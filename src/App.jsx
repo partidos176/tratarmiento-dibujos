@@ -13,8 +13,21 @@ function App() {
   const [figuras, setFiguras] = useState([]);
   const [figuraSeleccionada, setFiguraSeleccionada] = useState(null);
   const [imgDim, setImgDim] = useState(null);
+  const [clipActivo, setClipActivo] = useState(null);
+  const [arrastrandoMarcaId, setArrastrandoMarcaId] = useState(null);
+  const [arrastrePos, setArrastrePos] = useState(null);
+  const [aviso, setAviso] = useState(null);
+  const [exportando, setExportando] = useState(false);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
+  const clipRef = useRef(null);
+  const clipTimerRef = useRef(null);
+  const prevTiempoRef = useRef(0);
+  const marcaMovidaRef = useRef(false);
+
+  useEffect(() => () => {
+    if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
+  }, []);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
 
@@ -42,13 +55,124 @@ function App() {
   const span = duracion || 1;
   const dec = 2;
 
+  const totalDuracion = duracion + capturas.filter(c => c.videoUrl && c.insertarEn != null).length * 2;
+
+  const togglePlay = () => {
+    if (clipActivo) {
+      const c = clipRef.current;
+      const v = videoRef.current;
+      if (!c) { setClipActivo(null); return; }
+      if (c.paused) { c.play().catch(() => {}); if (v) v.play().catch(() => {}); }
+      else { c.pause(); if (v) v.pause(); }
+      return;
+    }
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play(); else v.pause();
+  };
+
   const buscarEnTimeline = (e) => {
     const video = videoRef.current;
     if (!video || !duracion) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    video.currentTime = inicioVentana + x * span;
+    setClipActivo(null);
+    if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+    prevTiempoRef.current = x * duracion;
+    video.currentTime = x * duracion;
     setProgreso(x);
+  };
+
+  const exportarVideo = async () => {
+    const original = videoRef.current;
+    if (!original || !duracion) return;
+    setExportando(true);
+    try {
+      const w = original.videoWidth || 640;
+      const h = original.videoHeight || 360;
+      const clips = capturas.filter(c => c.videoUrl && c.insertarEn != null).sort((a, b) => a.insertarEn - b.insertarEn);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+
+      const orig = document.createElement('video');
+      orig.muted = true;
+      orig.playsInline = true;
+      orig.preload = 'auto';
+      orig.src = videoUrl;
+
+      const clipEls = clips.map(c => {
+        const v = document.createElement('video');
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = 'auto';
+        v.src = c.videoUrl;
+        return { c, v };
+      });
+
+      let idx = 0;
+      let playingClip = false;
+      let active = orig;
+      let raf = 0;
+
+      const loop = () => {
+        ctx.drawImage(active, 0, 0, w, h);
+        raf = requestAnimationFrame(loop);
+      };
+
+      const terminar = async (error) => {
+        cancelAnimationFrame(raf);
+        try { rec.stop(); } catch (e) { /* noop */ }
+        setExportando(false);
+        if (error) { setAviso('Error al exportar el video'); return; }
+        await new Promise(res => { rec.onstop = res; });
+        const blob = new Blob(chunks, { type: mime });
+        try {
+          const resp = await fetch('/export-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: blob
+          });
+          const data = await resp.json();
+          setAviso(data.ok ? `Video exportado a C:\\Users\\uSer\\Videos\\${data.name}` : `Error al exportar: ${data.error || 'desconocido'}`);
+        } catch (e) {
+          setAviso('Error al exportar: ' + String(e));
+        }
+      };
+
+      orig.addEventListener('timeupdate', () => {
+        if (!playingClip && idx < clipEls.length && orig.currentTime >= clipEls[idx].c.insertarEn) {
+          playingClip = true;
+          orig.pause();
+          active = clipEls[idx].v;
+          clipEls[idx].v.play();
+        }
+      });
+      clipEls.forEach(({ v }) => {
+        v.addEventListener('ended', () => {
+          playingClip = false;
+          idx++;
+          active = orig;
+          orig.play();
+        });
+      });
+      orig.addEventListener('ended', () => terminar(false));
+      orig.addEventListener('error', () => terminar(true));
+
+      rec.start(250);
+      loop();
+      await orig.play();
+    } catch (e) {
+      setExportando(false);
+      setAviso('Error al exportar: ' + String(e));
+    }
   };
 
   const capturarImagen = () => {
@@ -166,8 +290,9 @@ function App() {
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
       }
-      setCapturas(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000), dataUrl: nueva, videoUrl, figuras, tiempo: capturaSeleccionada.tiempo }]);
-      setCapturaGuardada({ dataUrl: nueva, videoUrl });
+      const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
+      setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo }]);
+      setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
     } catch (e) {
       console.error('Error al guardar la captura', e);
     }
@@ -246,21 +371,59 @@ function App() {
                   ref={videoRef}
                   muted
                   src={videoUrl}
-                  onClick={() => {
-                    const v = videoRef.current;
-                    if (!v) return;
-                    if (v.paused) v.play(); else v.pause();
-                  }}
+                  onClick={togglePlay}
                   onPlay={() => setReproduciendo(true)}
                   onPause={() => setReproduciendo(false)}
                   onLoadedMetadata={(e) => setDuracion(e.currentTarget.duration || 0)}
                   onTimeUpdate={(e) => {
-                    const d = e.currentTarget.duration;
-                    setDuracion(d || 0);
-                    setProgreso(d ? e.currentTarget.currentTime / d : 0);
+                    const v = e.currentTarget;
+                    const d = v.duration || 0;
+                    setDuracion(d);
+                    const t = v.currentTime;
+                    if (!clipActivo && t > prevTiempoRef.current) {
+                      const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
+                      if (cl) {
+                        prevTiempoRef.current = cl.insertarEn + 2;
+                        setClipActivo(cl);
+                        setReproduciendo(true);
+                        if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
+                        clipTimerRef.current = setTimeout(() => setClipActivo(null), 2000);
+                        return;
+                      }
+                    }
+                    prevTiempoRef.current = t;
+                    setProgreso(d ? t / d : 0);
+                  }}
+                  onEnded={() => {
+                    setClipActivo(null);
+                    setReproduciendo(false);
+                    setProgreso(1);
+                    if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                   }}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
+                {clipActivo && clipActivo.videoUrl && (
+                  <video
+                    ref={(el) => {
+                      clipRef.current = el;
+                      if (el) el.play().catch(() => {});
+                    }}
+                    src={clipActivo.videoUrl}
+                    muted
+                    autoPlay
+                    playsInline
+                    onClick={togglePlay}
+                    onEnded={() => {
+                      if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                      const v = videoRef.current;
+                      if (v) v.play().catch(() => {});
+                      setClipActivo(null);
+                      setReproduciendo(true);
+                    }}
+                    title={`Clip 2s en ${formatoTiempo(clipActivo.insertarEn ?? 0)}`}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '2px solid #16a34a', zIndex: 2, cursor: 'pointer' }}
+                  />
+                )}
               </div>
               <div style={{ width: '80%' }}>
                 <div
@@ -269,13 +432,26 @@ function App() {
                   onPointerMove={(e) => { if (draggingRef.current) buscarEnTimeline(e); }}
                   onPointerUp={() => { draggingRef.current = false; }}
                   onPointerCancel={() => { draggingRef.current = false; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const id = e.dataTransfer.getData('text/plain');
+                    if (!id || !duracion) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                    const nuevo = Math.max(0, Math.min(duracion, x * duracion));
+                    setCapturas(prev => prev.map(c => c.id === Number(id) ? { ...c, insertarEn: nuevo } : c));
+                    setAviso(`Video modificado colocado en ${formatoTiempo(nuevo)}`);
+                  }}
                   style={{ position: 'relative', height: '14px', background: '#1e293b', border: '1px solid #334155', borderRadius: '7px', cursor: 'pointer', touchAction: 'none' }}
                 >
                   <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${Math.min(100, Math.max(0, ((tActual - inicioVentana) / span) * 100)).toFixed(2)}%`, background: '#38bdf8', borderRadius: '7px', transition: 'width 0.1s linear' }} />
                   {duracion > 0 && capturas.map(c => {
-                    if (c.tiempo < inicioVentana || c.tiempo > finVentana) return null;
-                    const pos = ((c.tiempo - inicioVentana) / span) * 100;
+                    const posMar = arrastrandoMarcaId === c.id && arrastrePos != null
+                      ? arrastrePos * 100
+                      : (((c.insertarEn ?? c.tiempo) - inicioVentana) / span) * 100;
                     const abrir = (e) => {
+                      if (marcaMovidaRef.current) { marcaMovidaRef.current = false; return; }
                       e.stopPropagation();
                       setFiguras(c.figuras || []);
                       setFiguraSeleccionada(null);
@@ -284,7 +460,33 @@ function App() {
                       setImgDim(null);
                       setHoja('Edición');
                     };
-                    const baseStyle = { position: 'absolute', top: '50%', left: `${Math.min(100, Math.max(0, pos)).toFixed(2)}%`, transform: 'translate(-50%, -50%)', width: '46px', borderRadius: '6px', background: '#0f172a', cursor: 'pointer', zIndex: 5 };
+                    const dragProps = {
+                      onPointerDown: (e) => {
+                        e.stopPropagation();
+                        marcaMovidaRef.current = false;
+                        setArrastrandoMarcaId(c.id);
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                      },
+                      onPointerMove: (e) => {
+                        if (arrastrandoMarcaId !== c.id) return;
+                        const bar = e.currentTarget.parentElement;
+                        if (!bar) return;
+                        const rect = bar.getBoundingClientRect();
+                        const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                        if (Math.abs(x - (arrastrePos ?? ((c.insertarEn ?? c.tiempo) / (duracion || 1)))) > 0.01) marcaMovidaRef.current = true;
+                        setArrastrePos(x);
+                      },
+                      onPointerUp: () => {
+                        if (arrastrandoMarcaId !== c.id) return;
+                        const f = arrastrePos;
+                        setArrastrandoMarcaId(null);
+                        setArrastrePos(null);
+                        if (f != null && duracion) {
+                          setCapturas(prev => prev.map(x => x.id === c.id ? { ...x, insertarEn: Math.max(0, Math.min(duracion, f * duracion)) } : x));
+                        }
+                      },
+                    };
+                    const baseStyle = { position: 'absolute', top: '50%', left: `${Math.min(100, Math.max(0, posMar)).toFixed(2)}%`, transform: 'translate(-50%, -50%)', width: '46px', borderRadius: '6px', background: '#0f172a', cursor: 'grab', touchAction: 'none', zIndex: 5 };
                     if (c.videoUrl) {
                       return (
                         <video
@@ -293,9 +495,9 @@ function App() {
                           muted
                           playsInline
                           preload="metadata"
-                          title={`Video ${formatoTiempo(c.tiempo)} (2s)`}
-                          onPointerDown={(e) => e.stopPropagation()}
+                          title={`Clip 2s en ${formatoTiempo(c.insertarEn ?? c.tiempo)} (arrastrar para mover el corte)`}
                           onClick={abrir}
+                          {...dragProps}
                           style={{ ...baseStyle, border: '2px solid #16a34a' }}
                         />
                       );
@@ -306,8 +508,8 @@ function App() {
                         src={c.dataUrl}
                         alt={`Captura ${formatoTiempo(c.tiempo)}`}
                         title={formatoTiempo(c.tiempo)}
-                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={abrir}
+                        {...dragProps}
                         style={{ ...baseStyle, display: 'block', border: '2px solid #8b5cf6' }}
                       />
                     );
@@ -316,15 +518,11 @@ function App() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
                   <span>{formatoTiempo(videoRef.current ? videoRef.current.currentTime : 0)}</span>
-                  <span>{formatoTiempo(videoRef.current ? videoRef.current.duration || 0 : 0)}</span>
+                  <span>{formatoTiempo(totalDuracion)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
                   <button
-                    onClick={() => {
-                      const v = videoRef.current;
-                      if (!v) return;
-                      if (v.paused) v.play(); else v.pause();
-                    }}
+                    onClick={togglePlay}
                     style={{ background: reproduciendo ? '#f59e0b' : '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
                   >
                     {reproduciendo ? 'PAUSA' : 'PLAY'}
@@ -339,6 +537,14 @@ function App() {
                       <circle cx="12" cy="13" r="4" />
                     </svg>
                   </button>
+                  <button
+                    onClick={exportarVideo}
+                    disabled={exportando}
+                    style={{ background: '#e11d48', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
+                    title="Exportar el video final a C:\\Users\\uSer\\Videos"
+                  >
+                    {exportando ? 'Exportando...' : 'Exportar'}
+                  </button>
                 </div>
                 {capturas.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
@@ -352,9 +558,11 @@ function App() {
                               controls
                               playsInline
                               preload="metadata"
+                              draggable
+                              onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; }}
                               onClick={(e) => e.stopPropagation()}
-                              title="Video de la captura (2s)"
-                              style={{ width: '160px', borderRadius: '8px', border: '1px solid #16a34a', background: '#000000', cursor: 'pointer' }}
+                              title="Clip 2s (arrástralo a la línea de tiempo)"
+                              style={{ width: '160px', borderRadius: '8px', border: '1px solid #16a34a', background: '#000000', cursor: 'grab' }}
                             />
                           ) : (
                             <img
@@ -379,6 +587,18 @@ function App() {
                             ×
                           </button>
                         </div>
+                        {c.videoUrl && (
+                          <button
+                            onClick={() => {
+                              setCapturas(prev => prev.map(x => x.id === c.id ? { ...x, insertarEn: c.tiempo } : x));
+                              setAviso(`Video modificado colocado en ${formatoTiempo(c.tiempo)} (su punto original)`);
+                            }}
+                            title="Colocar el video en el punto de su captura original"
+                            style={{ background: '#0f172a', border: '1px solid #16a34a', borderRadius: '8px', padding: '0.4rem 0.6rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer' }}
+                          >
+                            Colocar en su punto
+                          </button>
+                        )}
                         <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>
                           {formatoTiempo(c.tiempo)}
                         </span>
@@ -548,40 +768,62 @@ style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
                     </svg>
                   )}
                 </div>
+                {capturaGuardada && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      {capturaGuardada.videoUrl ? (
+                        <video
+                          src={capturaGuardada.videoUrl}
+                          muted
+                          controls
+                          playsInline
+                          onClick={(e) => {
+                            const v = e.currentTarget;
+                            if (v.paused) v.play(); else v.pause();
+                          }}
+                          style={{ width: '320px', borderRadius: '8px', border: '2px solid #16a34a', background: '#000000', cursor: 'pointer' }}
+                        />
+                      ) : (
+                        <img
+                          src={capturaGuardada.dataUrl}
+                          alt="Captura guardada"
+                          style={{ width: '160px', borderRadius: '8px', border: '2px solid #16a34a' }}
+                        />
+                      )}
+                      <button
+                        onClick={() => {
+                          setCapturas(prev => prev.filter(x => x.id !== capturaGuardada.id));
+                          setCapturaGuardada(null);
+                        }}
+                        title="Borrar el video modificado"
+                        style={{ position: 'absolute', top: '4px', right: '4px', width: '24px', height: '24px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '1rem', lineHeight: '24px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.8rem', color: '#94a3b8' }}>
                     Captura {formatoTiempo(capturaSeleccionada.tiempo)}
                   </span>
                 </div>
-                {capturaGuardada && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
-                    {capturaGuardada.videoUrl ? (
-                      <video
-                        src={capturaGuardada.videoUrl}
-                        muted
-                        controls
-                        playsInline
-                        onClick={(e) => {
-                          const v = e.currentTarget;
-                          if (v.paused) v.play(); else v.pause();
-                        }}
-                        style={{ width: '320px', borderRadius: '8px', border: '2px solid #16a34a', background: '#000000', cursor: 'pointer' }}
-                      />
-                    ) : (
-                      <img
-                        src={capturaGuardada.dataUrl}
-                        alt="Captura guardada"
-                        style={{ width: '160px', borderRadius: '8px', border: '2px solid #16a34a' }}
-                      />
-                    )}
-                    <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Guardada (2s)
-                    </span>
-                  </div>
-                )}
               </div>
             ) : (
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#94a3b8' }}>Edición</span>
             )}
+          </div>
+        </div>
+)}
+      {aviso && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.4rem 1.8rem', maxWidth: '340px', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: '#e2e8f0' }}>{aviso}</p>
+            <button
+              onClick={() => setAviso(null)}
+              style={{ marginTop: '1rem', background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+            >
+              OK
+            </button>
           </div>
         </div>
       )}
