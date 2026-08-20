@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 function App() {
   const [archivo, setArchivo] = useState(null);
@@ -9,11 +9,16 @@ function App() {
   const [capturas, setCapturas] = useState([]);
   const [capturaSeleccionada, setCapturaSeleccionada] = useState(null);
   const [figuras, setFiguras] = useState([]);
+  const [figuraSeleccionada, setFiguraSeleccionada] = useState(null);
   const [imgDim, setImgDim] = useState(null);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
+  const svgRef = useRef(null);
+  const dragRef = useRef(null);
 
   const hojas = ['Presentación', 'Edición'];
+
+  const colores = ['#38bdf8', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#facc15', '#ffffff'];
 
   const handleFile = (e) => {
     const f = e.target.files[0] || null;
@@ -53,8 +58,43 @@ function App() {
   };
 
   const anadirTriangulo = () => {
-    setFiguras(prev => [...prev, { id: Date.now(), tipo: 'triangulo', x: 0.5, y: 0.5, tam: 0.15, color: '#38bdf8' }]);
+    const id = Date.now();
+    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.15, alto: 0.2, color: '#38bdf8', opacidad: 0.5 }]);
+    setFiguraSeleccionada(id);
   };
+
+  const actualizarFigura = (id, cambios) => {
+    setFiguras(prev => prev.map(f => f.id === id ? { ...f, ...cambios } : f));
+  };
+
+  const anadirCirculo = () => {
+    const id = Date.now();
+    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5 }]);
+    setFiguraSeleccionada(id);
+  };
+
+  const puntoImagen = (e) => {
+    const svg = svgRef.current;
+    if (!svg || !imgDim) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const p = pt.matrixTransform(ctm.inverse());
+    return { x: p.x / imgDim.w, y: p.y / imgDim.h };
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.key === 'Delete' || e.key === 'Del') && figuraSeleccionada) {
+        setFiguras(prev => prev.filter(f => f.id !== figuraSeleccionada));
+        setFiguraSeleccionada(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [figuraSeleccionada]);
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -179,6 +219,7 @@ function App() {
                             onClick={() => {
                               setCapturaSeleccionada(c);
                               setFiguras([]);
+                              setFiguraSeleccionada(null);
                               setImgDim(null);
                               setHoja('Edición');
                             }}
@@ -206,14 +247,37 @@ function App() {
       ) : (
         <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
           {capturaSeleccionada && (
-            <button
-              onClick={() => { setCapturaSeleccionada(null); setFiguras([]); setImgDim(null); }}
-              style={{ position: 'absolute', top: '1rem', right: '1.5rem', background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', zIndex: 10 }}
-            >
-              BORRAR
-            </button>
+            <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
+              <button
+                onClick={() => { setCapturaSeleccionada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                BORRAR
+              </button>
+              {figuraSeleccionada && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem', background: '#1e293b', padding: '0.6rem', borderRadius: '12px', border: '1px solid #334155' }}>
+                    {colores.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => actualizarFigura(figuraSeleccionada, { color: c })}
+                        title={c}
+                        style={{ width: '22px', height: '22px', background: c, borderRadius: '6px', border: figuras.find(f => f.id === figuraSeleccionada)?.color === c ? '2px solid #ffffff' : '2px solid transparent', cursor: 'pointer', padding: 0 }}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => actualizarFigura(figuraSeleccionada, { rayado: !figuras.find(f => f.id === figuraSeleccionada)?.rayado })}
+                    title="Rayas en diagonal"
+                    style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.rayado ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '12px', padding: '0.5rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                  >
+                    Rayas
+                  </button>
+                </div>
+              )}
+            </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', borderRight: '1px solid #1e293b' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '1rem', borderRight: '1px solid #1e293b' }}>
             <button
               onClick={anadirTriangulo}
               title="Añadir triángulo"
@@ -223,11 +287,30 @@ function App() {
                 <polygon points="12,3 22,20 2,20" />
               </svg>
             </button>
+            <button
+              onClick={anadirCirculo}
+              title="Añadir círculo"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={figuraSeleccionada ? Math.round((figuras.find(f => f.id === figuraSeleccionada)?.opacidad ?? 0.5) * 100) : 50}
+              onChange={(e) => { if (figuraSeleccionada) actualizarFigura(figuraSeleccionada, { opacidad: Number(e.target.value) / 100 }); }}
+              disabled={!figuraSeleccionada}
+              title="Opacidad"
+              style={{ width: '120px', cursor: 'pointer' }}
+            />
           </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setFiguraSeleccionada(null)}>
             {capturaSeleccionada ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
+                <div style={{ position: 'relative', display: 'inline-block' }} onClick={() => setFiguraSeleccionada(null)}>
                   <img
                     src={capturaSeleccionada.dataUrl}
                     alt="Captura en edición"
@@ -236,26 +319,78 @@ function App() {
                   />
                   {imgDim && (
                     <svg
+                      ref={svgRef}
                       viewBox={`0 0 ${imgDim.w} ${imgDim.h}`}
+                      onPointerMove={(e) => {
+                        const d = dragRef.current;
+                        if (!d) return;
+                        const p = puntoImagen(e);
+                        if (!p) return;
+                        if (d.tipo === 'mover') {
+                          actualizarFigura(d.id, { x: d.ox + (p.x - d.px), y: d.oy + (p.y - d.py) });
+                        } else if (d.tipo === 'resize') {
+                          actualizarFigura(d.id, { ancho: Math.max(0.02, Math.abs(p.x - d.fx) * 2), alto: Math.max(0.02, Math.abs(p.y - d.fy) * 2) });
+                        }
+                      }}
+                      onPointerUp={() => { dragRef.current = null; }}
+                      onPointerCancel={() => { dragRef.current = null; }}
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
                     >
+                      <defs>
+                        {figuras.filter(f => f.rayado).map(f => (
+                          <pattern key={f.id} id={`rayado-${f.id}`} patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
+                            <line x1="0" y1="0" x2="0" y2="5" stroke={f.color} strokeWidth="2.5" />
+                          </pattern>
+                        ))}
+                      </defs>
                       {figuras.map(f => {
-                        if (f.tipo === 'triangulo') {
-                          const s = f.tam * imgDim.w;
-                          const x = f.x * imgDim.w;
-                          const y = f.y * imgDim.h;
-                          return (
-                            <polygon
-                              key={f.id}
-                              points={`${x},${y - s / 2} ${x - s / 2},${y + s / 2} ${x + s / 2},${y + s / 2}`}
-                              fill={f.color}
-                              fillOpacity="0.5"
-                              stroke="#ffffff"
-                              strokeWidth="2"
-                            />
-                          );
-                        }
-                        return null;
+                        const x = f.x * imgDim.w;
+                        const y = f.y * imgDim.h;
+                        const ancho = f.ancho * imgDim.w;
+                        const alto = f.alto * imgDim.h;
+                        const sel = figuraSeleccionada === f.id;
+                        const shapeProps = {
+                          fill: f.rayado ? `url(#rayado-${f.id})` : f.color,
+                          fillOpacity: f.opacidad ?? 0.5,
+                          stroke: f.color,
+                          strokeWidth: sel ? 3 : 2,
+                          style: { pointerEvents: 'all', cursor: 'move' },
+                          onClick: (e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); },
+                          onPointerDown: (e) => {
+                            setFiguraSeleccionada(f.id);
+                            const p = puntoImagen(e);
+                            if (!p) return;
+                            dragRef.current = { tipo: 'mover', id: f.id, ox: f.x, oy: f.y, px: p.x, py: p.y };
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                          },
+                        };
+                        const shape = f.tipo === 'triangulo'
+                          ? <path {...shapeProps} d={`M ${x},${y - alto / 2} L ${x - ancho / 2},${y + alto / 2} A ${ancho / 2} ${ancho / 2} 0 0 0 ${x + ancho / 2},${y + alto / 2} Z`} />
+                          : <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />;
+                        return (
+                          <g key={f.id}>
+                            {shape}
+                            {sel && (
+                              <circle
+                                cx={x + ancho / 2}
+                                cy={y + alto / 2}
+                                r={Math.max(8, ancho * 0.06)}
+                                fill="#ffffff"
+                                stroke="#0ea5e9"
+                                strokeWidth="2"
+style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                  setFiguraSeleccionada(f.id);
+                                  const p = puntoImagen(e);
+                                  if (!p) return;
+                                  dragRef.current = { tipo: 'resize', id: f.id, fx: f.x, fy: f.y };
+                                  e.currentTarget.setPointerCapture(e.pointerId);
+                                }}
+                              />
+                            )}
+                          </g>
+                        );
                       })}
                     </svg>
                   )}
