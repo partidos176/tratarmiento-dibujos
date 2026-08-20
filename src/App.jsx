@@ -18,12 +18,20 @@ function App() {
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [exportando, setExportando] = useState(false);
+  const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
+  const [modoPolilinea, setModoPolilinea] = useState(false);
+  const [puntosPolilinea, setPuntosPolilinea] = useState([]);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
   const prevTiempoRef = useRef(0);
   const marcaMovidaRef = useRef(false);
+  const circuloAnimRef = useRef(null);
+  const lineaAnimRef = useRef(null);
+  const flechaAnimRef = useRef(null);
+  const triAnimRef = useRef(null);
+  const circuitoAnimRef = useRef(null);
 
   useEffect(() => () => {
     if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
@@ -141,7 +149,12 @@ function App() {
             body: blob
           });
           const data = await resp.json();
-          setAviso(data.ok ? `Video exportado a C:\\Users\\uSer\\Videos\\${data.name}` : `Error al exportar: ${data.error || 'desconocido'}`);
+          if (data.ok) {
+            setAviso(`Video exportado a C:\\Users\\uSer\\Videos\\${data.name}`);
+            setAbrirCarpetaAlOK(true);
+          } else {
+            setAviso(`Error al exportar: ${data.error || 'desconocido'}`);
+          }
         } catch (e) {
           setAviso('Error al exportar: ' + String(e));
         }
@@ -190,18 +203,120 @@ function App() {
 
   const anadirTriangulo = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.15, alto: 0.2, color: '#38bdf8', opacidad: 0.5 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.08, alto: 0.25, color: '#38bdf8', opacidad: 0.5, crecimiento: 0 }]);
     setFiguraSeleccionada(id);
+    if (triAnimRef.current) cancelAnimationFrame(triAnimRef.current);
+    const t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / 1000);
+      const e = 1 - Math.pow(1 - p, 3);
+      setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
+      if (p < 1) triAnimRef.current = requestAnimationFrame(paso);
+      else triAnimRef.current = null;
+    };
+    triAnimRef.current = requestAnimationFrame(paso);
   };
 
   const actualizarFigura = (id, cambios) => {
     setFiguras(prev => prev.map(f => f.id === id ? { ...f, ...cambios } : f));
   };
 
+  const anadirCircuito = () => {
+    const id = Date.now();
+    const x1 = 0.3, y1 = 0.5, x2 = 0.7, y2 = 0.5, r1 = 0.08, r2 = 0.08;
+    setFiguras(prev => [...prev, { id, tipo: 'circuito', x1, y1, x2: x1, y2: y1, radio1: 0, radio2: 0, color: '#38bdf8', opacidad: 1, grosor: 0.005 }]);
+    setFiguraSeleccionada(id);
+    if (circuitoAnimRef.current) cancelAnimationFrame(circuitoAnimRef.current);
+    const t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / 1000);
+      const e = 1 - Math.pow(1 - p, 3);
+      setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, radio1: r1 * e, radio2: r2 * e } : f));
+      if (p < 1) circuitoAnimRef.current = requestAnimationFrame(paso);
+      else circuitoAnimRef.current = null;
+    };
+    circuitoAnimRef.current = requestAnimationFrame(paso);
+  };
+
   const anadirCirculo = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5 }]);
+    const objetivo = 0.2;
+    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.001, alto: 0.001, color: '#38bdf8', opacidad: 0.5 }]);
     setFiguraSeleccionada(id);
+    if (circuloAnimRef.current) cancelAnimationFrame(circuloAnimRef.current);
+    const t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / 1000);
+      const e = 1 - Math.pow(1 - p, 3);
+      setFiguras(prev => prev.map(f => f.id === id ? { ...f, ancho: objetivo * e, alto: objetivo * e } : f));
+      if (p < 1) circuloAnimRef.current = requestAnimationFrame(paso);
+      else circuloAnimRef.current = null;
+    };
+    circuloAnimRef.current = requestAnimationFrame(paso);
+  };
+
+  const anadirTexto = () => {
+    const id = Date.now();
+    setFiguras(prev => [...prev, { id, tipo: 'texto', x: 0.5, y: 0.5, fontSize: 0.06, color: '#ffffff', opacidad: 1, texto: 'Texto' }]);
+    setFiguraSeleccionada(id);
+  };
+
+  const anadirLinea = () => {
+    const id = Date.now();
+    const x1 = 0.3;
+    const y1 = 0.5;
+    const x2 = 0.7;
+    const y2 = 0.5;
+    setFiguras(prev => [...prev, { id, tipo: 'linea', x1, y1, x2: x1, y2: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005 }]);
+    setFiguraSeleccionada(id);
+    if (lineaAnimRef.current) cancelAnimationFrame(lineaAnimRef.current);
+    const t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / 1000);
+      const e = 1 - Math.pow(1 - p, 3);
+      setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e } : f));
+      if (p < 1) lineaAnimRef.current = requestAnimationFrame(paso);
+      else lineaAnimRef.current = null;
+    };
+    lineaAnimRef.current = requestAnimationFrame(paso);
+  };
+
+  const anadirFlecha = () => {
+    const id = Date.now();
+    const x1 = 0.25;
+    const y1 = 0.5;
+    const x2 = 0.75;
+    const y2 = 0.5;
+    const cx = (x1 + x2) / 2;
+    const cy = (y1 + y2) / 2;
+    setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2: x1, y2: y1, cx: x1, cy: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 0 }]);
+    setFiguraSeleccionada(id);
+    if (flechaAnimRef.current) cancelAnimationFrame(flechaAnimRef.current);
+    const t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / 1000);
+      const e = 1 - Math.pow(1 - p, 3);
+      setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, cx: x1 + (cx - x1) * e, cy: y1 + (cy - y1) * e, cabeza: e } : f));
+      if (p < 1) flechaAnimRef.current = requestAnimationFrame(paso);
+      else flechaAnimRef.current = null;
+    };
+    flechaAnimRef.current = requestAnimationFrame(paso);
+  };
+
+  const anadirPolilinea = () => {
+    if (modoPolilinea) {
+      if (puntosPolilinea.length >= 2) {
+        const id = Date.now();
+        setFiguras(prev => [...prev, { id, tipo: 'polilinea', puntos: puntosPolilinea, color: '#38bdf8', opacidad: 1, grosor: 0.006 }]);
+        setFiguraSeleccionada(id);
+      }
+      setModoPolilinea(false);
+      setPuntosPolilinea([]);
+    } else {
+      setModoPolilinea(true);
+      setPuntosPolilinea([]);
+      setFiguraSeleccionada(null);
+    }
   };
 
   const puntoImagen = (e) => {
@@ -222,12 +337,60 @@ function App() {
       : '';
     const fill = f.rayado ? `url(#rayado-${f.id})` : f.color;
     const common = `fill="${fill}" fill-opacity="${f.opacidad ?? 0.5}" stroke="${f.color}" stroke-width="2"`;
+    if (f.tipo === 'polilinea') {
+      const pts = (f.puntos || []).map(p => `${p.x * imgDim.w},${p.y * imgDim.h}`);
+      const grosor = (f.grosor || 0.006) * imgDim.h;
+      const radio = Math.max(5, grosor * 1.2);
+      const pol = pts.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round" stroke-linejoin="round"/>` : '';
+      const circs = pts.map((p, i) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="${radio}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" stroke="#ffffff" stroke-width="1"/>`).join('');
+      return `${pol}${circs}`;
+    }
+    if (f.tipo === 'circuito') {
+      const c1x = f.x1 * imgDim.w;
+      const c1y = f.y1 * imgDim.h;
+      const c2x = f.x2 * imgDim.w;
+      const c2y = f.y2 * imgDim.h;
+      const r1 = (f.radio1 || 0.08) * imgDim.w;
+      const r2 = (f.radio2 || 0.08) * imgDim.w;
+      const grosor = (f.grosor || 0.005) * imgDim.h;
+      return `<line x1="${c1x}" y1="${c1y}" x2="${c2x}" y2="${c2y}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/><circle cx="${c1x}" cy="${c1y}" r="${r1}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/><circle cx="${c2x}" cy="${c2y}" r="${r2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
+    }
+    if (f.tipo === 'flecha') {
+      const x1 = f.x1 * imgDim.w;
+      const y1 = f.y1 * imgDim.h;
+      const x2 = f.x2 * imgDim.w;
+      const y2 = f.y2 * imgDim.h;
+      const cx = f.cx * imgDim.w;
+      const cy = f.cy * imgDim.h;
+      const grosor = (f.grosor || 0.005) * imgDim.h;
+      const ang = Math.atan2(y2 - cy, x2 - cx);
+      const L = grosor * 6 * (f.cabeza ?? 1);
+      const a = Math.PI / 6;
+      const hx1 = x2 - L * Math.cos(ang - a);
+      const hy1 = y2 - L * Math.sin(ang - a);
+      const hx2 = x2 - L * Math.cos(ang + a);
+      const hy2 = y2 - L * Math.sin(ang + a);
+      const dash = f.discontinuo ? ` stroke-dasharray="${grosor * 3},${grosor * 2}"` : '';
+      return `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"${dash}/><polygon points="${x2},${y2} ${hx1},${hy1} ${hx2},${hy2}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}"/>`;
+    }
+    if (f.tipo === 'linea') {
+      return `<line x1="${f.x1 * imgDim.w}" y1="${f.y1 * imgDim.h}" x2="${f.x2 * imgDim.w}" y2="${f.y2 * imgDim.h}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${(f.grosor || 0.005) * imgDim.h}" stroke-linecap="round"/>`;
+    }
+    if (f.tipo === 'texto') {
+      const x = f.x * imgDim.w;
+      const y = f.y * imgDim.h;
+      const tam = (f.fontSize || 0.06) * imgDim.h;
+      const txt = String(f.texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<text x="${x}" y="${y}" font-size="${tam}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">${txt}</text>`;
+    }
     if (f.tipo === 'triangulo') {
       const x = f.x * imgDim.w;
       const y = f.y * imgDim.h;
       const ancho = f.ancho * imgDim.w;
       const alto = f.alto * imgDim.h;
-      return `${pat}<path d="M ${x},${y - alto / 2} L ${x - ancho / 2},${y + alto / 2} A ${ancho / 2} ${ancho / 2} 0 0 0 ${x + ancho / 2},${y + alto / 2} Z" ${common}/>`;
+      const yBase = y + alto / 2;
+      const yPunta = yBase - alto * (f.crecimiento ?? 1);
+      return `${pat}<path d="M ${x},${yPunta} L ${x - ancho / 2},${yBase} L ${x + ancho / 2},${yBase} Z" ${common}/>`;
     }
     const cx = f.x * imgDim.w;
     const cy = f.y * imgDim.h;
@@ -236,34 +399,41 @@ function App() {
     return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${common}/>`;
   };
 
-  const generarVideo = (dataUrl, w, h) => new Promise((resolve, reject) => {
+  const generarVideo = (svgFn, w, h) => new Promise((resolve, reject) => {
     try {
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, w, h);
-        const stream = canvas.captureStream(30);
-        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
-        const chunks = [];
-        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-        rec.onstop = () => resolve(URL.createObjectURL(new Blob(chunks, { type: mime })));
-        rec.onerror = reject;
-        rec.start(250);
-        const timer = setInterval(() => {
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => resolve(URL.createObjectURL(new Blob(chunks, { type: mime })));
+      rec.onerror = reject;
+      rec.start(250);
+      let frame = 0;
+      let timer;
+      const dibujarFrame = () => {
+        const t = Math.min(2000, frame * 33);
+        const svgStr = svgFn(t);
+        const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
+        const img = new Image();
+        img.onload = () => {
           ctx.drawImage(img, 0, 0, w, h);
-        }, 33);
-        setTimeout(() => {
-          clearInterval(timer);
-          ctx.drawImage(img, 0, 0, w, h);
-          setTimeout(() => { try { rec.stop(); } catch (e) { reject(e); } }, 50);
-        }, 2000);
+          URL.revokeObjectURL(url);
+          frame++;
+          if (frame * 33 <= 2000) {
+            timer = setTimeout(dibujarFrame, 33);
+          } else {
+            setTimeout(() => { try { rec.stop(); } catch (e) { reject(e); } }, 50);
+          }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('error al renderizar frame')); };
+        img.src = url;
       };
-      img.onerror = reject;
-      img.src = dataUrl;
+      dibujarFrame();
     } catch (e) {
       reject(e);
     }
@@ -286,7 +456,19 @@ function App() {
       URL.revokeObjectURL(url);
       let videoUrl = null;
       try {
-        videoUrl = await generarVideo(nueva, imgDim.w, imgDim.h);
+        const svgFn = (t) => {
+          const e = t >= 1000 ? 1 : 1 - Math.pow(1 - Math.min(1, t / 1000), 3);
+          const figAnim = figuras.map(f => {
+            if (f.tipo === 'triangulo') return { ...f, crecimiento: e };
+            if (f.tipo === 'circulo') return { ...f, ancho: f.ancho * e, alto: f.alto * e };
+            if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
+            if (f.tipo === 'flecha') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
+            if (f.tipo === 'circuito') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, radio1: (f.radio1 || 0.08) * e, radio2: (f.radio2 || 0.08) * e };
+            return f;
+          });
+          return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(svgFigura).join('')}</svg>`;
+        };
+        videoUrl = await generarVideo(svgFn, imgDim.w, imgDim.h);
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
       }
@@ -592,6 +774,7 @@ function App() {
                             onClick={() => {
                               setCapturas(prev => prev.map(x => x.id === c.id ? { ...x, insertarEn: c.tiempo } : x));
                               setAviso(`Video modificado colocado en ${formatoTiempo(c.tiempo)} (su punto original)`);
+                              setAbrirCarpetaAlOK(true);
                             }}
                             title="Colocar el video en el punto de su captura original"
                             style={{ background: '#0f172a', border: '1px solid #16a34a', borderRadius: '8px', padding: '0.4rem 0.6rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer' }}
@@ -628,6 +811,16 @@ function App() {
               </button>
               {figuraSeleccionada && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'texto' && (
+                    <input
+                      value={figuras.find(f => f.id === figuraSeleccionada)?.texto || ''}
+                      onChange={(e) => actualizarFigura(figuraSeleccionada, { texto: e.target.value })}
+                      placeholder="Escribe el texto"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: '180px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.6rem', fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', color: '#e2e8f0', outline: 'none' }}
+                    />
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem', background: '#1e293b', padding: '0.6rem', borderRadius: '12px', border: '1px solid #334155' }}>
                     {colores.map(c => (
                       <button
@@ -638,6 +831,32 @@ function App() {
                       />
                     ))}
                   </div>
+                  {[ 'linea', 'flecha', 'polilinea', 'circuito'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Grosor
+                      </span>
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        value={Math.round((figuras.find(f => f.id === figuraSeleccionada)?.grosor ?? 0.005) * (imgDim?.h || 500))}
+                        onChange={(e) => actualizarFigura(figuraSeleccionada, { grosor: Number(e.target.value) / (imgDim?.h || 500) })}
+                        title="Grosor de la línea"
+                        style={{ width: '120px', cursor: 'pointer' }}
+                      />
+                    </div>
+                  ) : null}
+                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'flecha' && (
+                    <button
+                      onClick={() => actualizarFigura(figuraSeleccionada, { discontinuo: !figuras.find(f => f.id === figuraSeleccionada)?.discontinuo })}
+                      title="Continuidad de la flecha"
+                      style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.discontinuo ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '12px', padding: '0.5rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                    >
+                      {figuras.find(f => f.id === figuraSeleccionada)?.discontinuo ? 'Continua' : 'Discontinua'}
+                    </button>
+                  )}
+                  {!['texto', 'linea', 'flecha', 'polilinea', 'circuito'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) && (
                   <button
                     onClick={() => actualizarFigura(figuraSeleccionada, { rayado: !figuras.find(f => f.id === figuraSeleccionada)?.rayado })}
                     title="Rayas en diagonal"
@@ -645,6 +864,7 @@ function App() {
                   >
                     Rayas
                   </button>
+                  )}
                 </div>
               )}
             </div>
@@ -668,6 +888,60 @@ function App() {
                 <circle cx="12" cy="12" r="9" />
               </svg>
             </button>
+            <button
+              onClick={anadirTexto}
+              title="Añadir texto"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.5">
+                <polyline points="4,7 4,4 20,4 20,7" />
+                <line x1="9" y1="20" x2="15" y2="20" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+              </svg>
+            </button>
+            <button
+              onClick={anadirLinea}
+              title="Dibujar línea"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="20" x2="20" y2="4" />
+              </svg>
+            </button>
+            <button
+              onClick={anadirFlecha}
+              title="Dibujar flecha"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="20" x2="19" y2="5" />
+                <polyline points="11,5 19,5 19,13" />
+              </svg>
+            </button>
+            <button
+              onClick={anadirPolilinea}
+              title={modoPolilinea ? 'Terminar la polilínea' : 'Dibujar polilínea (pulsa en la captura para marcar los puntos)'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoPolilinea ? '#f59e0b' : '#0ea5e9', border: modoPolilinea ? '2px solid #ffffff' : 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4,17 9,17 13,8 19,8" />
+                <circle cx="4" cy="17" r="2.5" />
+                <circle cx="9" cy="17" r="2.5" />
+                <circle cx="13" cy="8" r="2.5" />
+                <circle cx="19" cy="8" r="2.5" />
+              </svg>
+            </button>
+            <button
+              onClick={anadirCircuito}
+              title="Añadir aro unido a otro aro"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
+                <line x1="8" y1="12" x2="16" y2="12" />
+                <circle cx="8" cy="12" r="4.5" />
+                <circle cx="16" cy="12" r="4.5" />
+              </svg>
+            </button>
             <input
               type="range"
               min="0"
@@ -679,7 +953,14 @@ function App() {
               style={{ width: '120px', cursor: 'pointer' }}
             />
           </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setFiguraSeleccionada(null)}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
+            if (modoPolilinea) {
+              const p = puntoImagen(e);
+              if (p) setPuntosPolilinea(prev => [...prev, { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) }]);
+            } else {
+              setFiguraSeleccionada(null);
+            }
+          }}>
             {capturaSeleccionada ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
@@ -700,9 +981,50 @@ function App() {
                         const p = puntoImagen(e);
                         if (!p) return;
                         if (d.tipo === 'mover') {
-                          actualizarFigura(d.id, { x: d.ox + (p.x - d.px), y: d.oy + (p.y - d.py) });
+                          if (d.tipoFig === 'polilinea') {
+                            const dx = p.x - d.px;
+                            const dy = p.y - d.py;
+                            actualizarFigura(d.id, { puntos: (d.puntos || []).map(pt => ({ x: pt.x + dx, y: pt.y + dy })) });
+                          } else if (d.tipoFig === 'linea' || d.tipoFig === 'flecha') {
+                            const dx = p.x - d.px;
+                            const dy = p.y - d.py;
+                            const up = { x1: d.x1 + dx, y1: d.y1 + dy, x2: d.x2 + dx, y2: d.y2 + dy };
+                            if (d.cx != null) { up.cx = d.cx + dx; up.cy = d.cy + dy; }
+                            actualizarFigura(d.id, up);
+                          } else if (d.tipoFig === 'circuito') {
+                            const dx = p.x - d.px;
+                            const dy = p.y - d.py;
+                            actualizarFigura(d.id, { x1: d.x1 + dx, y1: d.y1 + dy, x2: d.x2 + dx, y2: d.y2 + dy });
+                          } else {
+                            actualizarFigura(d.id, { x: d.ox + (p.x - d.px), y: d.oy + (p.y - d.py) });
+                          }
+                        } else if (d.tipo === 'polilineaPunto') {
+                          actualizarFigura(d.id, { puntos: (d.puntos || []).map((pt, i) => i === d.indice ? { x: p.x, y: p.y } : pt) });
+                        } else if (d.tipo === 'circuitoPunto') {
+                          if (d.cual === 'p1') {
+                            actualizarFigura(d.id, { x1: p.x, y1: p.y });
+                          } else {
+                            actualizarFigura(d.id, { x2: p.x, y2: p.y });
+                          }
+                        } else if (d.tipo === 'circuitoRadio') {
+                          const dx = (p.x - d.cx) * imgDim.w;
+                          const dy = (p.y - d.cy) * imgDim.h;
+                          const rad = Math.max(0.01, Math.hypot(dx, dy) / imgDim.w);
+                          actualizarFigura(d.id, d.cual === 'r1' ? { radio1: rad } : { radio2: rad });
+                        } else if (d.tipo === 'lineaPunto') {
+                          if (d.cual === 'p1') {
+                            actualizarFigura(d.id, { x1: p.x, y1: p.y, cx: d.cx + (p.x - d.px), cy: d.cy + (p.y - d.py) });
+                          } else {
+                            actualizarFigura(d.id, { x2: p.x, y2: p.y, cx: d.cx + (p.x - d.px), cy: d.cy + (p.y - d.py) });
+                          }
+                        } else if (d.tipo === 'flechaCurva') {
+                          actualizarFigura(d.id, { cx: p.x, cy: p.y });
                         } else if (d.tipo === 'resize') {
-                          actualizarFigura(d.id, { ancho: Math.max(0.02, Math.abs(p.x - d.fx) * 2), alto: Math.max(0.02, Math.abs(p.y - d.fy) * 2) });
+                          if (d.tipoFig === 'texto') {
+                            actualizarFigura(d.id, { fontSize: Math.max(0.01, d.tamInicial + (p.y - d.py) * 2) });
+                          } else {
+                            actualizarFigura(d.id, { ancho: Math.max(0.02, Math.abs(p.x - d.fx) * 2), alto: Math.max(0.02, Math.abs(p.y - d.fy) * 2) });
+                          }
                         }
                       }}
                       onPointerUp={() => { dragRef.current = null; }}
@@ -730,41 +1052,336 @@ function App() {
                           style: { pointerEvents: 'all', cursor: 'move' },
                           onClick: (e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); },
                           onPointerDown: (e) => {
+                            if (circuloAnimRef.current) { cancelAnimationFrame(circuloAnimRef.current); circuloAnimRef.current = null; }
+                            if (lineaAnimRef.current) { cancelAnimationFrame(lineaAnimRef.current); lineaAnimRef.current = null; }
+                            if (flechaAnimRef.current) { cancelAnimationFrame(flechaAnimRef.current); flechaAnimRef.current = null; if (f.tipo === 'flecha') actualizarFigura(f.id, { cabeza: 1 }); }
+                            if (triAnimRef.current) { cancelAnimationFrame(triAnimRef.current); triAnimRef.current = null; if (f.tipo === 'triangulo') actualizarFigura(f.id, { crecimiento: 1 }); }
+                            if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
                             setFiguraSeleccionada(f.id);
                             const p = puntoImagen(e);
                             if (!p) return;
-                            dragRef.current = { tipo: 'mover', id: f.id, ox: f.x, oy: f.y, px: p.x, py: p.y };
+                            dragRef.current = { tipo: 'mover', id: f.id, ox: f.x, oy: f.y, px: p.x, py: p.y, tipoFig: f.tipo, x1: f.x1, y1: f.y1, x2: f.x2, y2: f.y2, cx: f.cx, cy: f.cy, puntos: f.puntos };
                             e.currentTarget.setPointerCapture(e.pointerId);
                           },
                         };
-                        const shape = f.tipo === 'triangulo'
-                          ? <path {...shapeProps} d={`M ${x},${y - alto / 2} L ${x - ancho / 2},${y + alto / 2} A ${ancho / 2} ${ancho / 2} 0 0 0 ${x + ancho / 2},${y + alto / 2} Z`} />
-                          : <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />;
+const shape = f.tipo === 'triangulo'
+                          ? <path {...shapeProps} d={`M ${x},${y + alto / 2 - alto * (f.crecimiento ?? 1)} L ${x - ancho / 2},${y + alto / 2} L ${x + ancho / 2},${y + alto / 2} Z`} />
+                          : f.tipo === 'circulo'
+                            ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
+                            : f.tipo === 'linea'
+                              ? <line
+                                  x1={f.x1 * imgDim.w}
+                                  y1={f.y1 * imgDim.h}
+                                  x2={f.x2 * imgDim.w}
+                                  y2={f.y2 * imgDim.h}
+                                  stroke={f.color}
+                                  strokeOpacity={f.opacidad ?? 1}
+                                  strokeWidth={(f.grosor || 0.005) * imgDim.h}
+                                  strokeLinecap="round"
+                                  style={{ pointerEvents: 'all', cursor: 'move' }}
+                                  onClick={shapeProps.onClick}
+                                  onPointerDown={shapeProps.onPointerDown}
+                                />
+                              : f.tipo === 'flecha'
+                                ? (() => {
+                                    const px1 = f.x1 * imgDim.w;
+                                    const py1 = f.y1 * imgDim.h;
+                                    const px2 = f.x2 * imgDim.w;
+                                    const py2 = f.y2 * imgDim.h;
+                                    const pcx = f.cx * imgDim.w;
+                                    const pcy = f.cy * imgDim.h;
+                                    const grosorPx = (f.grosor || 0.005) * imgDim.h;
+                                    const ang = Math.atan2(py2 - pcy, px2 - pcx);
+                                    const L = grosorPx * 6 * (f.cabeza ?? 1);
+                                    const a = Math.PI / 6;
+                                    const hx1 = px2 - L * Math.cos(ang - a);
+                                    const hy1 = py2 - L * Math.sin(ang - a);
+                                    const hx2 = px2 - L * Math.cos(ang + a);
+                                    const hy2 = py2 - L * Math.sin(ang + a);
+                                    return (
+                                      <g style={{ pointerEvents: 'all', cursor: 'move' }} onClick={shapeProps.onClick} onPointerDown={shapeProps.onPointerDown}>
+                                        <path
+                                          d={`M ${px1} ${py1} Q ${pcx} ${pcy} ${px2} ${py2}`}
+                                          fill="none"
+                                          stroke={f.color}
+                                          strokeOpacity={f.opacidad ?? 1}
+                                          strokeWidth={grosorPx}
+                                          strokeLinecap="round"
+                                          strokeDasharray={f.discontinuo ? `${grosorPx * 3}, ${grosorPx * 2}` : undefined}
+                                        />
+                                        <polygon points={`${px2},${py2} ${hx1},${hy1} ${hx2},${hy2}`} fill={f.color} fillOpacity={f.opacidad ?? 1} />
+                                      </g>
+                                    );
+                                  })()
+: f.tipo === 'circuito'
+                                ? (() => {
+                                    const c1x = f.x1 * imgDim.w;
+                                    const c1y = f.y1 * imgDim.h;
+                                    const c2x = f.x2 * imgDim.w;
+                                    const c2y = f.y2 * imgDim.h;
+                                    const r1 = (f.radio1 || 0.08) * imgDim.w;
+                                    const r2 = (f.radio2 || 0.08) * imgDim.w;
+                                    const grosorPx = (f.grosor || 0.005) * imgDim.h;
+                                    return (
+                                      <g style={{ pointerEvents: 'all', cursor: 'move' }} onClick={shapeProps.onClick} onPointerDown={shapeProps.onPointerDown}>
+                                        <line
+                                          x1={c1x}
+                                          y1={c1y}
+                                          x2={c2x}
+                                          y2={c2y}
+                                          stroke={f.color}
+                                          strokeOpacity={f.opacidad ?? 1}
+                                          strokeWidth={grosorPx}
+                                          strokeLinecap="round"
+                                        />
+                                        <circle cx={c1x} cy={c1y} r={r1} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} />
+                                        <circle cx={c2x} cy={c2y} r={r2} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} />
+                                      </g>
+                                    );
+                                  })()
+                              : f.tipo === 'polilinea'
+                                ? (() => {
+                                    const pts = f.puntos || [];
+                                    const grosorPx = (f.grosor || 0.006) * imgDim.h;
+                                    const radio = Math.max(5, grosorPx * 1.2);
+                                    return (
+                                      <g style={{ pointerEvents: 'all', cursor: 'move' }} onClick={shapeProps.onClick} onPointerDown={shapeProps.onPointerDown}>
+                                        {pts.length > 1 && (
+                                          <polyline
+                                            points={pts.map(p => `${p.x * imgDim.w},${p.y * imgDim.h}`).join(' ')}
+                                            fill="none"
+                                            stroke={f.color}
+                                            strokeOpacity={f.opacidad ?? 1}
+                                            strokeWidth={grosorPx}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          />
+                                        )}
+                                        {pts.map((p, i) => (
+                                          <circle key={i} cx={p.x * imgDim.w} cy={p.y * imgDim.h} r={radio} fill={f.color} fillOpacity={f.opacidad ?? 1} stroke="#ffffff" strokeWidth={sel ? 2 : 1} />
+                                        ))}
+                                      </g>
+                                    );
+                                  })()
+                              : <text
+                                  x={x}
+                                  y={y}
+                                  fontSize={(f.fontSize || 0.06) * imgDim.h}
+                                  fill={f.color}
+                                  fillOpacity={f.opacidad ?? 1}
+                                  stroke={sel ? '#0ea5e9' : 'none'}
+                                  strokeWidth={sel ? 1 : 0}
+                                  textAnchor="middle"
+                                  dominantBaseline="central"
+                                  style={{ pointerEvents: 'all', cursor: 'move', userSelect: 'none' }}
+                                  onClick={shapeProps.onClick}
+                                  onPointerDown={shapeProps.onPointerDown}
+                                >
+                                  {f.texto || ''}
+                                </text>;
+                        const tamTxt = (f.fontSize || 0.06) * imgDim.h;
+                        const anchoTxt = Math.max(60, (f.texto || 'Texto').length * tamTxt * 0.6);
                         return (
                           <g key={f.id}>
                             {shape}
-                            {sel && (
+                            {sel && (f.tipo === 'linea' || f.tipo === 'flecha' ? (
+                              <>
+                                <circle
+                                  cx={f.x1 * imgDim.w}
+                                  cy={f.y1 * imgDim.h}
+                                  r={8}
+                                  fill="#ffffff"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (lineaAnimRef.current) { cancelAnimationFrame(lineaAnimRef.current); lineaAnimRef.current = null; }
+                                    if (flechaAnimRef.current) { cancelAnimationFrame(flechaAnimRef.current); flechaAnimRef.current = null; actualizarFigura(f.id, { cabeza: 1 }); }
+                                    const p = puntoImagen(e);
+                                    if (!p) return;
+                                    dragRef.current = { tipo: 'lineaPunto', id: f.id, cual: 'p1', cx: f.cx, cy: f.cy, px: p.x, py: p.y };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                                <circle
+                                  cx={f.x2 * imgDim.w}
+                                  cy={f.y2 * imgDim.h}
+                                  r={8}
+                                  fill="#ffffff"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (lineaAnimRef.current) { cancelAnimationFrame(lineaAnimRef.current); lineaAnimRef.current = null; }
+                                    if (flechaAnimRef.current) { cancelAnimationFrame(flechaAnimRef.current); flechaAnimRef.current = null; actualizarFigura(f.id, { cabeza: 1 }); }
+                                    const p = puntoImagen(e);
+                                    if (!p) return;
+                                    dragRef.current = { tipo: 'lineaPunto', id: f.id, cual: 'p2', cx: f.cx, cy: f.cy, px: p.x, py: p.y };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                                {f.tipo === 'flecha' && (
+                                  <circle
+                                    cx={f.cx * imgDim.w}
+                                    cy={f.cy * imgDim.h}
+                                    r={8}
+                                    fill="#facc15"
+                                    stroke="#0ea5e9"
+                                    strokeWidth="2"
+                                    style={{ pointerEvents: 'all', cursor: 'grab' }}
+                                    title="Arrastra para curvar la flecha"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => {
+                                      setFiguraSeleccionada(f.id);
+                                      if (flechaAnimRef.current) { cancelAnimationFrame(flechaAnimRef.current); flechaAnimRef.current = null; actualizarFigura(f.id, { cabeza: 1 }); }
+                                      const p = puntoImagen(e);
+                                      if (!p) return;
+                                      dragRef.current = { tipo: 'flechaCurva', id: f.id };
+                                      e.currentTarget.setPointerCapture(e.pointerId);
+                                    }}
+                                  />
+                                )}
+                              </>
+                            ) : f.tipo === 'polilinea' ? (
+                              <>
+                                {(f.puntos || []).map((p, i) => (
+                                  <circle
+                                    key={i}
+                                    cx={p.x * imgDim.w}
+                                    cy={p.y * imgDim.h}
+                                    r={8}
+                                    fill="#ffffff"
+                                    stroke="#0ea5e9"
+                                    strokeWidth="2"
+                                    style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => {
+                                      setFiguraSeleccionada(f.id);
+                                      const pp = puntoImagen(e);
+                                      if (!pp) return;
+                                      dragRef.current = { tipo: 'polilineaPunto', id: f.id, indice: i, puntos: f.puntos };
+                                      e.currentTarget.setPointerCapture(e.pointerId);
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            ) : f.tipo === 'circuito' ? (
+                              <>
+                                <circle
+                                  cx={f.x1 * imgDim.w}
+                                  cy={f.y1 * imgDim.h}
+                                  r={8}
+                                  fill="#ffffff"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'move' }}
+                                  title="Mover aro 1"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                    const p = puntoImagen(e);
+                                    if (!p) return;
+                                    dragRef.current = { tipo: 'circuitoPunto', id: f.id, cual: 'p1' };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                                <circle
+                                  cx={f.x2 * imgDim.w}
+                                  cy={f.y2 * imgDim.h}
+                                  r={8}
+                                  fill="#ffffff"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'move' }}
+                                  title="Mover aro 2"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                    const p = puntoImagen(e);
+                                    if (!p) return;
+                                    dragRef.current = { tipo: 'circuitoPunto', id: f.id, cual: 'p2' };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                                <circle
+                                  cx={(f.x1 + (f.radio1 || 0.08)) * imgDim.w}
+                                  cy={f.y1 * imgDim.h}
+                                  r={8}
+                                  fill="#facc15"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
+                                  title="Tamaño del aro 1"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                    const p = puntoImagen(e);
+                                    if (!p) return;
+                                    dragRef.current = { tipo: 'circuitoRadio', id: f.id, cual: 'r1', cx: f.x1, cy: f.y1 };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                                <circle
+                                  cx={(f.x2 + (f.radio2 || 0.08)) * imgDim.w}
+                                  cy={f.y2 * imgDim.h}
+                                  r={8}
+                                  fill="#facc15"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
+                                  title="Tamaño del aro 2"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                    const p = puntoImagen(e);
+                                    if (!p) return;
+                                    dragRef.current = { tipo: 'circuitoRadio', id: f.id, cual: 'r2', cx: f.x2, cy: f.y2 };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                              </>
+                            ) : (
                               <circle
-                                cx={x + ancho / 2}
-                                cy={y + alto / 2}
-                                r={Math.max(8, ancho * 0.06)}
+                                cx={f.tipo === 'texto' ? x + anchoTxt / 2 : x + ancho / 2}
+                                cy={f.tipo === 'texto' ? y + tamTxt / 2 : y + alto / 2}
+                                r={Math.max(8, (f.tipo === 'texto' ? anchoTxt : ancho) * 0.06)}
                                 fill="#ffffff"
                                 stroke="#0ea5e9"
                                 strokeWidth="2"
-style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onPointerDown={(e) => {
+                                style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
+                                onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => {
+                                  if (circuloAnimRef.current) { cancelAnimationFrame(circuloAnimRef.current); circuloAnimRef.current = null; }
+                                  if (triAnimRef.current) { cancelAnimationFrame(triAnimRef.current); triAnimRef.current = null; if (f.tipo === 'triangulo') actualizarFigura(f.id, { crecimiento: 1 }); }
                                   setFiguraSeleccionada(f.id);
                                   const p = puntoImagen(e);
                                   if (!p) return;
-                                  dragRef.current = { tipo: 'resize', id: f.id, fx: f.x, fy: f.y };
+                                  dragRef.current = { tipo: 'resize', id: f.id, fx: f.x, fy: f.y, tipoFig: f.tipo, tamInicial: f.fontSize || 0.06, py: p.y };
                                   e.currentTarget.setPointerCapture(e.pointerId);
                                 }}
                               />
-                            )}
+                            ))}
                           </g>
                         );
                       })}
+                      {modoPolilinea && puntosPolilinea.length > 0 && (
+                        <g style={{ pointerEvents: 'none' }}>
+                          {puntosPolilinea.length > 1 && (
+                            <polyline points={puntosPolilinea.map(p => `${p.x * imgDim.w},${p.y * imgDim.h}`).join(' ')} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,3" />
+                          )}
+                          {puntosPolilinea.map((p, i) => (
+                            <circle key={i} cx={p.x * imgDim.w} cy={p.y * imgDim.h} r="6" fill="#38bdf8" stroke="#ffffff" strokeWidth="2" />
+                          ))}
+                        </g>
+                      )}
                     </svg>
                   )}
                 </div>
@@ -819,7 +1436,13 @@ style={{ pointerEvents: 'all', cursor: 'nwse-resize' }}
           <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.4rem 1.8rem', maxWidth: '340px', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
             <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: '#e2e8f0' }}>{aviso}</p>
             <button
-              onClick={() => setAviso(null)}
+              onClick={() => {
+                if (abrirCarpetaAlOK) {
+                  setAbrirCarpetaAlOK(false);
+                  try { fetch('/abrir-carpeta'); } catch (e) { /* noop */ }
+                }
+                setAviso(null);
+              }}
               style={{ marginTop: '1rem', background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
             >
               OK

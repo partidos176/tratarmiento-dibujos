@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
+import { exec } from 'node:child_process';
 
 export default defineConfig({
   plugins: [
@@ -33,6 +34,14 @@ export default defineConfig({
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ ok: false, error: 'request error' }));
+          });
+        });
+        server.middlewares.use('/abrir-carpeta', (req, res, next) => {
+          if (req.method !== 'GET' && req.method !== 'POST') return next();
+          exec('explorer "C:\\Users\\uSer\\Videos"', () => {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true }));
           });
         });
       }
