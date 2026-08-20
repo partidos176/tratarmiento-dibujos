@@ -6,6 +6,10 @@ function App() {
   const [hoja, setHoja] = useState('Presentación');
   const [progreso, setProgreso] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(false);
+  const [capturas, setCapturas] = useState([]);
+  const [capturaSeleccionada, setCapturaSeleccionada] = useState(null);
+  const [figuras, setFiguras] = useState([]);
+  const [imgDim, setImgDim] = useState(null);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
 
@@ -22,7 +26,8 @@ function App() {
   const formatoTiempo = (s) => {
     const m = Math.floor(s / 60);
     const ss = Math.floor(s % 60);
-    return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    const cs = Math.floor((s % 1) * 100);
+    return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}:${String(cs).padStart(2, '0')}`;
   };
 
   const buscarEnTimeline = (e) => {
@@ -32,6 +37,23 @@ function App() {
     const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     video.currentTime = x * video.duration;
     setProgreso(x);
+  };
+
+  const capturarImagen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    setReproduciendo(false);
+    const canvas = document.createElement('canvas');
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    setCapturas(prev => [...prev, { id: Date.now(), dataUrl: canvas.toDataURL('image/png'), tiempo: v.currentTime }]);
+  };
+
+  const anadirTriangulo = () => {
+    setFiguras(prev => [...prev, { id: Date.now(), tipo: 'triangulo', x: 0.5, y: 0.5, tam: 0.15, color: '#38bdf8' }]);
   };
 
   return (
@@ -135,14 +157,117 @@ function App() {
                   >
                     {reproduciendo ? 'PAUSA' : 'PLAY'}
                   </button>
+                  <button
+                    onClick={capturarImagen}
+                    style={{ display: 'inline-flex', alignItems: 'center', background: '#8b5cf6', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', cursor: 'pointer' }}
+                    title="Capturar imagen"
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                  </button>
                 </div>
+                {capturas.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
+                    {capturas.map((c, i) => (
+                      <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <div style={{ position: 'relative' }}>
+                          <img
+                            src={c.dataUrl}
+                            alt={`Captura ${i + 1}`}
+                            onClick={() => {
+                              setCapturaSeleccionada(c);
+                              setFiguras([]);
+                              setImgDim(null);
+                              setHoja('Edición');
+                            }}
+                            style={{ width: '160px', borderRadius: '8px', border: '1px solid #334155', cursor: 'pointer' }}
+                          />
+                          <button
+                            onClick={() => setCapturas(prev => prev.filter(x => x.id !== c.id))}
+                            title="Eliminar captura"
+                            style={{ position: 'absolute', top: '4px', right: '4px', width: '22px', height: '22px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.9rem', lineHeight: '22px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>
+                          {formatoTiempo(c.tiempo)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#94a3b8' }}>Edición</span>
+        <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
+          {capturaSeleccionada && (
+            <button
+              onClick={() => { setCapturaSeleccionada(null); setFiguras([]); setImgDim(null); }}
+              style={{ position: 'absolute', top: '1rem', right: '1.5rem', background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', zIndex: 10 }}
+            >
+              BORRAR
+            </button>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', borderRight: '1px solid #1e293b' }}>
+            <button
+              onClick={anadirTriangulo}
+              title="Añadir triángulo"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round">
+                <polygon points="12,3 22,20 2,20" />
+              </svg>
+            </button>
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {capturaSeleccionada ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img
+                    src={capturaSeleccionada.dataUrl}
+                    alt="Captura en edición"
+                    onLoad={(e) => setImgDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                    style={{ display: 'block', maxWidth: '100%', maxHeight: '92vh', borderRadius: '12px', border: '1px solid #334155' }}
+                  />
+                  {imgDim && (
+                    <svg
+                      viewBox={`0 0 ${imgDim.w} ${imgDim.h}`}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                    >
+                      {figuras.map(f => {
+                        if (f.tipo === 'triangulo') {
+                          const s = f.tam * imgDim.w;
+                          const x = f.x * imgDim.w;
+                          const y = f.y * imgDim.h;
+                          return (
+                            <polygon
+                              key={f.id}
+                              points={`${x},${y - s / 2} ${x - s / 2},${y + s / 2} ${x + s / 2},${y + s / 2}`}
+                              fill={f.color}
+                              fillOpacity="0.5"
+                              stroke="#ffffff"
+                              strokeWidth="2"
+                            />
+                          );
+                        }
+                        return null;
+                      })}
+                    </svg>
+                  )}
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.8rem', color: '#94a3b8' }}>
+                  Captura {formatoTiempo(capturaSeleccionada.tiempo)}
+                </span>
+              </div>
+            ) : (
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#94a3b8' }}>Edición</span>
+            )}
+          </div>
         </div>
       )}
     </main>
