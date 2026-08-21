@@ -223,15 +223,19 @@ function App() {
 
   const anadirCircuito = () => {
     const id = Date.now();
-    const x1 = 0.3, y1 = 0.5, x2 = 0.7, y2 = 0.5, r1 = 0.08, r2 = 0.08;
-    setFiguras(prev => [...prev, { id, tipo: 'circuito', x1, y1, x2: x1, y2: y1, radio1: 0, radio2: 0, color: '#38bdf8', opacidad: 1, grosor: 0.005 }]);
+    const final = [{ x: 0.2, y: 0.5 }, { x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }, { x: 0.8, y: 0.5 }];
+    const cx = 0.5, cy = 0.5;
+    setFiguras(prev => [...prev, { id, tipo: 'circuito', elipses: final.map(() => ({ x: cx, y: cy, rx: 0, ry: 0 })), color: '#38bdf8', opacidad: 1, grosor: 0.005 }]);
     setFiguraSeleccionada(id);
     if (circuitoAnimRef.current) cancelAnimationFrame(circuitoAnimRef.current);
     const t0 = performance.now();
     const paso = (t) => {
       const p = Math.min(1, (t - t0) / 1000);
       const e = 1 - Math.pow(1 - p, 3);
-      setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, radio1: r1 * e, radio2: r2 * e } : f));
+      setFiguras(prev => prev.map(f => {
+        if (f.id !== id) return f;
+        return { ...f, elipses: final.map((fin, i) => ({ x: cx + (fin.x - cx) * e, y: cy + (fin.y - cy) * e, rx: 0.08 * e, ry: 0.08 * e })) };
+      }));
       if (p < 1) circuitoAnimRef.current = requestAnimationFrame(paso);
       else circuitoAnimRef.current = null;
     };
@@ -346,14 +350,29 @@ function App() {
       return `${pol}${circs}`;
     }
     if (f.tipo === 'circuito') {
-      const c1x = f.x1 * imgDim.w;
-      const c1y = f.y1 * imgDim.h;
-      const c2x = f.x2 * imgDim.w;
-      const c2y = f.y2 * imgDim.h;
-      const r1 = (f.radio1 || 0.08) * imgDim.w;
-      const r2 = (f.radio2 || 0.08) * imgDim.w;
+      const elipses = f.elipses || [{x:f.x1??0.2,y:f.y1??0.5,rx:f.rx1??0.08,ry:f.ry1??0.08},{x:f.x2??0.8,y:f.y2??0.5,rx:f.rx2??0.08,ry:f.ry2??0.08}];
       const grosor = (f.grosor || 0.005) * imgDim.h;
-      return `<line x1="${c1x}" y1="${c1y}" x2="${c2x}" y2="${c2y}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/><circle cx="${c1x}" cy="${c1y}" r="${r1}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/><circle cx="${c2x}" cy="${c2y}" r="${r2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
+      let parts = '';
+      for (let i = 0; i < elipses.length - 1; i++) {
+        const a = elipses[i], b = elipses[i + 1];
+        const ax = a.x * imgDim.w, ay = a.y * imgDim.h;
+        const bx = b.x * imgDim.w, by = b.y * imgDim.h;
+        const arx = (a.rx ?? 0.08) * imgDim.w, ary = (a.ry ?? 0.08) * imgDim.h;
+        const brx = (b.rx ?? 0.08) * imgDim.w, bry = (b.ry ?? 0.08) * imgDim.h;
+        const dx = bx - ax, dy = by - ay, dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+          const ux = dx / dist, uy = dy / dist;
+          const lx1 = ax + ux * arx, ly1 = ay + uy * ary;
+          const lx2 = bx - ux * brx, ly2 = by - uy * bry;
+          parts += `<line x1="${lx1}" y1="${ly1}" x2="${lx2}" y2="${ly2}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
+        }
+      }
+      elipses.forEach(e => {
+        const ex = e.x * imgDim.w, ey = e.y * imgDim.h;
+        const erx = (e.rx ?? 0.08) * imgDim.w, ery = (e.ry ?? 0.08) * imgDim.h;
+        parts += `<ellipse cx="${ex}" cy="${ey}" rx="${erx}" ry="${ery}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
+      });
+      return parts;
     }
     if (f.tipo === 'flecha') {
       const x1 = f.x1 * imgDim.w;
@@ -463,7 +482,15 @@ function App() {
             if (f.tipo === 'circulo') return { ...f, ancho: f.ancho * e, alto: f.alto * e };
             if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
             if (f.tipo === 'flecha') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
-            if (f.tipo === 'circuito') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, radio1: (f.radio1 || 0.08) * e, radio2: (f.radio2 || 0.08) * e };
+            if (f.tipo === 'circuito') {
+              const finales = [{ x: 0.2, y: 0.5 }, { x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }, { x: 0.8, y: 0.5 }];
+              const cx = 0.5, cy = 0.5;
+              const elipses = (f.elipses || []).map((el, i) => {
+                const fin = finales[i] || finales[0];
+                return { x: cx + (fin.x - cx) * e, y: cy + (fin.y - cy) * e, rx: (el.rx ?? 0.08) * e, ry: (el.ry ?? 0.08) * e };
+              });
+              return { ...f, elipses };
+            }
             return f;
           });
           return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(svgFigura).join('')}</svg>`;
@@ -919,19 +946,6 @@ function App() {
               </svg>
             </button>
             <button
-              onClick={anadirPolilinea}
-              title={modoPolilinea ? 'Terminar la polilínea' : 'Dibujar polilínea (pulsa en la captura para marcar los puntos)'}
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoPolilinea ? '#f59e0b' : '#0ea5e9', border: modoPolilinea ? '2px solid #ffffff' : 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
-            >
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="4,17 9,17 13,8 19,8" />
-                <circle cx="4" cy="17" r="2.5" />
-                <circle cx="9" cy="17" r="2.5" />
-                <circle cx="13" cy="8" r="2.5" />
-                <circle cx="19" cy="8" r="2.5" />
-              </svg>
-            </button>
-            <button
               onClick={anadirCircuito}
               title="Añadir aro unido a otro aro"
               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
@@ -994,23 +1008,22 @@ function App() {
                           } else if (d.tipoFig === 'circuito') {
                             const dx = p.x - d.px;
                             const dy = p.y - d.py;
-                            actualizarFigura(d.id, { x1: d.x1 + dx, y1: d.y1 + dy, x2: d.x2 + dx, y2: d.y2 + dy });
+                            const elipses = (d.elipses || []).map(el => ({ ...el, x: el.x + dx, y: el.y + dy }));
+                            actualizarFigura(d.id, { elipses });
                           } else {
                             actualizarFigura(d.id, { x: d.ox + (p.x - d.px), y: d.oy + (p.y - d.py) });
                           }
                         } else if (d.tipo === 'polilineaPunto') {
                           actualizarFigura(d.id, { puntos: (d.puntos || []).map((pt, i) => i === d.indice ? { x: p.x, y: p.y } : pt) });
                         } else if (d.tipo === 'circuitoPunto') {
-                          if (d.cual === 'p1') {
-                            actualizarFigura(d.id, { x1: p.x, y1: p.y });
-                          } else {
-                            actualizarFigura(d.id, { x2: p.x, y2: p.y });
-                          }
-                        } else if (d.tipo === 'circuitoRadio') {
-                          const dx = (p.x - d.cx) * imgDim.w;
-                          const dy = (p.y - d.cy) * imgDim.h;
-                          const rad = Math.max(0.01, Math.hypot(dx, dy) / imgDim.w);
-                          actualizarFigura(d.id, d.cual === 'r1' ? { radio1: rad } : { radio2: rad });
+                          const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => i === d.indice ? { ...el, x: p.x, y: p.y } : el);
+                          actualizarFigura(d.id, { elipses });
+                        } else if (d.tipo === 'circuitoRadioX') {
+                          const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => i === d.indice ? { ...el, rx: Math.max(0.01, Math.abs(p.x - el.x)) } : el);
+                          actualizarFigura(d.id, { elipses });
+                        } else if (d.tipo === 'circuitoRadioY') {
+                          const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => i === d.indice ? { ...el, ry: Math.max(0.01, Math.abs(p.y - el.y)) } : el);
+                          actualizarFigura(d.id, { elipses });
                         } else if (d.tipo === 'lineaPunto') {
                           if (d.cual === 'p1') {
                             actualizarFigura(d.id, { x1: p.x, y1: p.y, cx: d.cx + (p.x - d.px), cy: d.cy + (p.y - d.py) });
@@ -1060,7 +1073,7 @@ function App() {
                             setFiguraSeleccionada(f.id);
                             const p = puntoImagen(e);
                             if (!p) return;
-                            dragRef.current = { tipo: 'mover', id: f.id, ox: f.x, oy: f.y, px: p.x, py: p.y, tipoFig: f.tipo, x1: f.x1, y1: f.y1, x2: f.x2, y2: f.y2, cx: f.cx, cy: f.cy, puntos: f.puntos };
+                            dragRef.current = { tipo: 'mover', id: f.id, ox: f.x, oy: f.y, px: p.x, py: p.y, tipoFig: f.tipo, x1: f.x1, y1: f.y1, x2: f.x2, y2: f.y2, cx: f.cx, cy: f.cy, puntos: f.puntos, elipses: f.elipses };
                             e.currentTarget.setPointerCapture(e.pointerId);
                           },
                         };
@@ -1115,27 +1128,27 @@ const shape = f.tipo === 'triangulo'
                                   })()
 : f.tipo === 'circuito'
                                 ? (() => {
-                                    const c1x = f.x1 * imgDim.w;
-                                    const c1y = f.y1 * imgDim.h;
-                                    const c2x = f.x2 * imgDim.w;
-                                    const c2y = f.y2 * imgDim.h;
-                                    const r1 = (f.radio1 || 0.08) * imgDim.w;
-                                    const r2 = (f.radio2 || 0.08) * imgDim.w;
+                                    const elipses = f.elipses || [{x:f.x1??0.2,y:f.y1??0.5,rx:f.rx1??0.08,ry:f.ry1??0.08},{x:f.x2??0.8,y:f.y2??0.5,rx:f.rx2??0.08,ry:f.ry2??0.08}];
                                     const grosorPx = (f.grosor || 0.005) * imgDim.h;
                                     return (
                                       <g style={{ pointerEvents: 'all', cursor: 'move' }} onClick={shapeProps.onClick} onPointerDown={shapeProps.onPointerDown}>
-                                        <line
-                                          x1={c1x}
-                                          y1={c1y}
-                                          x2={c2x}
-                                          y2={c2y}
-                                          stroke={f.color}
-                                          strokeOpacity={f.opacidad ?? 1}
-                                          strokeWidth={grosorPx}
-                                          strokeLinecap="round"
-                                        />
-                                        <circle cx={c1x} cy={c1y} r={r1} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} />
-                                        <circle cx={c2x} cy={c2y} r={r2} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} />
+                                        {elipses.map((el, i) => {
+                                          if (i === 0) return null;
+                                          const a = elipses[i - 1], b = el;
+                                          const ax = a.x * imgDim.w, ay = a.y * imgDim.h;
+                                          const bx = b.x * imgDim.w, by = b.y * imgDim.h;
+                                          const arx = (a.rx ?? 0.08) * imgDim.w, ary = (a.ry ?? 0.08) * imgDim.h;
+                                          const brx = (b.rx ?? 0.08) * imgDim.w, bry = (b.ry ?? 0.08) * imgDim.h;
+                                          const dx = bx - ax, dy = by - ay, dist = Math.hypot(dx, dy);
+                                          if (dist <= 0) return null;
+                                          const ux = dx / dist, uy = dy / dist;
+                                          return (
+                                            <line key={`l${i}`} x1={ax + ux * arx} y1={ay + uy * ary} x2={bx - ux * brx} y2={by - uy * bry} stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} strokeLinecap="round" />
+                                          );
+                                        })}
+                                        {elipses.map((el, i) => (
+                                          <ellipse key={i} cx={el.x * imgDim.w} cy={el.y * imgDim.h} rx={(el.rx ?? 0.08) * imgDim.w} ry={(el.ry ?? 0.08) * imgDim.h} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} />
+                                        ))}
                                       </g>
                                     );
                                   })()
@@ -1271,82 +1284,67 @@ const shape = f.tipo === 'triangulo'
                               </>
                             ) : f.tipo === 'circuito' ? (
                               <>
-                                <circle
-                                  cx={f.x1 * imgDim.w}
-                                  cy={f.y1 * imgDim.h}
-                                  r={8}
-                                  fill="#ffffff"
-                                  stroke="#0ea5e9"
-                                  strokeWidth="2"
-                                  style={{ pointerEvents: 'all', cursor: 'move' }}
-                                  title="Mover aro 1"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onPointerDown={(e) => {
-                                    setFiguraSeleccionada(f.id);
-                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
-                                    const p = puntoImagen(e);
-                                    if (!p) return;
-                                    dragRef.current = { tipo: 'circuitoPunto', id: f.id, cual: 'p1' };
-                                    e.currentTarget.setPointerCapture(e.pointerId);
-                                  }}
-                                />
-                                <circle
-                                  cx={f.x2 * imgDim.w}
-                                  cy={f.y2 * imgDim.h}
-                                  r={8}
-                                  fill="#ffffff"
-                                  stroke="#0ea5e9"
-                                  strokeWidth="2"
-                                  style={{ pointerEvents: 'all', cursor: 'move' }}
-                                  title="Mover aro 2"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onPointerDown={(e) => {
-                                    setFiguraSeleccionada(f.id);
-                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
-                                    const p = puntoImagen(e);
-                                    if (!p) return;
-                                    dragRef.current = { tipo: 'circuitoPunto', id: f.id, cual: 'p2' };
-                                    e.currentTarget.setPointerCapture(e.pointerId);
-                                  }}
-                                />
-                                <circle
-                                  cx={(f.x1 + (f.radio1 || 0.08)) * imgDim.w}
-                                  cy={f.y1 * imgDim.h}
-                                  r={8}
-                                  fill="#facc15"
-                                  stroke="#0ea5e9"
-                                  strokeWidth="2"
-                                  style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
-                                  title="Tamaño del aro 1"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onPointerDown={(e) => {
-                                    setFiguraSeleccionada(f.id);
-                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
-                                    const p = puntoImagen(e);
-                                    if (!p) return;
-                                    dragRef.current = { tipo: 'circuitoRadio', id: f.id, cual: 'r1', cx: f.x1, cy: f.y1 };
-                                    e.currentTarget.setPointerCapture(e.pointerId);
-                                  }}
-                                />
-                                <circle
-                                  cx={(f.x2 + (f.radio2 || 0.08)) * imgDim.w}
-                                  cy={f.y2 * imgDim.h}
-                                  r={8}
-                                  fill="#facc15"
-                                  stroke="#0ea5e9"
-                                  strokeWidth="2"
-                                  style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
-                                  title="Tamaño del aro 2"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onPointerDown={(e) => {
-                                    setFiguraSeleccionada(f.id);
-                                    if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
-                                    const p = puntoImagen(e);
-                                    if (!p) return;
-                                    dragRef.current = { tipo: 'circuitoRadio', id: f.id, cual: 'r2', cx: f.x2, cy: f.y2 };
-                                    e.currentTarget.setPointerCapture(e.pointerId);
-                                  }}
-                                />
+                                {(f.elipses || []).map((el, i) => (
+                                  <g key={i}>
+                                    <circle
+                                      cx={el.x * imgDim.w}
+                                      cy={el.y * imgDim.h}
+                                      r={7}
+                                      fill="#ffffff"
+                                      stroke="#0ea5e9"
+                                      strokeWidth="2"
+                                      style={{ pointerEvents: 'all', cursor: 'move' }}
+                                      title={`Mover aro ${i + 1}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onPointerDown={(e) => {
+                                        setFiguraSeleccionada(f.id);
+                                        if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                        const p = puntoImagen(e);
+                                        if (!p) return;
+                                        dragRef.current = { tipo: 'circuitoPunto', id: f.id, indice: i };
+                                        e.currentTarget.setPointerCapture(e.pointerId);
+                                      }}
+                                    />
+                                    <circle
+                                      cx={(el.x + (el.rx ?? 0.08)) * imgDim.w}
+                                      cy={el.y * imgDim.h}
+                                      r={6}
+                                      fill="#facc15"
+                                      stroke="#0ea5e9"
+                                      strokeWidth="2"
+                                      style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
+                                      title={`Ancho aro ${i + 1}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onPointerDown={(e) => {
+                                        setFiguraSeleccionada(f.id);
+                                        if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                        const p = puntoImagen(e);
+                                        if (!p) return;
+                                        dragRef.current = { tipo: 'circuitoRadioX', id: f.id, indice: i };
+                                        e.currentTarget.setPointerCapture(e.pointerId);
+                                      }}
+                                    />
+                                    <circle
+                                      cx={el.x * imgDim.w}
+                                      cy={(el.y + (el.ry ?? 0.08)) * imgDim.h}
+                                      r={6}
+                                      fill="#fb923c"
+                                      stroke="#0ea5e9"
+                                      strokeWidth="2"
+                                      style={{ pointerEvents: 'all', cursor: 'ns-resize' }}
+                                      title={`Alto aro ${i + 1}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onPointerDown={(e) => {
+                                        setFiguraSeleccionada(f.id);
+                                        if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                        const p = puntoImagen(e);
+                                        if (!p) return;
+                                        dragRef.current = { tipo: 'circuitoRadioY', id: f.id, indice: i };
+                                        e.currentTarget.setPointerCapture(e.pointerId);
+                                      }}
+                                    />
+                                  </g>
+                                ))}
                               </>
                             ) : (
                               <circle
