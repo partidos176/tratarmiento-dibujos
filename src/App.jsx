@@ -244,19 +244,8 @@ function App() {
 
   const anadirCirculo = () => {
     const id = Date.now();
-    const objetivo = 0.2;
-    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.001, alto: 0.001, color: '#38bdf8', opacidad: 0.5 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0 }]);
     setFiguraSeleccionada(id);
-    if (circuloAnimRef.current) cancelAnimationFrame(circuloAnimRef.current);
-    const t0 = performance.now();
-    const paso = (t) => {
-      const p = Math.min(1, (t - t0) / 1000);
-      const e = 1 - Math.pow(1 - p, 3);
-      setFiguras(prev => prev.map(f => f.id === id ? { ...f, ancho: objetivo * e, alto: objetivo * e } : f));
-      if (p < 1) circuloAnimRef.current = requestAnimationFrame(paso);
-      else circuloAnimRef.current = null;
-    };
-    circuloAnimRef.current = requestAnimationFrame(paso);
   };
 
   const anadirTexto = () => {
@@ -1078,7 +1067,7 @@ function App() {
                           },
                         };
 const shape = f.tipo === 'triangulo'
-                          ? <path {...shapeProps} d={`M ${x},${y + alto / 2} L ${x - ancho / 2},${y - alto / 2 + alto * (f.crecimiento ?? 1)} L ${x + ancho / 2},${y - alto / 2 + alto * (f.crecimiento ?? 1)} Z`} />
+                          ? <path {...shapeProps} d={`M ${x},${y - alto / 2 + alto * (f.crecimiento ?? 1)} L ${x - ancho / 2},${y + alto / 2} L ${x + ancho / 2},${y + alto / 2} Z`} />
                           : f.tipo === 'circulo'
                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
                             : f.tipo === 'linea'
