@@ -408,8 +408,8 @@ function App() {
       const ancho = f.ancho * imgDim.w;
       const alto = f.alto * imgDim.h;
       const yBase = y + alto / 2;
-      const yPunta = yBase - alto * (f.crecimiento ?? 1);
-      return `${pat}<path d="M ${x},${yPunta} L ${x - ancho / 2},${yBase} L ${x + ancho / 2},${yBase} Z" ${common}/>`;
+      const yPunta = yBase - alto + alto * (f.crecimiento ?? 1);
+      return `${pat}<path d="M ${x},${yBase} L ${x - ancho / 2},${yPunta} L ${x + ancho / 2},${yPunta} Z" ${common}/>`;
     }
     const cx = f.x * imgDim.w;
     const cy = f.y * imgDim.h;
@@ -1078,7 +1078,7 @@ function App() {
                           },
                         };
 const shape = f.tipo === 'triangulo'
-                          ? <path {...shapeProps} d={`M ${x},${y + alto / 2 - alto * (f.crecimiento ?? 1)} L ${x - ancho / 2},${y + alto / 2} L ${x + ancho / 2},${y + alto / 2} Z`} />
+                          ? <path {...shapeProps} d={`M ${x},${y + alto / 2} L ${x - ancho / 2},${y - alto / 2 + alto * (f.crecimiento ?? 1)} L ${x + ancho / 2},${y - alto / 2 + alto * (f.crecimiento ?? 1)} Z`} />
                           : f.tipo === 'circulo'
                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
                             : f.tipo === 'linea'
