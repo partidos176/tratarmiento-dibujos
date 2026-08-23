@@ -1111,13 +1111,12 @@ function App() {
              <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setModoFlechaClick(prev => !prev);
                   if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
-                  flechaOrigenRef.current = null;
                   setAviso('');
+                  anadirFlecha();
                 }}
-                title={modoFlechaClick ? 'Desactivar modo flecha' : 'Colocar flecha con click'}
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoFlechaClick ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+                title="Añadir flecha"
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
               >
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="4" y1="20" x2="19" y2="5" />
