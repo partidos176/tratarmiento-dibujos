@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 function App() {
   const [archivo, setArchivo] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoja, setHoja] = useState('Presentación');
   const [progreso, setProgreso] = useState(0);
   const [duracion, setDuracion] = useState(0);
@@ -502,6 +503,18 @@ function App() {
   };
 
   useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFullscreen(false);
+        const v = videoRef.current;
+        if (v) { v.style.maxHeight = '60vh'; v.style.borderRadius = '12px'; v.style.border = '1px solid #334155'; }
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  useEffect(() => {
     const onKey = (e) => {
       if ((e.key === 'Delete' || e.key === 'Del') && figuraSeleccionada) {
         setFiguras(prev => prev.filter(f => f.id !== figuraSeleccionada));
@@ -606,12 +619,30 @@ function App() {
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
                 <button
-                  onClick={() => { const container = document.getElementById('video-container'); if (container) { if (container.requestFullscreen) container.requestFullscreen(); else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen(); } }}
+                  onClick={() => {
+                    const container = document.getElementById('video-container');
+                    if (!container) return;
+                    if (!document.fullscreenElement) {
+                      container.requestFullscreen?.() || container.webkitRequestFullscreen?.();
+                      setIsFullscreen(true);
+                      const v = videoRef.current;
+                      if (v) { v.style.maxHeight = '100vh'; v.style.borderRadius = '0'; v.style.border = 'none'; }
+                    } else {
+                      document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+                      setIsFullscreen(false);
+                      const v = videoRef.current;
+                      if (v) { v.style.maxHeight = '60vh'; v.style.borderRadius = '12px'; v.style.border = '1px solid #334155'; }
+                    }
+                  }}
                   title="Pantalla completa"
                   style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 3 }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                    {isFullscreen ? (
+                      <><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" /></>
+                    ) : (
+                      <><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></>
+                    )}
                   </svg>
                 </button>
                 {clipActivo && clipActivo.videoUrl && (
