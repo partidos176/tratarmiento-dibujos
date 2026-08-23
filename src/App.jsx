@@ -408,11 +408,12 @@ function App() {
         const bx = b.x * d.w, by = b.y * d.h;
         const arx = (a.rx ?? 0.08) * d.w, ary = (a.ry ?? 0.08) * d.h;
         const brx = (b.rx ?? 0.08) * d.w, bry = (b.ry ?? 0.08) * d.h;
-        const dx = bx - ax, dy = by - ay, dist = Math.hypot(dx, dy);
-        if (dist > 0) {
-          const ux = dx / dist, uy = dy / dist;
-          const lx1 = ax + ux * arx, ly1 = ay + uy * ary;
-          const lx2 = bx - ux * brx, ly2 = by - uy * bry;
+        const dx = bx - ax, dy = by - ay;
+        if (dx !== 0 || dy !== 0) {
+          const tA = 1 / Math.sqrt((dx / arx) ** 2 + (dy / ary) ** 2);
+          const tB = 1 / Math.sqrt((dx / brx) ** 2 + (dy / bry) ** 2);
+          const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
+          const lx2 = bx - dx * tB, ly2 = by - dy * tB;
           parts += `<line x1="${lx1}" y1="${ly1}" x2="${lx2}" y2="${ly2}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
         }
       }
@@ -561,14 +562,22 @@ function App() {
         let lineParts = '';
         if (allAppeared && allEllipses.length >= 2) {
           const lineProgress = Math.min(1, (t - 0.5) * 2);
-          const pts = allEllipses.map(c => ({ x: c.x * w, y: c.y * h }));
-          for (let j = 0; j < pts.length - 1; j++) {
-            const segEnd = Math.min(1, lineProgress * (pts.length - 1) - j);
+          for (let j = 0; j < allEllipses.length - 1; j++) {
+            const segEnd = Math.min(1, lineProgress * (allEllipses.length - 1) - j);
             if (segEnd <= 0) break;
-            const x1 = pts[j].x, y1 = pts[j].y;
-            const x2 = pts[j].x + (pts[j + 1].x - pts[j].x) * Math.min(1, segEnd);
-            const y2 = pts[j].y + (pts[j + 1].y - pts[j].y) * Math.min(1, segEnd);
-            lineParts += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#38bdf8" stroke-opacity="1" stroke-width="2" stroke-linecap="round"/>`;
+            const a = allEllipses[j], b = allEllipses[j + 1];
+            const ax = a.x * w, ay = a.y * h, arx = (a.ancho || 0.04) * w / 2, ary = (a.alto || 0.025) * h / 2;
+            const bx = b.x * w, by = b.y * h, brx = (b.ancho || 0.04) * w / 2, bry = (b.alto || 0.025) * h / 2;
+            const dx = bx - ax, dy = by - ay;
+            if (dx !== 0 || dy !== 0) {
+              const tA = 1 / Math.sqrt((dx / arx) ** 2 + (dy / ary) ** 2);
+              const tB = 1 / Math.sqrt((dx / brx) ** 2 + (dy / bry) ** 2);
+              const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
+              const lx2 = bx - dx * tB, ly2 = by - dy * tB;
+              const cx = lx1 + (lx2 - lx1) * Math.min(1, segEnd);
+              const cy = ly1 + (ly2 - ly1) * Math.min(1, segEnd);
+              lineParts += `<line x1="${lx1}" y1="${ly1}" x2="${cx}" y2="${cy}" stroke="#38bdf8" stroke-opacity="1" stroke-width="2" stroke-linecap="round"/>`;
+            }
           }
         }
         const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${capturaSeleccionada.dataUrl}" width="${w}" height="${h}"/>${ellipseParts.join('')}${lineParts}</svg>`;
@@ -643,11 +652,8 @@ function App() {
             if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
             if (f.tipo === 'flecha') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
             if (f.tipo === 'circuito') {
-              const finales = [{ x: 0.2, y: 0.5 }, { x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }, { x: 0.8, y: 0.5 }];
-              const cx = 0.5, cy = 0.5;
-              const elipses = (f.elipses || []).map((el, i) => {
-                const fin = finales[i] || finales[0];
-                return { x: cx + (fin.x - cx) * e, y: cy + (fin.y - cy) * e, rx: (el.rx ?? 0.08) * e, ry: (el.ry ?? 0.08) * e };
+              const elipses = (f.elipses || []).map((el) => {
+                return { x: el.x * e + (el.x > 0.5 ? (1 - e) * el.x : 0), y: el.y * e + (el.y > 0.5 ? (1 - e) * el.y : 0), rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e };
               });
               return { ...f, elipses };
             }
