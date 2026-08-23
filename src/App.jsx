@@ -387,7 +387,8 @@ function App() {
       ? `<defs><pattern id="rayado-${f.id}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${f.color}" strokeWidth="2.5"/></pattern></defs>`
       : '';
     const fill = f.sinRelleno ? 'none' : (f.rayado ? `url(#rayado-${f.id})` : f.color);
-    const common = `fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : (f.opacidad ?? 0.5)}" stroke="${f.color}" stroke-width="2"`;
+    const op = f.opacidad ?? 0.5;
+    const common = `fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : op}" stroke="${f.color}" stroke-opacity="${op}" stroke-width="2"`;
     if (f.tipo === 'polilinea') {
       const pts = (f.puntos || []).map(p => `${p.x * d.w},${p.y * d.h}`);
       const grosor = (f.grosor || 0.006) * d.h;
@@ -1047,7 +1048,7 @@ function App() {
               const p = puntoImagen(e);
               if (p) {
                 const id = Date.now();
-                setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.04, alto: 0.025, color: '#38bdf8', opacidad: 1, crecimiento: 1, sinRelleno: true }]);
+                setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.04, alto: 0.025, color: '#38bdf8', opacidad: 0, crecimiento: 1, sinRelleno: true }]);
                 setFiguraSeleccionada(id);
                 setModoCirculoClick(false);
                 setAviso('');
