@@ -26,6 +26,7 @@ function App() {
   const [modoCorte, setModoCorte] = useState(false);
   const [modoCirculoClick, setModoCirculoClick] = useState(false);
   const [modoFlechaClick, setModoFlechaClick] = useState(false);
+  const flechaOrigenRef = useRef(null);
   const elipsesSessionRef = useRef([]);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
@@ -1227,6 +1228,7 @@ function App() {
                   e.stopPropagation();
                   setModoFlechaClick(prev => !prev);
                   if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
+                  flechaOrigenRef.current = null;
                   setAviso('');
                 }}
                 title={modoFlechaClick ? 'Desactivar modo flecha' : 'Colocar flecha con click'}
@@ -1288,25 +1290,32 @@ function App() {
             if (modoFlechaClick) {
               const p = puntoImagen(e);
               if (p) {
-                const id = Date.now();
-                const x1 = Math.min(1, Math.max(0, p.x));
-                const y1 = Math.min(1, Math.max(0, p.y));
-                const x2 = Math.min(1, Math.max(0, p.x + 0.2));
-                const y2 = Math.min(1, Math.max(0, p.y));
-                const cx = (x1 + x2) / 2;
-                const cy = (y1 + y2) / 2;
-                setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2: x1, y2: y1, cx: x1, cy: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 0 }]);
-                setFiguraSeleccionada(id);
-                if (flechaAnimRef.current) cancelAnimationFrame(flechaAnimRef.current);
-                const t0 = performance.now();
-                const paso = (t) => {
-                  const pp = Math.min(1, (t - t0) / 1000);
-                  const e = 1 - Math.pow(1 - pp, 3);
-                  setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, cx: x1 + (cx - x1) * e, cy: y1 + (cy - y1) * e, cabeza: e } : f));
-                  if (pp < 1) flechaAnimRef.current = requestAnimationFrame(paso);
-                  else flechaAnimRef.current = null;
-                };
-                flechaAnimRef.current = requestAnimationFrame(paso);
+                if (!flechaOrigenRef.current) {
+                  flechaOrigenRef.current = { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) };
+                  setAviso('Ahora click para colocar la punta');
+                } else {
+                  const x1 = flechaOrigenRef.current.x;
+                  const y1 = flechaOrigenRef.current.y;
+                  const x2 = Math.min(1, Math.max(0, p.x));
+                  const y2 = Math.min(1, Math.max(0, p.y));
+                  const cx = (x1 + x2) / 2;
+                  const cy = (y1 + y2) / 2;
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2: x1, y2: y1, cx: x1, cy: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 0 }]);
+                  setFiguraSeleccionada(id);
+                  flechaOrigenRef.current = null;
+                  setAviso('');
+                  if (flechaAnimRef.current) cancelAnimationFrame(flechaAnimRef.current);
+                  const t0 = performance.now();
+                  const paso = (t) => {
+                    const pp = Math.min(1, (t - t0) / 1000);
+                    const e = 1 - Math.pow(1 - pp, 3);
+                    setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, cx: x1 + (cx - x1) * e, cy: y1 + (cy - y1) * e, cabeza: e } : f));
+                    if (pp < 1) flechaAnimRef.current = requestAnimationFrame(paso);
+                    else flechaAnimRef.current = null;
+                  };
+                  flechaAnimRef.current = requestAnimationFrame(paso);
+                }
               }
               return;
             }
