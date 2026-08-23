@@ -143,6 +143,8 @@ function App() {
       orig.preload = 'auto';
       orig.src = videoUrl;
 
+      await new Promise((res, rej) => { orig.onloadedmetadata = res; orig.onerror = rej; });
+
       const clipEls = clips.map(c => {
         const v = document.createElement('video');
         v.muted = true;
@@ -151,14 +153,13 @@ function App() {
         v.src = c.videoUrl;
         return { c, v };
       });
+      await Promise.all(clipEls.map(({ v }) => new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; })));
 
       let idx = 0;
       let playingClip = false;
       let active = orig;
       let raf = 0;
-      let frameCount = 0;
       let terminado = false;
-      let intervalId = null;
 
       const drawFrame = () => {
         ctx.drawImage(active, 0, 0, w, h);
@@ -170,7 +171,6 @@ function App() {
       const terminar = async (error) => {
         if (terminado) return;
         terminado = true;
-        if (intervalId) { clearInterval(intervalId); intervalId = null; }
         cancelAnimationFrame(raf);
         try { rec.stop(); } catch (e) { /* noop */ }
         setExportando(false);
@@ -195,16 +195,24 @@ function App() {
         }
       };
 
+      const loop = () => {
+        drawFrame();
+        if (!terminado) raf = requestAnimationFrame(loop);
+      };
+
       orig.addEventListener('timeupdate', () => {
+        if (terminado) return;
         if (!playingClip && idx < clipEls.length && orig.currentTime >= clipEls[idx].c.insertarEn) {
           playingClip = true;
           orig.pause();
           active = clipEls[idx].v;
+          clipEls[idx].v.currentTime = 0;
           clipEls[idx].v.play();
         }
       });
       clipEls.forEach(({ v }) => {
         v.addEventListener('ended', () => {
+          if (terminado) return;
           playingClip = false;
           idx++;
           active = orig;
@@ -212,21 +220,15 @@ function App() {
           orig.play();
         });
       });
+      orig.addEventListener('ended', () => terminar(false));
       orig.addEventListener('error', () => terminar(true));
 
       rec.start(250);
-      drawFrame();
-      intervalId = setInterval(() => {
-        drawFrame();
-        frameCount++;
-        if (frameCount >= 120) {
-          terminar(false);
-        }
-      }, 33);
+      loop();
       await orig.play();
     } catch (e) {
       setExportando(false);
-      setAviso('Error al exportar: ' + String(e));
+      setAviso('Error al exportar el video');
     }
   };
 
