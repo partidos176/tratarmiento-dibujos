@@ -701,7 +701,7 @@ function App() {
             if (f.tipo === 'flecha') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
             if (f.tipo === 'circuito') {
               const elipses = (f.elipses || []).map((el) => {
-                return { x: el.x * e + (el.x > 0.5 ? (1 - e) * el.x : 0), y: el.y * e + (el.y > 0.5 ? (1 - e) * el.y : 0), rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e };
+                return { x: el.x, y: el.y, rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e };
               });
               return { ...f, elipses };
             }
