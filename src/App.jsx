@@ -623,6 +623,10 @@ function App() {
         a.click();
         URL.revokeObjectURL(url);
         setExportando(false);
+        setCapturaSeleccionada(null);
+        setFiguras([]);
+        setImgDim(null);
+        setFiguraSeleccionada(null);
       };
 
       const lastFrame = frameImages[frameImages.length - 1];
