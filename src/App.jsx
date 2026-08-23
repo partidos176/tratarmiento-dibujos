@@ -666,7 +666,7 @@ function App() {
                     muted
                     autoPlay
                     playsInline
-                    onClick={togglePlay}
+                    onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                     onEnded={() => {
                       if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                       const v = videoRef.current;
