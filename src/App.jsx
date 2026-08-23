@@ -587,7 +587,7 @@ function App() {
             ctx.beginPath();
             ctx.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2);
             ctx.strokeStyle = c.color;
-            ctx.globalAlpha = c.opacidad ?? 1;
+            ctx.globalAlpha = Math.max(0.5, c.opacidad ?? 1);
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.globalAlpha = 1;
