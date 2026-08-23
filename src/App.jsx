@@ -203,13 +203,13 @@ function App() {
 
   const anadirTriangulo = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.08, alto: 0.25, color: '#38bdf8', opacidad: 0.5, crecimiento: 0 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.06, alto: 0.35, color: '#f97316', opacidad: 0.7, crecimiento: 0 }]);
     setFiguraSeleccionada(id);
     if (triAnimRef.current) cancelAnimationFrame(triAnimRef.current);
     const t0 = performance.now();
     const paso = (t) => {
-      const p = Math.min(1, (t - t0) / 1000);
-      const e = 1 - Math.pow(1 - p, 3);
+      const p = Math.min(1, (t - t0) / 1200);
+      const e = 1 - Math.pow(1 - p, 2.5);
       setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
       if (p < 1) triAnimRef.current = requestAnimationFrame(paso);
       else triAnimRef.current = null;
@@ -396,9 +396,14 @@ function App() {
       const y = f.y * imgDim.h;
       const ancho = f.ancho * imgDim.w;
       const alto = f.alto * imgDim.h;
+      const crecimiento = f.crecimiento ?? 1;
       const yBase = y + alto / 2;
-      const yPunta = yBase - alto + alto * (f.crecimiento ?? 1);
-      return `${pat}<path d="M ${x},${yBase} L ${x - ancho / 2},${yPunta} L ${x + ancho / 2},${yPunta} Z" ${common}/>`;
+      const pillarH = alto * crecimiento;
+      const yTop = yBase - pillarH;
+      const halfW = ancho / 2;
+      const ellipseRy = alto * 0.06 * crecimiento;
+      const gradientId = `pilar_${f.id}`;
+      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><ellipse cx="${x}" cy="${yBase}" rx="${halfW * 1.8}" ry="${ellipseRy}" fill="rgba(30,10,0,0.5)" /><rect x="${x - halfW}" y="${yTop}" width="${ancho}" height="${pillarH}" rx="${halfW * 0.3}" fill="url(#${gradientId})" />`;
     }
     const cx = f.x * imgDim.w;
     const cy = f.y * imgDim.h;
@@ -1067,7 +1072,7 @@ function App() {
                           },
                         };
 const shape = f.tipo === 'triangulo'
-                          ? <path {...shapeProps} d={`M ${x},${y - alto / 2 + alto * (f.crecimiento ?? 1)} L ${x - ancho / 2},${y + alto / 2} L ${x + ancho / 2},${y + alto / 2} Z`} />
+                          ? <rect {...shapeProps} x={x - ancho / 2} y={y - alto / 2} width={ancho} height={alto} rx={ancho * 0.15} />
                           : f.tipo === 'circulo'
                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
                             : f.tipo === 'linea'
