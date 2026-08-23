@@ -755,9 +755,19 @@ function App() {
                     if (!id || !duracion) return;
                     const rect = e.currentTarget.getBoundingClientRect();
                     const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                    const nuevo = Math.max(0, Math.min(duracion, x * duracion));
+                    let nuevo = x * duracion;
+                    if (cortes.length > 0) {
+                      let minDist = Infinity;
+                      let closest = nuevo;
+                      for (const ct of cortes) {
+                        const d = Math.abs(nuevo - ct);
+                        if (d < minDist) { minDist = d; closest = ct; }
+                      }
+                      if (minDist < duracion * 0.05) nuevo = closest;
+                    }
+                    nuevo = Math.max(0, Math.min(duracion, nuevo));
                     setCapturas(prev => prev.map(c => c.id === Number(id) ? { ...c, insertarEn: nuevo } : c));
-                    setAviso(`Video modificado colocado en ${formatoTiempo(nuevo)}`);
+                    setAviso(`Clip colocado en ${formatoTiempo(nuevo)}`);
                   }}
                   style={{ position: 'relative', height: '14px', background: '#1e293b', border: '1px solid #334155', borderRadius: '7px', cursor: 'pointer', touchAction: 'none' }}
                 >
