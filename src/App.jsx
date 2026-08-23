@@ -32,6 +32,10 @@ function App() {
   const lineaAnimRef = useRef(null);
   const flechaAnimRef = useRef(null);
   const triAnimRef = useRef(null);
+  const triAnimStartRef = useRef(0);
+  const triAnimPausedAtRef = useRef(0);
+  const triAnimElapsedRef = useRef(0);
+  const triAnimIdRef = useRef(null);
   const circuitoAnimRef = useRef(null);
 
   useEffect(() => () => {
@@ -207,9 +211,16 @@ function App() {
     setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.06, alto: 0.35, color: '#f97316', opacidad: 0.7, crecimiento: 0 }]);
     setFiguraSeleccionada(id);
     if (triAnimRef.current) cancelAnimationFrame(triAnimRef.current);
-    const t0 = performance.now();
+    triAnimIdRef.current = id;
+    triAnimElapsedRef.current = 0;
+    triAnimStartRef.current = performance.now();
     const paso = (t) => {
-      const p = Math.min(1, (t - t0) / 2000);
+      const v = videoRef.current;
+      if (v && !v.paused) {
+        triAnimElapsedRef.current += (t - triAnimStartRef.current);
+      }
+      triAnimStartRef.current = t;
+      const p = Math.min(1, triAnimElapsedRef.current / 2000);
       const e = 1 - Math.pow(1 - p, 2.5);
       setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
       if (p < 1) triAnimRef.current = requestAnimationFrame(paso);
