@@ -1132,8 +1132,12 @@ function App() {
                     const pts = elipsesSessionRef.current;
                     if (pts.length >= 2) {
                       setFiguras(prev => {
-                        const sessionIds = prev.filter(f => f.tipo === 'circulo' && f.sinRelleno && pts.some(p => Math.abs(f.x - p.x) < 0.02 && Math.abs(f.y - p.y) < 0.02)).map(f => f.id);
-                        const elipses = pts.map(p => ({ x: p.x, y: p.y, rx: 0.03, ry: 0.02 }));
+                        const sessionCircles = prev.filter(f => f.tipo === 'circulo' && f.sinRelleno && pts.some(p => Math.abs(f.x - p.x) < 0.02 && Math.abs(f.y - p.y) < 0.02));
+                        const sessionIds = sessionCircles.map(f => f.id);
+                        const elipses = pts.map((p, i) => {
+                          const original = sessionCircles[i] || {};
+                          return { x: p.x, y: p.y, rx: (original.ancho || 0.04) / 2, ry: (original.alto || 0.025) / 2 };
+                        });
                         const circuito = { id: Date.now(), tipo: 'circuito', elipses, color: '#38bdf8', opacidad: 1, grosor: 0.003 };
                         return [...prev.filter(f => !sessionIds.includes(f.id)), circuito];
                       });
