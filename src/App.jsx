@@ -466,7 +466,7 @@ function App() {
       const halfW = ancho / 2;
       const ellipseRy = alto * 0.06 * crecimiento;
       const gradientId = `pilar_${f.id}`;
-      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><ellipse cx="${x}" cy="${yBase}" rx="${halfW * 1.8}" ry="${ellipseRy}" fill="rgba(30,10,0,0.5)" /><rect x="${x - halfW}" y="${yTop}" width="${ancho}" height="${pillarH}" rx="${halfW * 0.3}" fill="url(#${gradientId})" />`;
+      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><rect x="${x - halfW}" y="${yTop}" width="${ancho}" height="${pillarH}" rx="${halfW * 0.3}" fill="url(#${gradientId})" />`;
     }
     const cx = f.x * d.w;
     const cy = f.y * d.h;
