@@ -668,11 +668,9 @@ function App() {
                     if (!clipActivo && t > prevTiempoRef.current) {
                       const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
                       if (cl) {
-                        prevTiempoRef.current = cl.insertarEn + 2;
+                        prevTiempoRef.current = cl.insertarEn + (cl.duracion || 4);
                         setClipActivo(cl);
                         setReproduciendo(true);
-                        if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
-                        clipTimerRef.current = setTimeout(() => setClipActivo(null), 2000);
                         return;
                       }
                     }
@@ -726,7 +724,6 @@ function App() {
                     playsInline
                     onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                     onEnded={() => {
-                      if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                       const v = videoRef.current;
                       if (v) v.play().catch(() => {});
                       setClipActivo(null);
