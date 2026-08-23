@@ -543,17 +543,9 @@ function App() {
           if (f.tipo === 'circulo') return { ...f, ancho: f.ancho * e, alto: f.alto * e };
           if (f.tipo === 'triangulo') return { ...f, crecimiento: e };
           if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
-          if (f.tipo === 'flecha') {
-            const dx = (f.x2 - f.x1) * e;
-            const dy = (f.y2 - f.y1) * e;
-            return { ...f, x1: f.x1 + dx, y1: f.y1 + dy, x2: f.x1 + dx * 2, y2: f.y1 + dy * 2, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
-          }
           if (f.tipo === 'circuito') {
             const elipses = (f.elipses || []).map(el => ({ ...el, rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e }));
             return { ...f, elipses };
-          }
-          if (f.tipo === 'polilinea' && f.puntos) {
-            return { ...f, puntos: f.puntos.map(p => ({ x: p.x, y: p.y })) };
           }
           return f;
         });
@@ -1008,7 +1000,7 @@ function App() {
               >
                 GUARDAR
               </button>
-              {figuras.some(f => f.tipo === 'circulo' || f.tipo === 'circuito' || f.tipo === 'flecha') && (
+              {figuras.some(f => f.tipo === 'circulo' || f.tipo === 'circuito') && (
                 <button
                   onClick={animarElipses}
                   disabled={exportando}
