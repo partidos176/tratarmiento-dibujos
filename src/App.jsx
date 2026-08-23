@@ -531,15 +531,20 @@ function App() {
       const w = imgDim.w;
       const h = imgDim.h;
       const circs = figuras.filter(f => f.tipo === 'circulo');
-      if (circs.length < 2) { setAviso('Necesitas al menos 2 elipses para animar'); setExportando(false); return; }
+      const circuits = figuras.filter(f => f.tipo === 'circuito');
+      const allEllipses = [
+        ...circs.map(c => ({ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto })),
+        ...circuits.flatMap(c => (c.elipses || []).map(el => ({ x: el.x, y: el.y, color: c.color, opacidad: c.opacidad, ancho: (el.rx || 0.03) * 2, alto: (el.ry || 0.02) * 2 })))
+      ];
+      if (allEllipses.length < 2) { setAviso('Necesitas al menos 2 elipses para animar'); setExportando(false); return; }
       const totalFrames = 120;
       const frameDuration = 1000 / 30;
       const halfFrames = Math.floor(totalFrames / 2);
-      const perEllipse = Math.floor(halfFrames / circs.length);
+      const perEllipse = Math.floor(halfFrames / allEllipses.length);
       const promises = [];
       for (let i = 0; i <= totalFrames; i++) {
         const t = i / totalFrames;
-        const ellipseParts = circs.map((c, ci) => {
+        const ellipseParts = allEllipses.map((c, ci) => {
           const appearStart = (ci * perEllipse) / totalFrames;
           const appearEnd = ((ci + 1) * perEllipse) / totalFrames;
           let e = 0;
@@ -554,9 +559,9 @@ function App() {
         });
         const allAppeared = t >= 0.5;
         let lineParts = '';
-        if (allAppeared && circs.length >= 2) {
+        if (allAppeared && allEllipses.length >= 2) {
           const lineProgress = Math.min(1, (t - 0.5) * 2);
-          const pts = circs.map(c => ({ x: c.x * w, y: c.y * h }));
+          const pts = allEllipses.map(c => ({ x: c.x * w, y: c.y * h }));
           for (let j = 0; j < pts.length - 1; j++) {
             const segEnd = Math.min(1, lineProgress * (pts.length - 1) - j);
             if (segEnd <= 0) break;
@@ -1002,7 +1007,7 @@ function App() {
               >
                 GUARDAR
               </button>
-              {figuras.some(f => f.tipo === 'circulo') && (
+              {figuras.some(f => f.tipo === 'circulo' || f.tipo === 'circuito') && (
                 <button
                   onClick={animarElipses}
                   disabled={exportando}
