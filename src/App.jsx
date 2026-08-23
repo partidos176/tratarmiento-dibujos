@@ -70,7 +70,7 @@ function App() {
   const span = duracion || 1;
   const dec = 2;
 
-  const totalDuracion = duracion + capturas.filter(c => c.videoUrl && c.insertarEn != null).length * 2;
+  const totalDuracion = duracion + capturas.filter(c => c.videoUrl && c.insertarEn != null).reduce((sum, c) => sum + (c.duracion || 4), 0);
 
   const togglePlay = () => {
     if (clipActivo) {
@@ -568,7 +568,7 @@ function App() {
         console.error('Error al generar el video de la captura', e);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-      setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo }]);
+      setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo }]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
     } catch (e) {
       console.error('Error al guardar la captura', e);
