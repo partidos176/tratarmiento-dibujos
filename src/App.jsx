@@ -529,147 +529,53 @@ function App() {
 
   const animarElipses = async () => {
     if (!capturaSeleccionada || !imgDim || figuras.length === 0) return;
-    const circs = figuras.filter(f => f.tipo === 'circulo');
-    const circuits = figuras.filter(f => f.tipo === 'circuito');
-    const flechas = figuras.filter(f => f.tipo === 'flecha');
-    if (circs.length === 0 && circuits.length === 0 && flechas.length === 0) return;
     setExportando(true);
     try {
       const w = imgDim.w;
       const h = imgDim.h;
-
-      const bgImg = new Image();
-      await new Promise((res, rej) => { bgImg.onload = res; bgImg.onerror = rej; bgImg.src = capturaSeleccionada.dataUrl; });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-
       const totalFrames = 120;
-
-      const drawFrame = (frameIdx) => {
-        const t = Math.min(frameIdx / totalFrames, 1);
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(bgImg, 0, 0, w, h);
-
-        const groups = [];
-        const individualCircs = circs.map(c => ({ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto }));
-        if (individualCircs.length > 0) groups.push(individualCircs);
-        circuits.forEach(c => {
-          const els = (c.elipses || []).map(el => ({ x: el.x, y: el.y, color: c.color, opacidad: c.opacidad, ancho: (el.rx || 0.03) * 2, alto: (el.ry || 0.02) * 2 }));
-          if (els.length > 0) groups.push(els);
-        });
-
-        const totalGroups = groups.length;
-        const framesPerGroup = totalGroups > 0 ? Math.floor(totalFrames / totalGroups) : totalFrames;
-
-        groups.forEach((group, gi) => {
-          const groupStart = (gi * framesPerGroup) / totalFrames;
-          const groupEnd = ((gi + 1) * framesPerGroup) / totalFrames;
-          const groupT = Math.max(0, Math.min(1, (t - groupStart) / (groupEnd - groupStart)));
-
-          const appearT = Math.min(1, groupT * 2);
-          const lineT = groupT > 0.5 ? (groupT - 0.5) * 2 : 0;
-
-          group.forEach((c, ci) => {
-            const perEll = group.length > 0 ? 1 / group.length : 1;
-            const ellStart = ci * perEll;
-            const ellEnd = (ci + 1) * perEll;
-            let e = 0;
-            if (appearT >= ellEnd) e = 1;
-            else if (appearT > ellStart) e = (appearT - ellStart) / (ellEnd - ellStart);
-            e = 1 - Math.pow(1 - e, 3);
-            const cx = c.x * w;
-            const cy = c.y * h;
-            const rx = (c.ancho * w / 2) * e;
-            const ry = (c.alto * h / 2) * e;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2);
-            ctx.strokeStyle = c.color;
-            ctx.globalAlpha = Math.max(0.5, c.opacidad ?? 1);
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-          });
-
-          if (lineT > 0 && group.length >= 2) {
-            ctx.strokeStyle = group[0].color;
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            for (let j = 0; j < group.length - 1; j++) {
-              const segEnd = Math.min(1, lineT * (group.length - 1) - j);
-              if (segEnd <= 0) break;
-              const a = group[j], b = group[j + 1];
-              const ax = a.x * w, ay = a.y * h, arx = (a.ancho || 0.04) * w / 2, ary = (a.alto || 0.025) * h / 2;
-              const bx = b.x * w, by = b.y * h, brx = (b.ancho || 0.04) * w / 2, bry = (b.alto || 0.025) * h / 2;
-              const dx = bx - ax, dy = by - ay;
-              if (dx !== 0 || dy !== 0) {
-                const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
-                const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
-                const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
-                const lx2 = bx - dx * tB, ly2 = by - dy * tB;
-                ctx.beginPath();
-                ctx.moveTo(lx1, ly1);
-                ctx.lineTo(lx1 + (lx2 - lx1) * Math.min(1, segEnd), ly1 + (ly2 - ly1) * Math.min(1, segEnd));
-                ctx.stroke();
-              }
-            }
-          }
-        });
-
-        flechas.forEach((f, fi) => {
-          const fStart = (fi * framesPerGroup) / totalFrames;
-          const fEnd = ((fi + 1) * framesPerGroup) / totalFrames;
-          const fT = Math.max(0, Math.min(1, (t - fStart) / (fEnd - fStart)));
-          const e = 1 - Math.pow(1 - Math.min(1, fT), 2);
-          const dx = (f.x2 - f.x1) * w;
-          const dy = (f.y2 - f.y1) * h;
-          const ox = f.x1 * w + dx * e;
-          const oy = f.y1 * h + dy * e;
-          const x1 = ox, y1 = oy;
-          const x2 = ox + dx, y2 = oy + dy;
-          const cxP = ox + (f.cx - f.x1) * w;
-          const cyP = oy + (f.cy - f.y1) * h;
-          const grosor = (f.grosor || 0.005) * h;
-          ctx.strokeStyle = f.color;
-          ctx.globalAlpha = f.opacidad ?? 1;
-          ctx.lineWidth = grosor;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-          const adx = x2 - x1, ady = y2 - y1;
-          const len = Math.hypot(adx, ady);
-          if (len > 0) {
-            const ux = adx / len, uy = ady / len;
-            const headLen = grosor * 3;
-            const hx1 = x2 - ux * headLen - uy * headLen * 0.5;
-            const hy1 = y2 - uy * headLen + ux * headLen * 0.5;
-            const hx2 = x2 - ux * headLen + uy * headLen * 0.5;
-            const hy2 = y2 - uy * headLen - ux * headLen * 0.5;
-            ctx.fillStyle = f.color;
-            ctx.beginPath();
-            ctx.moveTo(x2, y2);
-            ctx.lineTo(hx1, hy1);
-            ctx.lineTo(cxP, cyP);
-            ctx.lineTo(hx2, hy2);
-            ctx.closePath();
-            ctx.fill();
-          }
-          ctx.globalAlpha = 1;
-        });
-      };
 
       const frameImages = [];
       for (let i = 0; i <= totalFrames; i++) {
-        drawFrame(i);
-        frameImages.push(ctx.getImageData(0, 0, w, h));
+        const t = i / totalFrames;
+        const e = t >= 1 ? 1 : 1 - Math.pow(1 - t, 3);
+        const figAnim = figuras.map(f => {
+          if (f.tipo === 'circulo') return { ...f, ancho: f.ancho * e, alto: f.alto * e };
+          if (f.tipo === 'triangulo') return { ...f, crecimiento: e };
+          if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
+          if (f.tipo === 'flecha') {
+            const dx = (f.x2 - f.x1) * e;
+            const dy = (f.y2 - f.y1) * e;
+            return { ...f, x1: f.x1 + dx, y1: f.y1 + dy, x2: f.x1 + dx * 2, y2: f.y1 + dy * 2, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
+          }
+          if (f.tipo === 'circuito') {
+            const elipses = (f.elipses || []).map(el => ({ ...el, rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e }));
+            return { ...f, elipses };
+          }
+          if (f.tipo === 'polilinea' && f.puntos) {
+            return { ...f, puntos: f.puntos.map(p => ({ x: p.x, y: p.y })) };
+          }
+          return f;
+        });
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${capturaSeleccionada.dataUrl}" width="${w}" height="${h}"/>${figAnim.map(svgFigura).join('')}</svg>`;
+        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const img = await new Promise((res, rej) => {
+          const im = new Image();
+          im.onload = () => { URL.revokeObjectURL(url); res(im); };
+          im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('SVG load error')); };
+          im.src = url;
+        });
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const cx = c.getContext('2d');
+        cx.drawImage(img, 0, 0, w, h);
+        frameImages.push(cx.getImageData(0, 0, w, h));
       }
 
-      ctx.clearRect(0, 0, w, h);
-
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
       const stream = canvas.captureStream(0);
       const videoTrack = stream.getVideoTracks()[0];
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
@@ -682,7 +588,7 @@ function App() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `animacion_elipses.webm`;
+        a.download = `animacion.webm`;
         a.click();
         URL.revokeObjectURL(url);
         setExportando(false);
@@ -690,13 +596,12 @@ function App() {
 
       rec.start();
       const frameMs = 1000 / 30;
-      let idx = 0;
       const totalMs = frameImages.length * frameMs;
       const startRec = performance.now();
+      let idx = -1;
 
       const loop = () => {
-        const now = performance.now();
-        const elapsed = now - startRec;
+        const elapsed = performance.now() - startRec;
         if (elapsed < totalMs) {
           const fi = Math.min(Math.floor(elapsed / frameMs), frameImages.length - 1);
           if (fi !== idx) {
@@ -712,11 +617,7 @@ function App() {
             ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
             videoTrack.requestFrame();
             setTimeout(() => {
-              ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
-              videoTrack.requestFrame();
-              setTimeout(() => {
-                try { rec.stop(); } catch (e) { setExportando(false); }
-              }, 500);
+              try { rec.stop(); } catch (e) { setExportando(false); }
             }, 500);
           }, 1000);
         }
@@ -725,7 +626,6 @@ function App() {
       setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 20000);
     } catch (e) {
       setExportando(false);
-      setAviso('Error al generar animación');
     }
   };
 
