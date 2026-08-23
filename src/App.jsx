@@ -463,39 +463,51 @@ function App() {
 
   const generarVideo = (svgFn, w, h) => new Promise((resolve, reject) => {
     try {
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      const stream = canvas.captureStream(30);
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
-      const chunks = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      rec.onstop = () => resolve(URL.createObjectURL(new Blob(chunks, { type: mime })));
-      rec.onerror = reject;
-      rec.start(250);
-      let frame = 0;
-      let timer;
-      const dibujarFrame = () => {
-        const t = Math.min(4000, frame * 33);
+      const totalFrames = 120;
+      const frameDuration = 1000 / 30;
+      const promises = [];
+      for (let i = 0; i <= totalFrames; i++) {
+        const t = Math.min(4000, i * 33);
         const svgStr = svgFn(t);
-        const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
-        const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0, w, h);
-          URL.revokeObjectURL(url);
-          frame++;
-          if (frame * 33 <= 4000) {
-            timer = setTimeout(dibujarFrame, 33);
+        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        promises.push(new Promise((res) => {
+          const img = new Image();
+          img.onload = () => { URL.revokeObjectURL(url); res(img); };
+          img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+          img.src = url;
+        }));
+      }
+      Promise.all(promises).then((frames) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        const stream = canvas.captureStream(30);
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+        const chunks = [];
+        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+        rec.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          resolve(URL.createObjectURL(new Blob(chunks, { type: mime })));
+        };
+        rec.onerror = reject;
+        rec.start();
+        let idx = 0;
+        const drawNext = () => {
+          if (idx < frames.length && frames[idx]) {
+            ctx.drawImage(frames[idx], 0, 0, w, h);
+          }
+          idx++;
+          if (idx < frames.length) {
+            setTimeout(drawNext, frameDuration);
           } else {
-            setTimeout(() => { try { rec.stop(); } catch (e) { reject(e); } }, 50);
+            try { rec.stop(); } catch (e) { reject(e); }
           }
         };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('error al renderizar frame')); };
-        img.src = url;
-      };
-      dibujarFrame();
+        drawNext();
+      }).catch(reject);
     } catch (e) {
       reject(e);
     }
