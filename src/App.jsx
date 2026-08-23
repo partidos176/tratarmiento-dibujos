@@ -623,7 +623,6 @@ function App() {
         a.click();
         URL.revokeObjectURL(url);
         setExportando(false);
-        setAviso('Animación descargada');
       };
 
       const lastFrame = frameImages[frameImages.length - 1];
