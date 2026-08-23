@@ -621,7 +621,7 @@ function App() {
         else setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 100);
       };
       drawNext();
-      setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) {} }, 5000);
+      setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) {} }, 4100);
     } catch (e) {
       setExportando(false);
       setAviso('Error al generar animación');
