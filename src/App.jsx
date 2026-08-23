@@ -156,16 +156,21 @@ function App() {
       let playingClip = false;
       let active = orig;
       let raf = 0;
+      let frameCount = 0;
+      let terminado = false;
+      let intervalId = null;
 
-      const loop = () => {
+      const drawFrame = () => {
         ctx.drawImage(active, 0, 0, w, h);
         if (figuresImg) {
           ctx.drawImage(figuresImg, 0, 0, w, h);
         }
-        raf = requestAnimationFrame(loop);
       };
 
       const terminar = async (error) => {
+        if (terminado) return;
+        terminado = true;
+        if (intervalId) { clearInterval(intervalId); intervalId = null; }
         cancelAnimationFrame(raf);
         try { rec.stop(); } catch (e) { /* noop */ }
         setExportando(false);
@@ -191,11 +196,6 @@ function App() {
       };
 
       orig.addEventListener('timeupdate', () => {
-        if (orig.currentTime >= 4) {
-          orig.pause();
-          terminar(false);
-          return;
-        }
         if (!playingClip && idx < clipEls.length && orig.currentTime >= clipEls[idx].c.insertarEn) {
           playingClip = true;
           orig.pause();
@@ -214,7 +214,14 @@ function App() {
       orig.addEventListener('error', () => terminar(true));
 
       rec.start(250);
-      loop();
+      drawFrame();
+      intervalId = setInterval(() => {
+        drawFrame();
+        frameCount++;
+        if (frameCount >= 120) {
+          terminar(false);
+        }
+      }, 33);
       await orig.play();
     } catch (e) {
       setExportando(false);
