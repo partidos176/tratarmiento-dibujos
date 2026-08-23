@@ -1050,8 +1050,6 @@ function App() {
                 const id = Date.now();
                 setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.04, alto: 0.025, color: '#38bdf8', opacidad: 0, crecimiento: 1, sinRelleno: true }]);
                 setFiguraSeleccionada(id);
-                setModoCirculoClick(false);
-                setAviso('');
               }
               return;
             }
