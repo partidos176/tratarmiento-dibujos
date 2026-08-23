@@ -546,31 +546,13 @@ function App() {
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
-      const stream = canvas.captureStream(30);
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
-      const chunks = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      rec.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `animacion_elipses.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setExportando(false);
-        setAviso('Animación descargada');
-      };
 
       const totalFrames = 120;
-      const frameMs = 1000 / 30;
       const halfFrames = Math.floor(totalFrames / 2);
       const perEllipse = Math.floor(halfFrames / allEllipses.length);
 
       const drawFrame = (frameIdx) => {
-        const t = frameIdx / totalFrames;
+        const t = Math.min(frameIdx / totalFrames, 1);
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(bgImg, 0, 0, w, h);
 
@@ -620,17 +602,49 @@ function App() {
         }
       };
 
-      rec.start();
-      let frame = 0;
-      const iv = setInterval(() => {
-        drawFrame(Math.min(frame, totalFrames));
-        frame++;
-        if (frame > totalFrames) {
-          clearInterval(iv);
-          setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 300);
+      const frameImages = [];
+      for (let i = 0; i <= totalFrames; i++) {
+        drawFrame(i);
+        frameImages.push(ctx.getImageData(0, 0, w, h));
+      }
+
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `animacion_elipses.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setExportando(false);
+        setAviso('Animación descargada');
+      };
+
+      const lastFrame = frameImages[frameImages.length - 1];
+
+      const playFrame = (idx) => {
+        if (idx < frameImages.length) {
+          ctx.putImageData(frameImages[idx], 0, 0);
+          setTimeout(() => playFrame(idx + 1), 1000 / 30);
+        } else {
+          setTimeout(() => {
+            ctx.putImageData(lastFrame, 0, 0);
+            setTimeout(() => {
+              try { rec.stop(); } catch (e) { setExportando(false); }
+            }, 2000);
+          }, 100);
         }
-      }, frameMs);
-      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 8000);
+      };
+
+      rec.start();
+      playFrame(0);
+      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 10000);
     } catch (e) {
       setExportando(false);
       setAviso('Error al generar animación');
