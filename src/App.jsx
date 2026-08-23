@@ -212,6 +212,7 @@ function App() {
       rec.start(250);
       loop();
       await orig.play();
+      setTimeout(() => terminar(false), 4000);
     } catch (e) {
       setExportando(false);
       setAviso('Error al exportar: ' + String(e));
