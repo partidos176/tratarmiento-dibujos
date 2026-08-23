@@ -22,6 +22,8 @@ function App() {
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
   const [modoPolilinea, setModoPolilinea] = useState(false);
   const [puntosPolilinea, setPuntosPolilinea] = useState([]);
+  const [cortes, setCortes] = useState([]);
+  const [modoCorte, setModoCorte] = useState(false);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
@@ -89,10 +91,18 @@ function App() {
     if (!video || !duracion) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const t = x * duracion;
+    if (modoCorte) {
+      const existe = cortes.some(c => Math.abs(c - t) < 0.3);
+      if (existe) return;
+      setCortes(prev => [...prev, t].sort((a, b) => a - b));
+      setAviso(`Corte en ${formatoTiempo(t)}`);
+      return;
+    }
     setClipActivo(null);
     if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
-    prevTiempoRef.current = x * duracion;
-    video.currentTime = x * duracion;
+    prevTiempoRef.current = t;
+    video.currentTime = t;
     setProgreso(x);
   };
 
@@ -820,6 +830,17 @@ function App() {
                       />
                     );
                   })}
+                  {cortes.map((ct, i) => {
+                    const pos = ((ct - inicioVentana) / span) * 100;
+                    return (
+                      <div
+                        key={`corte-${i}`}
+                        onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
+                        title={`Corte en ${formatoTiempo(ct)} (click para eliminar)`}
+                        style={{ position: 'absolute', top: '-2px', left: `${Math.min(100, Math.max(0, pos)).toFixed(2)}%`, transform: 'translateX(-50%)', width: '3px', height: 'calc(100% + 4px)', background: '#ef4444', borderRadius: '2px', cursor: 'pointer', zIndex: 10 }}
+                      />
+                    );
+                  })}
                   <div style={{ position: 'absolute', top: '50%', left: `${Math.min(100, Math.max(0, ((tActual - inicioVentana) / span) * 100)).toFixed(2)}%`, transform: 'translate(-50%, -50%)', width: '16px', height: '16px', background: '#ffffff', border: '2px solid #38bdf8', borderRadius: '50%', transition: 'left 0.1s linear' }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -851,6 +872,20 @@ function App() {
                   >
                     {exportando ? 'Exportando...' : 'Exportar'}
                   </button>
+                  <button
+                    onClick={() => { setModoCorte(prev => !prev); if (modoCorte) setAviso('Modo corte desactivado'); else setAviso('Modo corte activado — haz click en la línea de tiempo para cortar'); }}
+                    style={{ background: modoCorte ? '#ef4444' : '#475569', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                  >
+                    {modoCorte ? '✕ CORTAR' : '✂ CORTAR'}
+                  </button>
+                  {cortes.length > 0 && (
+                    <button
+                      onClick={() => { setCortes([]); setAviso('Todos los cortes eliminados'); }}
+                      style={{ background: '#1e293b', border: '1px solid #ef4444', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                    >
+                      Limpiar cortes ({cortes.length})
+                    </button>
+                  )}
                 </div>
                 {capturas.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
