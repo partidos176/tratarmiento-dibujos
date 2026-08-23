@@ -591,7 +591,7 @@ function App() {
           });
 
           if (lineT > 0 && group.length >= 2) {
-            ctx.strokeStyle = '#38bdf8';
+            ctx.strokeStyle = group[0].color;
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             for (let j = 0; j < group.length - 1; j++) {
