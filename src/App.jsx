@@ -220,7 +220,7 @@ function App() {
         triAnimElapsedRef.current += (t - triAnimStartRef.current);
       }
       triAnimStartRef.current = t;
-      const p = Math.min(1, triAnimElapsedRef.current / 2000);
+      const p = Math.min(1, triAnimElapsedRef.current / 4000);
       const e = 1 - Math.pow(1 - p, 2.5);
       setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
       if (p < 1) triAnimRef.current = requestAnimationFrame(paso);
