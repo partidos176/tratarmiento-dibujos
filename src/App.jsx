@@ -761,7 +761,17 @@ function App() {
                   }}
                   style={{ position: 'relative', height: '14px', background: '#1e293b', border: '1px solid #334155', borderRadius: '7px', cursor: 'pointer', touchAction: 'none' }}
                 >
-                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${Math.min(100, Math.max(0, ((tActual - inicioVentana) / span) * 100)).toFixed(2)}%`, background: '#38bdf8', borderRadius: '7px', transition: 'width 0.1s linear' }} />
+                  {cortes.length > 0 && (() => {
+                    const segColors = ['#1e3a5f', '#3b1f2b', '#1a3d2e', '#3d3a1a', '#2d1a4e', '#4a1a2d', '#1a3a4a', '#4a3a1a'];
+                    const pts = [0, ...cortes.map(c => c / duracion), 1];
+                    return pts.slice(0, -1).map((start, i) => {
+                      const end = pts[i + 1];
+                      return (
+                        <div key={`seg-${i}`} style={{ position: 'absolute', top: 0, left: `${(start * 100).toFixed(2)}%`, height: '100%', width: `${((end - start) * 100).toFixed(2)}%`, background: segColors[i % segColors.length], borderRadius: i === 0 ? '7px 0 0 7px' : i === pts.length - 2 ? '0 7px 7px 0' : '0' }} />
+                      );
+                    });
+                  })()}
+                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${Math.min(100, Math.max(0, ((tActual - inicioVentana) / span) * 100)).toFixed(2)}%`, background: 'rgba(56,189,248,0.3)', borderRadius: '7px', transition: 'width 0.1s linear', zIndex: 1 }} />
                   {duracion > 0 && capturas.map(c => {
                     const posMar = arrastrandoMarcaId === c.id && arrastrePos != null
                       ? arrastrePos * 100
@@ -841,8 +851,27 @@ function App() {
                       />
                     );
                   })}
-                  <div style={{ position: 'absolute', top: '50%', left: `${Math.min(100, Math.max(0, ((tActual - inicioVentana) / span) * 100)).toFixed(2)}%`, transform: 'translate(-50%, -50%)', width: '16px', height: '16px', background: '#ffffff', border: '2px solid #38bdf8', borderRadius: '50%', transition: 'left 0.1s linear' }} />
+                  <div style={{ position: 'absolute', top: '50%', left: `${Math.min(100, Math.max(0, ((tActual - inicioVentana) / span) * 100)).toFixed(2)}%`, transform: 'translate(-50%, -50%)', width: '16px', height: '16px', background: '#ffffff', border: '2px solid #38bdf8', borderRadius: '50%', transition: 'left 0.1s linear', zIndex: 2 }} />
                 </div>
+                {cortes.length > 0 && (
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+                    {(() => {
+                      const segColors = ['#1e3a5f', '#3b1f2b', '#1a3d2e', '#3d3a1a', '#2d1a4e', '#4a1a2d'];
+                      const pts = [0, ...cortes, duracion];
+                      return pts.slice(0, -1).map((start, i) => {
+                        const end = pts[i + 1];
+                        const dur = end - start;
+                        return (
+                          <div key={`label-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: segColors[i % segColors.length], borderRadius: '6px', padding: '2px 8px', fontSize: '0.65rem', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: '#e2e8f0', border: '1px solid #475569' }}>
+                            <span style={{ color: '#94a3b8' }}>P{i + 1}</span>
+                            <span>{formatoTiempo(start)} — {formatoTiempo(end)}</span>
+                            <span style={{ color: '#94a3b8' }}>({formatoTiempo(dur)})</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
                   <span>{formatoTiempo(videoRef.current ? videoRef.current.currentTime : 0)}</span>
                   <span>{formatoTiempo(totalDuracion)}</span>
