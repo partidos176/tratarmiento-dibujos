@@ -960,15 +960,17 @@ function App() {
                 <line x1="4" y1="20" x2="20" y2="4" />
               </svg>
             </button>
-             <div style={{ display: 'inline-flex', gap: '0.5rem', marginRight: '0.3rem' }}>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                <button
                  onClick={exportarFuncion}
-                 style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.4rem 0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                 title="Exportar figuras y capturas"
+                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#10b981', color: '#fff', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
                  Exportar
                </button>
                <button
                  onClick={importarFuncion}
-                 style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.4rem 0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                 title="Importar figuras y capturas"
+                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#f97316', color: '#fff', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
                  Importar
                </button>
              </div>
