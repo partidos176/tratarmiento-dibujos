@@ -618,9 +618,10 @@ function App() {
         if (idx < frames.length && frames[idx]) ctx.drawImage(frames[idx], 0, 0, w, h);
         idx++;
         if (idx < frames.length) setTimeout(drawNext, frameDuration);
-        else try { rec.stop(); } catch (e) { setExportando(false); }
+        else setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 100);
       };
       drawNext();
+      setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) {} }, 4200);
     } catch (e) {
       setExportando(false);
       setAviso('Error al generar animación');
