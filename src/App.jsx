@@ -1188,7 +1188,7 @@ function App() {
                     setAviso('');
                   } else {
                     elipsesSessionRef.current = [];
-                    setAviso('Haz click en la imagen para colocar elipses');
+                    setAviso('');
                   }
                   setModoCirculoClick(prev => !prev);
                 }}
