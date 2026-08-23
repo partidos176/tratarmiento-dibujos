@@ -527,17 +527,13 @@ function App() {
 
   const animarElipses = async () => {
     if (!capturaSeleccionada || !imgDim || figuras.length === 0) return;
+    const circs = figuras.filter(f => f.tipo === 'circulo');
+    const circuits = figuras.filter(f => f.tipo === 'circuito');
+    if (circs.length === 0 && circuits.length === 0) return;
     setExportando(true);
     try {
       const w = imgDim.w;
       const h = imgDim.h;
-      const circs = figuras.filter(f => f.tipo === 'circulo');
-      const circuits = figuras.filter(f => f.tipo === 'circuito');
-      const allEllipses = [
-        ...circs.map(c => ({ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto })),
-        ...circuits.flatMap(c => (c.elipses || []).map(el => ({ x: el.x, y: el.y, color: c.color, opacidad: c.opacidad, ancho: (el.rx || 0.03) * 2, alto: (el.ry || 0.02) * 2 })))
-      ];
-      if (allEllipses.length < 2) { setAviso('Necesitas al menos 2 elipses para animar'); setExportando(false); return; }
 
       const bgImg = new Image();
       await new Promise((res, rej) => { bgImg.onload = res; bgImg.onerror = rej; bgImg.src = capturaSeleccionada.dataUrl; });
@@ -548,58 +544,77 @@ function App() {
       const ctx = canvas.getContext('2d');
 
       const totalFrames = 120;
-      const halfFrames = Math.floor(totalFrames / 2);
-      const perEllipse = Math.floor(halfFrames / allEllipses.length);
 
       const drawFrame = (frameIdx) => {
         const t = Math.min(frameIdx / totalFrames, 1);
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(bgImg, 0, 0, w, h);
 
-        allEllipses.forEach((c, ci) => {
-          const appearStart = (ci * perEllipse) / totalFrames;
-          const appearEnd = ((ci + 1) * perEllipse) / totalFrames;
-          let e = 0;
-          if (t >= appearEnd) e = 1;
-          else if (t > appearStart) e = (t - appearStart) / (appearEnd - appearStart);
-          e = 1 - Math.pow(1 - e, 3);
-          const cx = c.x * w;
-          const cy = c.y * h;
-          const rx = (c.ancho * w / 2) * e;
-          const ry = (c.alto * h / 2) * e;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2);
-          ctx.strokeStyle = c.color;
-          ctx.globalAlpha = c.opacidad ?? 1;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          ctx.globalAlpha = 1;
+        const groups = [];
+        circs.forEach(c => {
+          groups.push([{ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto }]);
+        });
+        circuits.forEach(c => {
+          const els = (c.elipses || []).map(el => ({ x: el.x, y: el.y, color: c.color, opacidad: c.opacidad, ancho: (el.rx || 0.03) * 2, alto: (el.ry || 0.02) * 2 }));
+          if (els.length > 0) groups.push(els);
         });
 
-        if (t >= 0.5 && allEllipses.length >= 2) {
-          const lineProgress = Math.min(1, (t - 0.5) * 2);
-          ctx.strokeStyle = '#38bdf8';
-          ctx.lineWidth = 2;
-          ctx.lineCap = 'round';
-          for (let j = 0; j < allEllipses.length - 1; j++) {
-            const segEnd = Math.min(1, lineProgress * (allEllipses.length - 1) - j);
-            if (segEnd <= 0) break;
-            const a = allEllipses[j], b = allEllipses[j + 1];
-            const ax = a.x * w, ay = a.y * h, arx = (a.ancho || 0.04) * w / 2, ary = (a.alto || 0.025) * h / 2;
-            const bx = b.x * w, by = b.y * h, brx = (b.ancho || 0.04) * w / 2, bry = (b.alto || 0.025) * h / 2;
-            const dx = bx - ax, dy = by - ay;
-            if (dx !== 0 || dy !== 0) {
-              const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
-              const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
-              const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
-              const lx2 = bx - dx * tB, ly2 = by - dy * tB;
-              ctx.beginPath();
-              ctx.moveTo(lx1, ly1);
-              ctx.lineTo(lx1 + (lx2 - lx1) * Math.min(1, segEnd), ly1 + (ly2 - ly1) * Math.min(1, segEnd));
-              ctx.stroke();
+        const totalGroups = groups.length;
+        const framesPerGroup = totalGroups > 0 ? Math.floor(totalFrames / totalGroups) : totalFrames;
+
+        groups.forEach((group, gi) => {
+          const groupStart = (gi * framesPerGroup) / totalFrames;
+          const groupEnd = ((gi + 1) * framesPerGroup) / totalFrames;
+          const groupT = Math.max(0, Math.min(1, (t - groupStart) / (groupEnd - groupStart)));
+
+          const appearT = Math.min(1, groupT * 2);
+          const lineT = groupT > 0.5 ? (groupT - 0.5) * 2 : 0;
+
+          group.forEach((c, ci) => {
+            const perEll = group.length > 0 ? 1 / group.length : 1;
+            const ellStart = ci * perEll;
+            const ellEnd = (ci + 1) * perEll;
+            let e = 0;
+            if (appearT >= ellEnd) e = 1;
+            else if (appearT > ellStart) e = (appearT - ellStart) / (ellEnd - ellStart);
+            e = 1 - Math.pow(1 - e, 3);
+            const cx = c.x * w;
+            const cy = c.y * h;
+            const rx = (c.ancho * w / 2) * e;
+            const ry = (c.alto * h / 2) * e;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2);
+            ctx.strokeStyle = c.color;
+            ctx.globalAlpha = c.opacidad ?? 1;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          });
+
+          if (lineT > 0 && group.length >= 2) {
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            for (let j = 0; j < group.length - 1; j++) {
+              const segEnd = Math.min(1, lineT * (group.length - 1) - j);
+              if (segEnd <= 0) break;
+              const a = group[j], b = group[j + 1];
+              const ax = a.x * w, ay = a.y * h, arx = (a.ancho || 0.04) * w / 2, ary = (a.alto || 0.025) * h / 2;
+              const bx = b.x * w, by = b.y * h, brx = (b.ancho || 0.04) * w / 2, bry = (b.alto || 0.025) * h / 2;
+              const dx = bx - ax, dy = by - ay;
+              if (dx !== 0 || dy !== 0) {
+                const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
+                const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
+                const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
+                const lx2 = bx - dx * tB, ly2 = by - dy * tB;
+                ctx.beginPath();
+                ctx.moveTo(lx1, ly1);
+                ctx.lineTo(lx1 + (lx2 - lx1) * Math.min(1, segEnd), ly1 + (ly2 - ly1) * Math.min(1, segEnd));
+                ctx.stroke();
+              }
             }
           }
-        }
+        });
       };
 
       const frameImages = [];
