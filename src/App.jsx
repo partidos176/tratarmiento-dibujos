@@ -25,6 +25,7 @@ function App() {
   const [cortes, setCortes] = useState([]);
   const [modoCorte, setModoCorte] = useState(false);
   const [modoCirculoClick, setModoCirculoClick] = useState(false);
+  const [modoFlechaClick, setModoFlechaClick] = useState(false);
   const elipsesSessionRef = useRef([]);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
@@ -1222,15 +1223,20 @@ function App() {
               </svg>
             </button>
              <button
-               onClick={anadirFlecha}
-               title="Dibujar flecha"
-               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
-             >
-               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                 <line x1="4" y1="20" x2="19" y2="5" />
-                 <polyline points="11,5 19,5 19,13" />
-               </svg>
-             </button>
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModoFlechaClick(prev => !prev);
+                  if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
+                  setAviso('');
+                }}
+                title={modoFlechaClick ? 'Desactivar modo flecha' : 'Colocar flecha con click'}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoFlechaClick ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+              >
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="4" y1="20" x2="19" y2="5" />
+                  <polyline points="11,5 19,5 19,13" />
+                </svg>
+              </button>
              <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1279,6 +1285,31 @@ function App() {
             />
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
+            if (modoFlechaClick) {
+              const p = puntoImagen(e);
+              if (p) {
+                const id = Date.now();
+                const x1 = Math.min(1, Math.max(0, p.x));
+                const y1 = Math.min(1, Math.max(0, p.y));
+                const x2 = Math.min(1, Math.max(0, p.x + 0.2));
+                const y2 = Math.min(1, Math.max(0, p.y));
+                const cx = (x1 + x2) / 2;
+                const cy = (y1 + y2) / 2;
+                setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2: x1, y2: y1, cx: x1, cy: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 0 }]);
+                setFiguraSeleccionada(id);
+                if (flechaAnimRef.current) cancelAnimationFrame(flechaAnimRef.current);
+                const t0 = performance.now();
+                const paso = (t) => {
+                  const pp = Math.min(1, (t - t0) / 1000);
+                  const e = 1 - Math.pow(1 - pp, 3);
+                  setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, cx: x1 + (cx - x1) * e, cy: y1 + (cy - y1) * e, cabeza: e } : f));
+                  if (pp < 1) flechaAnimRef.current = requestAnimationFrame(paso);
+                  else flechaAnimRef.current = null;
+                };
+                flechaAnimRef.current = requestAnimationFrame(paso);
+              }
+              return;
+            }
             if (modoCirculoClick) {
               const p = puntoImagen(e);
               if (p) {
