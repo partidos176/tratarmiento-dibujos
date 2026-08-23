@@ -209,7 +209,7 @@ function App() {
     if (triAnimRef.current) cancelAnimationFrame(triAnimRef.current);
     const t0 = performance.now();
     const paso = (t) => {
-      const p = Math.min(1, (t - t0) / 1200);
+      const p = Math.min(1, (t - t0) / 2000);
       const e = 1 - Math.pow(1 - p, 2.5);
       setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
       if (p < 1) triAnimRef.current = requestAnimationFrame(paso);
