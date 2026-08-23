@@ -622,6 +622,8 @@ function App() {
         frameImages.push(ctx.getImageData(0, 0, w, h));
       }
 
+      ctx.clearRect(0, 0, w, h);
+
       const stream = canvas.captureStream(0);
       const videoTrack = stream.getVideoTracks()[0];
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
