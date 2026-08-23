@@ -1126,16 +1126,19 @@ function App() {
                </svg>
              </button>
              <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (modoCirculoClick) {
                     const pts = elipsesSessionRef.current;
                     if (pts.length >= 2) {
                       setFiguras(prev => {
-                        const sessionIds = prev.filter(f => f.tipo === 'circulo' && f.sinRelleno && pts.some(p => Math.abs(f.x - p.x) < 0.001 && Math.abs(f.y - p.y) < 0.001)).map(f => f.id);
+                        const sessionIds = prev.filter(f => f.tipo === 'circulo' && f.sinRelleno && pts.some(p => Math.abs(f.x - p.x) < 0.02 && Math.abs(f.y - p.y) < 0.02)).map(f => f.id);
                         const elipses = pts.map(p => ({ x: p.x, y: p.y, rx: 0.03, ry: 0.02 }));
                         const circuito = { id: Date.now(), tipo: 'circuito', elipses, color: '#38bdf8', opacidad: 1, grosor: 0.003 };
                         return [...prev.filter(f => !sessionIds.includes(f.id)), circuito];
                       });
+                    } else if (pts.length === 1) {
+                      setFiguras(prev => prev.filter(f => !(f.tipo === 'circulo' && f.sinRelleno && pts.some(p => Math.abs(f.x - p.x) < 0.02 && Math.abs(f.y - p.y) < 0.02))));
                     }
                     elipsesSessionRef.current = [];
                     setAviso('');
