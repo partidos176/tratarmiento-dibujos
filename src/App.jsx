@@ -25,6 +25,7 @@ function App() {
   const [cortes, setCortes] = useState([]);
   const [modoCorte, setModoCorte] = useState(false);
   const [modoCirculoClick, setModoCirculoClick] = useState(false);
+  const elipsesSessionRef = useRef([]);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
@@ -1022,8 +1023,26 @@ function App() {
                </svg>
              </button>
              <button
-                onClick={() => { setModoCirculoClick(prev => !prev); if (modoCirculoClick) setAviso(''); else setAviso('Haz click en la imagen para colocar un círculo'); }}
-               title={modoCirculoClick ? 'Desactivar modo círculo' : 'Colocar círculo con click'}
+                onClick={() => {
+                  if (modoCirculoClick) {
+                    const pts = elipsesSessionRef.current;
+                    if (pts.length >= 2) {
+                      setFiguras(prev => {
+                        const sessionIds = prev.filter(f => f.tipo === 'circulo' && f.sinRelleno && pts.some(p => Math.abs(f.x - p.x) < 0.001 && Math.abs(f.y - p.y) < 0.001)).map(f => f.id);
+                        const elipses = pts.map(p => ({ x: p.x, y: p.y, rx: 0.03, ry: 0.02 }));
+                        const circuito = { id: Date.now(), tipo: 'circuito', elipses, color: '#38bdf8', opacidad: 1, grosor: 0.003 };
+                        return [...prev.filter(f => !sessionIds.includes(f.id)), circuito];
+                      });
+                    }
+                    elipsesSessionRef.current = [];
+                    setAviso('');
+                  } else {
+                    elipsesSessionRef.current = [];
+                    setAviso('Haz click en la imagen para colocar elipses');
+                  }
+                  setModoCirculoClick(prev => !prev);
+                }}
+               title={modoCirculoClick ? 'Desactivar y unir elipses' : 'Colocar elipses con click'}
                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoCirculoClick ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
              >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
@@ -1050,6 +1069,7 @@ function App() {
                 const id = Date.now();
                 setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.04, alto: 0.025, color: '#38bdf8', opacidad: 0, crecimiento: 1, sinRelleno: true }]);
                 setFiguraSeleccionada(id);
+                elipsesSessionRef.current.push({ x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) });
               }
               return;
             }
