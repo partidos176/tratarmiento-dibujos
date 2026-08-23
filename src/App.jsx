@@ -828,14 +828,6 @@ function App() {
                       <circle cx="12" cy="13" r="4" />
                     </svg>
                   </button>
-                  <button
-                    onClick={exportarVideo}
-                    disabled={exportando}
-                    style={{ background: '#e11d48', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
-                    title="Exportar el video de la línea de tiempo"
-                  >
-                    {exportando ? 'Exportando...' : 'Exportar'}
-                  </button>
                 </div>
                 {capturas.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
