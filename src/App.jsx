@@ -622,11 +622,15 @@ function App() {
           const fStart = (fi * framesPerGroup) / totalFrames;
           const fEnd = ((fi + 1) * framesPerGroup) / totalFrames;
           const fT = Math.max(0, Math.min(1, (t - fStart) / (fEnd - fStart)));
-          const e = 1 - Math.pow(1 - Math.min(1, fT * 2), 3);
-          const headE = fT > 0.5 ? Math.min(1, (fT - 0.5) * 2) : 0;
-          const x1 = f.x1 * w, y1 = f.y1 * h;
-          const x2 = f.x1 * w + (f.x2 - f.x1) * w * e;
-          const y2 = f.y1 * h + (f.y2 - f.y1) * h * e;
+          const e = 1 - Math.pow(1 - Math.min(1, fT), 2);
+          const dx = (f.x2 - f.x1) * w;
+          const dy = (f.y2 - f.y1) * h;
+          const ox = f.x1 * w + dx * e;
+          const oy = f.y1 * h + dy * e;
+          const x1 = ox, y1 = oy;
+          const x2 = ox + dx, y2 = oy + dy;
+          const cxP = ox + (f.cx - f.x1) * w;
+          const cyP = oy + (f.cy - f.y1) * h;
           const grosor = (f.grosor || 0.005) * h;
           ctx.strokeStyle = f.color;
           ctx.globalAlpha = f.opacidad ?? 1;
@@ -636,27 +640,23 @@ function App() {
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
           ctx.stroke();
-          if (headE > 0) {
-            const cx = f.x1 * w + (f.cx - f.x1) * w * headE;
-            const cy = f.y1 * h + (f.cy - f.y1) * h * headE;
-            const dx = x2 - x1, dy = y2 - y1;
-            const len = Math.hypot(dx, dy);
-            if (len > 0) {
-              const ux = dx / len, uy = dy / len;
-              const headLen = grosor * 3 * headE;
-              const hx1 = x2 - ux * headLen - uy * headLen * 0.5;
-              const hy1 = y2 - uy * headLen + ux * headLen * 0.5;
-              const hx2 = x2 - ux * headLen + uy * headLen * 0.5;
-              const hy2 = y2 - uy * headLen - ux * headLen * 0.5;
-              ctx.fillStyle = f.color;
-              ctx.beginPath();
-              ctx.moveTo(x2, y2);
-              ctx.lineTo(hx1, hy1);
-              ctx.lineTo(cx, cy);
-              ctx.lineTo(hx2, hy2);
-              ctx.closePath();
-              ctx.fill();
-            }
+          const adx = x2 - x1, ady = y2 - y1;
+          const len = Math.hypot(adx, ady);
+          if (len > 0) {
+            const ux = adx / len, uy = ady / len;
+            const headLen = grosor * 3;
+            const hx1 = x2 - ux * headLen - uy * headLen * 0.5;
+            const hy1 = y2 - uy * headLen + ux * headLen * 0.5;
+            const hx2 = x2 - ux * headLen + uy * headLen * 0.5;
+            const hy2 = y2 - uy * headLen - ux * headLen * 0.5;
+            ctx.fillStyle = f.color;
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(hx1, hy1);
+            ctx.lineTo(cxP, cyP);
+            ctx.lineTo(hx2, hy2);
+            ctx.closePath();
+            ctx.fill();
           }
           ctx.globalAlpha = 1;
         });
