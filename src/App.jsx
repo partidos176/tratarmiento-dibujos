@@ -165,14 +165,17 @@ function App() {
       });
       await Promise.all(clipEls.map(({ v }) => new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; })));
 
-      let idx = 0;
-      let playingClip = false;
-      let active = orig;
+      let activeClip = null;
+      let clipStartTime = 0;
+      let clipIdx = 0;
       let raf = 0;
       let terminado = false;
 
       const drawFrame = () => {
-        ctx.drawImage(active, 0, 0, w, h);
+        ctx.drawImage(orig, 0, 0, w, h);
+        if (activeClip) {
+          ctx.drawImage(activeClip, 0, 0, w, h);
+        }
         if (figuresImg) {
           ctx.drawImage(figuresImg, 0, 0, w, h);
         }
@@ -206,29 +209,22 @@ function App() {
       };
 
       const loop = () => {
+        const t = orig.currentTime;
+        if (!activeClip && clipIdx < clipEls.length && t >= clipEls[clipIdx].c.insertarEn) {
+          activeClip = clipEls[clipIdx].v;
+          clipStartTime = t;
+          activeClip.currentTime = 0;
+          activeClip.play().catch(() => {});
+        }
+        if (activeClip && (t - clipStartTime) >= 2) {
+          activeClip.pause();
+          activeClip = null;
+          clipIdx++;
+        }
         drawFrame();
         if (!terminado) raf = requestAnimationFrame(loop);
       };
 
-      orig.addEventListener('timeupdate', () => {
-        if (terminado) return;
-        if (!playingClip && idx < clipEls.length && orig.currentTime >= clipEls[idx].c.insertarEn) {
-          playingClip = true;
-          orig.pause();
-          active = clipEls[idx].v;
-          clipEls[idx].v.currentTime = 0;
-          clipEls[idx].v.play();
-        }
-      });
-      clipEls.forEach(({ v }) => {
-        v.addEventListener('ended', () => {
-          if (terminado) return;
-          playingClip = false;
-          idx++;
-          active = orig;
-          orig.play();
-        });
-      });
       orig.addEventListener('ended', () => terminar(false));
       orig.addEventListener('error', () => terminar(true));
 
