@@ -410,8 +410,8 @@ function App() {
         const brx = (b.rx ?? 0.08) * d.w, bry = (b.ry ?? 0.08) * d.h;
         const dx = bx - ax, dy = by - ay;
         if (dx !== 0 || dy !== 0) {
-          const tA = 1 / Math.sqrt((dx / arx) ** 2 + (dy / ary) ** 2);
-          const tB = 1 / Math.sqrt((dx / brx) ** 2 + (dy / bry) ** 2);
+          const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
+          const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
           const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
           const lx2 = bx - dx * tB, ly2 = by - dy * tB;
           parts += `<line x1="${lx1}" y1="${ly1}" x2="${lx2}" y2="${ly2}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
@@ -538,66 +538,17 @@ function App() {
         ...circuits.flatMap(c => (c.elipses || []).map(el => ({ x: el.x, y: el.y, color: c.color, opacidad: c.opacidad, ancho: (el.rx || 0.03) * 2, alto: (el.ry || 0.02) * 2 })))
       ];
       if (allEllipses.length < 2) { setAviso('Necesitas al menos 2 elipses para animar'); setExportando(false); return; }
-      const totalFrames = 120;
-      const frameDuration = 1000 / 30;
-      const halfFrames = Math.floor(totalFrames / 2);
-      const perEllipse = Math.floor(halfFrames / allEllipses.length);
-      const promises = [];
-      for (let i = 0; i <= totalFrames; i++) {
-        const t = i / totalFrames;
-        const ellipseParts = allEllipses.map((c, ci) => {
-          const appearStart = (ci * perEllipse) / totalFrames;
-          const appearEnd = ((ci + 1) * perEllipse) / totalFrames;
-          let e = 0;
-          if (t >= appearEnd) e = 1;
-          else if (t > appearStart) e = (t - appearStart) / (appearEnd - appearStart);
-          e = 1 - Math.pow(1 - e, 3);
-          const cx = c.x * w;
-          const cy = c.y * h;
-          const rx = (c.ancho * w / 2) * e;
-          const ry = (c.alto * h / 2) * e;
-          return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="${c.color}" stroke-opacity="${c.opacidad ?? 1}" stroke-width="2"/>`;
-        });
-        const allAppeared = t >= 0.5;
-        let lineParts = '';
-        if (allAppeared && allEllipses.length >= 2) {
-          const lineProgress = Math.min(1, (t - 0.5) * 2);
-          for (let j = 0; j < allEllipses.length - 1; j++) {
-            const segEnd = Math.min(1, lineProgress * (allEllipses.length - 1) - j);
-            if (segEnd <= 0) break;
-            const a = allEllipses[j], b = allEllipses[j + 1];
-            const ax = a.x * w, ay = a.y * h, arx = (a.ancho || 0.04) * w / 2, ary = (a.alto || 0.025) * h / 2;
-            const bx = b.x * w, by = b.y * h, brx = (b.ancho || 0.04) * w / 2, bry = (b.alto || 0.025) * h / 2;
-            const dx = bx - ax, dy = by - ay;
-            if (dx !== 0 || dy !== 0) {
-              const tA = 1 / Math.sqrt((dx / arx) ** 2 + (dy / ary) ** 2);
-              const tB = 1 / Math.sqrt((dx / brx) ** 2 + (dy / bry) ** 2);
-              const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
-              const lx2 = bx - dx * tB, ly2 = by - dy * tB;
-              const cx = lx1 + (lx2 - lx1) * Math.min(1, segEnd);
-              const cy = ly1 + (ly2 - ly1) * Math.min(1, segEnd);
-              lineParts += `<line x1="${lx1}" y1="${ly1}" x2="${cx}" y2="${cy}" stroke="#38bdf8" stroke-opacity="1" stroke-width="2" stroke-linecap="round"/>`;
-            }
-          }
-        }
-        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${capturaSeleccionada.dataUrl}" width="${w}" height="${h}"/>${ellipseParts.join('')}${lineParts}</svg>`;
-        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        promises.push(new Promise((res) => {
-          const img = new Image();
-          img.onload = () => { URL.revokeObjectURL(url); res(img); };
-          img.onerror = () => { URL.revokeObjectURL(url); res(null); };
-          img.src = url;
-        }));
-      }
-      const frames = await Promise.all(promises);
+
+      const bgImg = new Image();
+      await new Promise((res, rej) => { bgImg.onload = res; bgImg.onerror = rej; bgImg.src = capturaSeleccionada.dataUrl; });
+
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       const stream = canvas.captureStream(30);
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
@@ -612,21 +563,74 @@ function App() {
         setExportando(false);
         setAviso('Animación descargada');
       };
-      rec.start();
-      const startTime = performance.now();
-      const totalDuration = totalFrames * frameDuration;
-      const drawFrame = (now) => {
-        const elapsed = now - startTime;
-        const frameIdx = Math.min(Math.floor(elapsed / frameDuration), frames.length - 1);
-        if (frames[frameIdx]) ctx.drawImage(frames[frameIdx], 0, 0, w, h);
-        if (elapsed < totalDuration) {
-          requestAnimationFrame(drawFrame);
-        } else {
-          setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 200);
+
+      const totalFrames = 120;
+      const frameMs = 1000 / 30;
+      const halfFrames = Math.floor(totalFrames / 2);
+      const perEllipse = Math.floor(halfFrames / allEllipses.length);
+
+      const drawFrame = (frameIdx) => {
+        const t = frameIdx / totalFrames;
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(bgImg, 0, 0, w, h);
+
+        allEllipses.forEach((c, ci) => {
+          const appearStart = (ci * perEllipse) / totalFrames;
+          const appearEnd = ((ci + 1) * perEllipse) / totalFrames;
+          let e = 0;
+          if (t >= appearEnd) e = 1;
+          else if (t > appearStart) e = (t - appearStart) / (appearEnd - appearStart);
+          e = 1 - Math.pow(1 - e, 3);
+          const cx = c.x * w;
+          const cy = c.y * h;
+          const rx = (c.ancho * w / 2) * e;
+          const ry = (c.alto * h / 2) * e;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2);
+          ctx.strokeStyle = c.color;
+          ctx.globalAlpha = c.opacidad ?? 1;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        });
+
+        if (t >= 0.5 && allEllipses.length >= 2) {
+          const lineProgress = Math.min(1, (t - 0.5) * 2);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.lineCap = 'round';
+          for (let j = 0; j < allEllipses.length - 1; j++) {
+            const segEnd = Math.min(1, lineProgress * (allEllipses.length - 1) - j);
+            if (segEnd <= 0) break;
+            const a = allEllipses[j], b = allEllipses[j + 1];
+            const ax = a.x * w, ay = a.y * h, arx = (a.ancho || 0.04) * w / 2, ary = (a.alto || 0.025) * h / 2;
+            const bx = b.x * w, by = b.y * h, brx = (b.ancho || 0.04) * w / 2, bry = (b.alto || 0.025) * h / 2;
+            const dx = bx - ax, dy = by - ay;
+            if (dx !== 0 || dy !== 0) {
+              const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
+              const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
+              const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
+              const lx2 = bx - dx * tB, ly2 = by - dy * tB;
+              ctx.beginPath();
+              ctx.moveTo(lx1, ly1);
+              ctx.lineTo(lx1 + (lx2 - lx1) * Math.min(1, segEnd), ly1 + (ly2 - ly1) * Math.min(1, segEnd));
+              ctx.stroke();
+            }
+          }
         }
       };
-      requestAnimationFrame(drawFrame);
-      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, totalDuration + 1000);
+
+      rec.start();
+      let frame = 0;
+      const iv = setInterval(() => {
+        drawFrame(Math.min(frame, totalFrames));
+        frame++;
+        if (frame > totalFrames) {
+          clearInterval(iv);
+          setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 300);
+        }
+      }, frameMs);
+      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 8000);
     } catch (e) {
       setExportando(false);
       setAviso('Error al generar animación');
