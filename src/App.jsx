@@ -529,7 +529,8 @@ function App() {
     if (!capturaSeleccionada || !imgDim || figuras.length === 0) return;
     const circs = figuras.filter(f => f.tipo === 'circulo');
     const circuits = figuras.filter(f => f.tipo === 'circuito');
-    if (circs.length === 0 && circuits.length === 0) return;
+    const flechas = figuras.filter(f => f.tipo === 'flecha');
+    if (circs.length === 0 && circuits.length === 0 && flechas.length === 0) return;
     setExportando(true);
     try {
       const w = imgDim.w;
@@ -613,6 +614,49 @@ function App() {
               }
             }
           }
+        });
+
+        flechas.forEach((f, fi) => {
+          const fStart = (fi * framesPerGroup) / totalFrames;
+          const fEnd = ((fi + 1) * framesPerGroup) / totalFrames;
+          const fT = Math.max(0, Math.min(1, (t - fStart) / (fEnd - fStart)));
+          const e = 1 - Math.pow(1 - Math.min(1, fT * 2), 3);
+          const headE = fT > 0.5 ? Math.min(1, (fT - 0.5) * 2) : 0;
+          const x1 = f.x1 * w, y1 = f.y1 * h;
+          const x2 = f.x1 * w + (f.x2 - f.x1) * w * e;
+          const y2 = f.y1 * h + (f.y2 - f.y1) * h * e;
+          const grosor = (f.grosor || 0.005) * h;
+          ctx.strokeStyle = f.color;
+          ctx.globalAlpha = f.opacidad ?? 1;
+          ctx.lineWidth = grosor;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          if (headE > 0) {
+            const cx = f.x1 * w + (f.cx - f.x1) * w * headE;
+            const cy = f.y1 * h + (f.cy - f.y1) * h * headE;
+            const dx = x2 - x1, dy = y2 - y1;
+            const len = Math.hypot(dx, dy);
+            if (len > 0) {
+              const ux = dx / len, uy = dy / len;
+              const headLen = grosor * 3 * headE;
+              const hx1 = x2 - ux * headLen - uy * headLen * 0.5;
+              const hy1 = y2 - uy * headLen + ux * headLen * 0.5;
+              const hx2 = x2 - ux * headLen + uy * headLen * 0.5;
+              const hy2 = y2 - uy * headLen - ux * headLen * 0.5;
+              ctx.fillStyle = f.color;
+              ctx.beginPath();
+              ctx.moveTo(x2, y2);
+              ctx.lineTo(hx1, hy1);
+              ctx.lineTo(cx, cy);
+              ctx.lineTo(hx2, hy2);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+          ctx.globalAlpha = 1;
         });
       };
 
@@ -1069,7 +1113,7 @@ function App() {
               >
                 GUARDAR
               </button>
-              {figuras.some(f => f.tipo === 'circulo' || f.tipo === 'circuito') && (
+              {figuras.some(f => f.tipo === 'circulo' || f.tipo === 'circuito' || f.tipo === 'flecha') && (
                 <button
                   onClick={animarElipses}
                   disabled={exportando}
