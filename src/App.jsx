@@ -569,7 +569,7 @@ function App() {
           </div>
           {videoUrl && (
             <>
-              <div style={{ position: 'relative', maxWidth: '75%' }}>
+              <div id="video-container" style={{ position: 'relative', maxWidth: '75%' }}>
                 <video
                   ref={videoRef}
                   muted
@@ -606,7 +606,7 @@ function App() {
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
                 <button
-                  onClick={() => { const v = videoRef.current; if (v) { if (v.fullscreenEnabled) { v.requestFullscreen?.() || v.webkitRequestFullscreen?.(); } else { const container = v.parentElement; if (container.requestFullscreen) container.requestFullscreen(); } } }}
+                  onClick={() => { const container = document.getElementById('video-container'); if (container) { if (container.requestFullscreen) container.requestFullscreen(); else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen(); } }}
                   title="Pantalla completa"
                   style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 3 }}
                 >
