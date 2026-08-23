@@ -1,4 +1,128 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+
+const fmtTime = (s) => {
+  if (!s || !isFinite(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
+};
+
+function PreviewPlayer({ videoUrl, clips, duracion }) {
+  const videoRef = useRef(null);
+  const clipRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [ currentTime, setCurrentTime ] = useState(0);
+  const [ clipActivo, setClipActivo ] = useState(null);
+  const idxRef = useRef(0);
+  const clipTimerRef = useRef(null);
+
+  const togglePlay = useCallback(() => {
+    if (clipActivo) {
+      const c = clipRef.current;
+      const v = videoRef.current;
+      if (!c) { setClipActivo(null); return; }
+      if (c.paused) { c.play().catch(() => {}); if (v) v.play().catch(() => {}); }
+      else { c.pause(); if (v) v.pause(); }
+      return;
+    }
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play(); else v.pause();
+  }, [clipActivo]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onTimeUpdate = () => {
+      const t = v.currentTime;
+      setCurrentTime(t);
+      const idx = idxRef.current;
+      if (!clipActivo && idx < clips.length && t >= clips[idx].insertarEn) {
+        setClipActivo(clips[idx]);
+        v.pause();
+        if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
+        clipTimerRef.current = setTimeout(() => {
+          const c = clipRef.current;
+          if (c) { c.currentTime = 0; c.play().catch(() => {}); }
+        }, 500);
+      }
+    };
+    const onEnded = () => { setPlaying(false); setClipActivo(null); idxRef.current = 0; };
+    v.addEventListener('play', onPlay);
+    v.addEventListener('pause', onPause);
+    v.addEventListener('timeupdate', onTimeUpdate);
+    v.addEventListener('ended', onEnded);
+    return () => {
+      v.removeEventListener('play', onPlay);
+      v.removeEventListener('pause', onPause);
+      v.removeEventListener('timeupdate', onTimeUpdate);
+      v.removeEventListener('ended', onEnded);
+      if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
+    };
+  }, [clips, clipActivo]);
+
+  const seekTo = (e) => {
+    const v = videoRef.current;
+    if (!v || !duracion) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    setClipActivo(null);
+    idxRef.current = 0;
+    for (let i = 0; i < clips.length; i++) {
+      if (x * duracion >= clips[i].insertarEn) idxRef.current = i + 1;
+    }
+    v.currentTime = x * duracion;
+    setCurrentTime(x * duracion);
+  };
+
+  const totalPreview = duracion + clips.reduce((s, c) => s + (c.duracion || 4), 0);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <video
+        ref={videoRef}
+        muted
+        controls
+        src={videoUrl}
+        style={{ width: '100%', maxHeight: '40vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+      />
+      {clipActivo && clipActivo.videoUrl && (
+        <video
+          ref={(el) => { clipRef.current = el; if (el) { el.currentTime = 0; el.play().catch(() => {}); } }}
+          src={clipActivo.videoUrl}
+          muted
+          playsInline
+          onEnded={() => {
+            if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
+            idxRef.current++;
+            setClipActivo(null);
+            const v = videoRef.current;
+            if (v) v.play().catch(() => {});
+          }}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '2px solid #16a34a', zIndex: 2 }}
+        />
+      )}
+      <div
+        onClick={seekTo}
+        style={{ position: 'relative', height: '6px', background: '#1e293b', border: '1px solid #334155', borderRadius: '3px', cursor: 'pointer', marginTop: '0.3rem' }}
+      >
+        {clips.map((c, i) => {
+          const pos = ((c.insertarEn / duracion) * 100).toFixed(2);
+          return (
+            <div key={i} style={{ position: 'absolute', top: '-4px', left: `${pos}%`, width: '3px', height: 'calc(100% + 8px)', background: '#16a34a', borderRadius: '2px', zIndex: 3 }} />
+          );
+        })}
+        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${duracion ? ((currentTime / duracion) * 100).toFixed(2) : 0}%`, background: '#38bdf8', borderRadius: '3px' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+        <span>{fmtTime(currentTime)}</span>
+        <span>{fmtTime(duracion)}</span>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [archivo, setArchivo] = useState(null);
@@ -920,6 +1044,25 @@ function App() {
                   </div>
                 )}
               </div>
+              {capturas.some(c => c.videoUrl && c.insertarEn != null) && (() => {
+                const clipsConVideo = capturas.filter(c => c.videoUrl && c.insertarEn != null).sort((a, b) => a.insertarEn - b.insertarEn);
+                const primerClip = clipsConVideo[0];
+                const previewRef2 = { current: null };
+                let previewActivo = 'orig';
+                let previewIdx = 0;
+                return (
+                  <div style={{ width: '75%', marginTop: '1rem' }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                      Vista previa: Original + Edición
+                    </div>
+                    <PreviewPlayer
+                      videoUrl={videoUrl}
+                      clips={clipsConVideo}
+                      duracion={duracion}
+                    />
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
