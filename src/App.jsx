@@ -242,6 +242,42 @@ function App() {
     circuitoAnimRef.current = requestAnimationFrame(paso);
   };
 
+  const exportarFuncion = () => {
+    const data = { figuras, capturas };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `captura_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setAviso('Proyecto exportado correctamente');
+  };
+
+  const importarFuncion = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.click();
+    input.onchange = () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.figuras) setFiguras(data.figuras);
+          if (data.capturas) setCapturas(data.capturas);
+          setAviso(`Proyecto importado: ${file.name}`);
+        } catch (e) {
+          setAviso('Error al importar el archivo');
+        }
+      };
+      reader.readAsText(file);
+    };
+  };
+
   const anadirCirculo = () => {
     const id = Date.now();
     setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0 }]);
@@ -924,18 +960,30 @@ function App() {
                 <line x1="4" y1="20" x2="20" y2="4" />
               </svg>
             </button>
-            <button
-              onClick={anadirFlecha}
-              title="Dibujar flecha"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
-            >
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="4" y1="20" x2="19" y2="5" />
-                <polyline points="11,5 19,5 19,13" />
-              </svg>
-            </button>
-            <button
-              onClick={anadirCircuito}
+             <div style={{ display: 'inline-flex', gap: '0.5rem', marginRight: '0.3rem' }}>
+               <button
+                 onClick={exportarFuncion}
+                 style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.4rem 0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                 Exportar
+               </button>
+               <button
+                 onClick={importarFuncion}
+                 style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.4rem 0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                 Importar
+               </button>
+             </div>
+             <button
+               onClick={anadirFlecha}
+               title="Dibujar flecha"
+               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+             >
+               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                 <line x1="4" y1="20" x2="19" y2="5" />
+                 <polyline points="11,5 19,5 19,13" />
+               </svg>
+             </button>
+             <button
+               onClick={anadirCircuito}
               title="Añadir aro unido a otro aro"
               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
             >
