@@ -608,7 +608,8 @@ function App() {
         frameImages.push(ctx.getImageData(0, 0, w, h));
       }
 
-      const stream = canvas.captureStream(30);
+      const stream = canvas.captureStream(0);
+      const videoTrack = stream.getVideoTracks()[0];
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
       const chunks = [];
@@ -626,23 +627,33 @@ function App() {
       };
 
       const lastFrame = frameImages[frameImages.length - 1];
-
-      const playFrame = (idx) => {
-        if (idx < frameImages.length) {
-          ctx.putImageData(frameImages[idx], 0, 0);
-          setTimeout(() => playFrame(idx + 1), 1000 / 30);
-        } else {
-          setTimeout(() => {
-            ctx.putImageData(lastFrame, 0, 0);
-            setTimeout(() => {
-              try { rec.stop(); } catch (e) { setExportando(false); }
-            }, 2000);
-          }, 100);
-        }
-      };
+      const holdExtraMs = 2000;
+      let startTime = 0;
 
       rec.start();
-      playFrame(0);
+      startTime = performance.now();
+
+      const animate = (now) => {
+        const elapsed = now - startTime;
+        const animDuration = (totalFrames + 1) * (1000 / 30);
+        if (elapsed < animDuration) {
+          const frameIdx = Math.min(Math.floor(elapsed / (1000 / 30)), totalFrames);
+          ctx.putImageData(frameImages[frameIdx], 0, 0);
+          videoTrack.requestFrame();
+          requestAnimationFrame(animate);
+        } else {
+          ctx.putImageData(lastFrame, 0, 0);
+          videoTrack.requestFrame();
+          setTimeout(() => {
+            ctx.putImageData(lastFrame, 0, 0);
+            videoTrack.requestFrame();
+            setTimeout(() => {
+              try { rec.stop(); } catch (e) { setExportando(false); }
+            }, 500);
+          }, holdExtraMs);
+        }
+      };
+      requestAnimationFrame(animate);
       setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 10000);
     } catch (e) {
       setExportando(false);
