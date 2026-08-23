@@ -208,6 +208,7 @@ function App() {
           playingClip = false;
           idx++;
           active = orig;
+          orig.currentTime += v.duration || 4;
           orig.play();
         });
       });
