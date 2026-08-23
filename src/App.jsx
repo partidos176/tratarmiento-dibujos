@@ -596,34 +596,27 @@ function App() {
 
       rec.start();
       const frameMs = 1000 / 30;
-      const totalMs = frameImages.length * frameMs;
-      const startRec = performance.now();
-      let idx = -1;
+      let frameIdx = 0;
 
-      const loop = () => {
-        const elapsed = performance.now() - startRec;
-        if (elapsed < totalMs) {
-          const fi = Math.min(Math.floor(elapsed / frameMs), frameImages.length - 1);
-          if (fi !== idx) {
-            idx = fi;
-            ctx.putImageData(frameImages[idx], 0, 0);
-            videoTrack.requestFrame();
-          }
-          requestAnimationFrame(loop);
+      const iv = setInterval(() => {
+        if (frameIdx < frameImages.length) {
+          ctx.putImageData(frameImages[frameIdx], 0, 0);
+          videoTrack.requestFrame();
+          frameIdx++;
+        } else if (frameIdx === frameImages.length) {
+          frameIdx++;
+          ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
+          videoTrack.requestFrame();
         } else {
+          clearInterval(iv);
           ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
           videoTrack.requestFrame();
           setTimeout(() => {
-            ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
-            videoTrack.requestFrame();
-            setTimeout(() => {
-              try { rec.stop(); } catch (e) { setExportando(false); }
-            }, 500);
-          }, 1000);
+            try { rec.stop(); } catch (e) { setExportando(false); }
+          }, 500);
         }
-      };
-      requestAnimationFrame(loop);
-      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 20000);
+      }, frameMs);
+      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 15000);
     } catch (e) {
       setExportando(false);
     }
