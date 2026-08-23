@@ -613,15 +613,20 @@ function App() {
         setAviso('Animación descargada');
       };
       rec.start();
-      let idx = 0;
-      const drawNext = () => {
-        if (idx < frames.length && frames[idx]) ctx.drawImage(frames[idx], 0, 0, w, h);
-        idx++;
-        if (idx < frames.length) setTimeout(drawNext, frameDuration);
-        else setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 100);
+      const startTime = performance.now();
+      const totalDuration = totalFrames * frameDuration;
+      const drawFrame = (now) => {
+        const elapsed = now - startTime;
+        const frameIdx = Math.min(Math.floor(elapsed / frameDuration), frames.length - 1);
+        if (frames[frameIdx]) ctx.drawImage(frames[frameIdx], 0, 0, w, h);
+        if (elapsed < totalDuration) {
+          requestAnimationFrame(drawFrame);
+        } else {
+          setTimeout(() => { try { rec.stop(); } catch (e) { setExportando(false); } }, 200);
+        }
       };
-      drawNext();
-      setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) {} }, 4100);
+      requestAnimationFrame(drawFrame);
+      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, totalDuration + 1000);
     } catch (e) {
       setExportando(false);
       setAviso('Error al generar animación');
