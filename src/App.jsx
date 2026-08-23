@@ -242,42 +242,6 @@ function App() {
     circuitoAnimRef.current = requestAnimationFrame(paso);
   };
 
-  const exportarFuncion = () => {
-    const data = { figuras, capturas };
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `captura_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setAviso('Proyecto exportado correctamente');
-  };
-
-  const importarFuncion = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.click();
-    input.onchange = () => {
-      const file = input.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = JSON.parse(reader.result);
-          if (data.figuras) setFiguras(data.figuras);
-          if (data.capturas) setCapturas(data.capturas);
-          setAviso(`Proyecto importado: ${file.name}`);
-        } catch (e) {
-          setAviso('Error al importar el archivo');
-        }
-      };
-      reader.readAsText(file);
-    };
-  };
-
   const anadirCirculo = () => {
     const id = Date.now();
     setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0 }]);
@@ -960,20 +924,6 @@ function App() {
                 <line x1="4" y1="20" x2="20" y2="4" />
               </svg>
             </button>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-               <button
-                 onClick={exportarFuncion}
-                 title="Exportar figuras y capturas"
-                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#10b981', color: '#fff', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
-                 Exportar
-               </button>
-               <button
-                 onClick={importarFuncion}
-                 title="Importar figuras y capturas"
-                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#f97316', color: '#fff', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
-                 Importar
-               </button>
-             </div>
              <button
                onClick={anadirFlecha}
                title="Dibujar flecha"
