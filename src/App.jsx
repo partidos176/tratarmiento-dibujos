@@ -524,6 +524,95 @@ function App() {
     }
   });
 
+  const animarElipses = async () => {
+    if (!capturaSeleccionada || !imgDim || figuras.length === 0) return;
+    setExportando(true);
+    try {
+      const w = imgDim.w;
+      const h = imgDim.h;
+      const circs = figuras.filter(f => f.tipo === 'circulo');
+      if (circs.length < 2) { setAviso('Necesitas al menos 2 elipses para animar'); setExportando(false); return; }
+      const totalFrames = 120;
+      const frameDuration = 1000 / 30;
+      const halfFrames = Math.floor(totalFrames / 2);
+      const perEllipse = Math.floor(halfFrames / circs.length);
+      const promises = [];
+      for (let i = 0; i <= totalFrames; i++) {
+        const t = i / totalFrames;
+        const ellipseParts = circs.map((c, ci) => {
+          const appearStart = (ci * perEllipse) / totalFrames;
+          const appearEnd = ((ci + 1) * perEllipse) / totalFrames;
+          let e = 0;
+          if (t >= appearEnd) e = 1;
+          else if (t > appearStart) e = (t - appearStart) / (appearEnd - appearStart);
+          e = 1 - Math.pow(1 - e, 3);
+          const cx = c.x * w;
+          const cy = c.y * h;
+          const rx = (c.ancho * w / 2) * e;
+          const ry = (c.alto * h / 2) * e;
+          return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="${c.color}" stroke-opacity="${c.opacidad ?? 1}" stroke-width="2"/>`;
+        });
+        const allAppeared = t >= 0.5;
+        let lineParts = '';
+        if (allAppeared && circs.length >= 2) {
+          const lineProgress = Math.min(1, (t - 0.5) * 2);
+          const pts = circs.map(c => ({ x: c.x * w, y: c.y * h }));
+          for (let j = 0; j < pts.length - 1; j++) {
+            const segEnd = Math.min(1, lineProgress * (pts.length - 1) - j);
+            if (segEnd <= 0) break;
+            const x1 = pts[j].x, y1 = pts[j].y;
+            const x2 = pts[j].x + (pts[j + 1].x - pts[j].x) * Math.min(1, segEnd);
+            const y2 = pts[j].y + (pts[j + 1].y - pts[j].y) * Math.min(1, segEnd);
+            lineParts += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#38bdf8" stroke-opacity="1" stroke-width="2" stroke-linecap="round"/>`;
+          }
+        }
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${capturaSeleccionada.dataUrl}" width="${w}" height="${h}"/>${ellipseParts.join('')}${lineParts}</svg>`;
+        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        promises.push(new Promise((res) => {
+          const img = new Image();
+          img.onload = () => { URL.revokeObjectURL(url); res(img); };
+          img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+          img.src = url;
+        }));
+      }
+      const frames = await Promise.all(promises);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `animacion_elipses.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setExportando(false);
+        setAviso('Animación descargada');
+      };
+      rec.start();
+      let idx = 0;
+      const drawNext = () => {
+        if (idx < frames.length && frames[idx]) ctx.drawImage(frames[idx], 0, 0, w, h);
+        idx++;
+        if (idx < frames.length) setTimeout(drawNext, frameDuration);
+        else try { rec.stop(); } catch (e) { setExportando(false); }
+      };
+      drawNext();
+    } catch (e) {
+      setExportando(false);
+      setAviso('Error al generar animación');
+    }
+  };
+
   const guardarCaptura = async () => {
     if (!capturaSeleccionada || !imgDim) return;
     try {
@@ -913,6 +1002,15 @@ function App() {
               >
                 GUARDAR
               </button>
+              {figuras.some(f => f.tipo === 'circulo') && (
+                <button
+                  onClick={animarElipses}
+                  disabled={exportando}
+                  style={{ background: '#8b5cf6', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
+                >
+                  {exportando ? 'Generando...' : 'Animar'}
+                </button>
+              )}
               {figuraSeleccionada && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'texto' && (
