@@ -535,11 +535,6 @@ function App() {
       </div>
       {hoja === 'Presentación' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.5rem', padding: '2rem' }}>
-          <input
-            type="text"
-            placeholder="Escribe aquí..."
-            style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', fontFamily: 'Inter, sans-serif', fontSize: '1rem', color: '#e2e8f0', outline: 'none', width: '100%', maxWidth: '400px' }}
-          />
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>ARCHIVO:</span>
