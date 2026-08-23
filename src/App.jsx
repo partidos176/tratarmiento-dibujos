@@ -24,6 +24,7 @@ function App() {
   const [puntosPolilinea, setPuntosPolilinea] = useState([]);
   const [cortes, setCortes] = useState([]);
   const [modoCorte, setModoCorte] = useState(false);
+  const [modoCirculoClick, setModoCirculoClick] = useState(false);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
@@ -1020,10 +1021,10 @@ function App() {
                </svg>
              </button>
              <button
-               onClick={anadirCircuito}
-              title="Añadir aro unido a otro aro"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
-            >
+                onClick={() => { setModoCirculoClick(prev => !prev); if (modoCirculoClick) setAviso(''); else setAviso('Haz click en la imagen para colocar un círculo'); }}
+               title={modoCirculoClick ? 'Desactivar modo círculo' : 'Colocar círculo con click'}
+               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoCirculoClick ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
                 <line x1="8" y1="12" x2="16" y2="12" />
                 <circle cx="8" cy="12" r="4.5" />
@@ -1042,6 +1043,17 @@ function App() {
             />
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
+            if (modoCirculoClick) {
+              const p = puntoImagen(e);
+              if (p) {
+                const id = Date.now();
+                setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.08, alto: 0.08, color: '#38bdf8', opacidad: 0.7, crecimiento: 1 }]);
+                setFiguraSeleccionada(id);
+                setModoCirculoClick(false);
+                setAviso('');
+              }
+              return;
+            }
             if (modoPolilinea) {
               const p = puntoImagen(e);
               if (p) setPuntosPolilinea(prev => [...prev, { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) }]);
