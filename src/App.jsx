@@ -105,6 +105,28 @@ function App() {
       const h = original.videoHeight || 360;
       const clips = capturas.filter(c => c.videoUrl && c.insertarEn != null).sort((a, b) => a.insertarEn - b.insertarEn);
 
+      const tempImgDim = { w, h };
+
+      const buildFiguresSvg = () => {
+        if (figuras.length === 0) return null;
+        const parts = figuras.map(f => svgFigura(f, tempImgDim)).filter(Boolean);
+        if (parts.length === 0) return null;
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${parts.join('')}</svg>`;
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        return URL.createObjectURL(blob);
+      };
+
+      const svgUrl = buildFiguresSvg();
+      let figuresImg = null;
+      if (svgUrl) {
+        figuresImg = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => { URL.revokeObjectURL(svgUrl); resolve(img); };
+          img.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(null); };
+          img.src = svgUrl;
+        });
+      }
+
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
@@ -137,6 +159,9 @@ function App() {
 
       const loop = () => {
         ctx.drawImage(active, 0, 0, w, h);
+        if (figuresImg) {
+          ctx.drawImage(figuresImg, 0, 0, w, h);
+        }
         raf = requestAnimationFrame(loop);
       };
 
@@ -336,15 +361,16 @@ function App() {
     return { x: p.x / imgDim.w, y: p.y / imgDim.h };
   };
 
-  const svgFigura = (f) => {
+  const svgFigura = (f, dim) => {
+    const d = dim || imgDim;
     const pat = f.rayado
       ? `<defs><pattern id="rayado-${f.id}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${f.color}" strokeWidth="2.5"/></pattern></defs>`
       : '';
     const fill = f.rayado ? `url(#rayado-${f.id})` : f.color;
     const common = `fill="${fill}" fill-opacity="${f.opacidad ?? 0.5}" stroke="${f.color}" stroke-width="2"`;
     if (f.tipo === 'polilinea') {
-      const pts = (f.puntos || []).map(p => `${p.x * imgDim.w},${p.y * imgDim.h}`);
-      const grosor = (f.grosor || 0.006) * imgDim.h;
+      const pts = (f.puntos || []).map(p => `${p.x * d.w},${p.y * d.h}`);
+      const grosor = (f.grosor || 0.006) * d.h;
       const radio = Math.max(5, grosor * 1.2);
       const pol = pts.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round" stroke-linejoin="round"/>` : '';
       const circs = pts.map((p, i) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="${radio}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" stroke="#ffffff" stroke-width="1"/>`).join('');
@@ -352,14 +378,14 @@ function App() {
     }
     if (f.tipo === 'circuito') {
       const elipses = f.elipses || [{x:f.x1??0.2,y:f.y1??0.5,rx:f.rx1??0.08,ry:f.ry1??0.08},{x:f.x2??0.8,y:f.y2??0.5,rx:f.rx2??0.08,ry:f.ry2??0.08}];
-      const grosor = (f.grosor || 0.005) * imgDim.h;
+      const grosor = (f.grosor || 0.005) * d.h;
       let parts = '';
       for (let i = 0; i < elipses.length - 1; i++) {
         const a = elipses[i], b = elipses[i + 1];
-        const ax = a.x * imgDim.w, ay = a.y * imgDim.h;
-        const bx = b.x * imgDim.w, by = b.y * imgDim.h;
-        const arx = (a.rx ?? 0.08) * imgDim.w, ary = (a.ry ?? 0.08) * imgDim.h;
-        const brx = (b.rx ?? 0.08) * imgDim.w, bry = (b.ry ?? 0.08) * imgDim.h;
+        const ax = a.x * d.w, ay = a.y * d.h;
+        const bx = b.x * d.w, by = b.y * d.h;
+        const arx = (a.rx ?? 0.08) * d.w, ary = (a.ry ?? 0.08) * d.h;
+        const brx = (b.rx ?? 0.08) * d.w, bry = (b.ry ?? 0.08) * d.h;
         const dx = bx - ax, dy = by - ay, dist = Math.hypot(dx, dy);
         if (dist > 0) {
           const ux = dx / dist, uy = dy / dist;
@@ -369,20 +395,20 @@ function App() {
         }
       }
       elipses.forEach(e => {
-        const ex = e.x * imgDim.w, ey = e.y * imgDim.h;
-        const erx = (e.rx ?? 0.08) * imgDim.w, ery = (e.ry ?? 0.08) * imgDim.h;
+        const ex = e.x * d.w, ey = e.y * d.h;
+        const erx = (e.rx ?? 0.08) * d.w, ery = (e.ry ?? 0.08) * d.h;
         parts += `<ellipse cx="${ex}" cy="${ey}" rx="${erx}" ry="${ery}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
       });
       return parts;
     }
     if (f.tipo === 'flecha') {
-      const x1 = f.x1 * imgDim.w;
-      const y1 = f.y1 * imgDim.h;
-      const x2 = f.x2 * imgDim.w;
-      const y2 = f.y2 * imgDim.h;
-      const cx = f.cx * imgDim.w;
-      const cy = f.cy * imgDim.h;
-      const grosor = (f.grosor || 0.005) * imgDim.h;
+      const x1 = f.x1 * d.w;
+      const y1 = f.y1 * d.h;
+      const x2 = f.x2 * d.w;
+      const y2 = f.y2 * d.h;
+      const cx = f.cx * d.w;
+      const cy = f.cy * d.h;
+      const grosor = (f.grosor || 0.005) * d.h;
       const ang = Math.atan2(y2 - cy, x2 - cx);
       const L = grosor * 6 * (f.cabeza ?? 1);
       const a = Math.PI / 6;
@@ -394,20 +420,20 @@ function App() {
       return `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"${dash}/><polygon points="${x2},${y2} ${hx1},${hy1} ${hx2},${hy2}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}"/>`;
     }
     if (f.tipo === 'linea') {
-      return `<line x1="${f.x1 * imgDim.w}" y1="${f.y1 * imgDim.h}" x2="${f.x2 * imgDim.w}" y2="${f.y2 * imgDim.h}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${(f.grosor || 0.005) * imgDim.h}" stroke-linecap="round"/>`;
+      return `<line x1="${f.x1 * d.w}" y1="${f.y1 * d.h}" x2="${f.x2 * d.w}" y2="${f.y2 * d.h}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${(f.grosor || 0.005) * d.h}" stroke-linecap="round"/>`;
     }
     if (f.tipo === 'texto') {
-      const x = f.x * imgDim.w;
-      const y = f.y * imgDim.h;
-      const tam = (f.fontSize || 0.06) * imgDim.h;
+      const x = f.x * d.w;
+      const y = f.y * d.h;
+      const tam = (f.fontSize || 0.06) * d.h;
       const txt = String(f.texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       return `<text x="${x}" y="${y}" font-size="${tam}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">${txt}</text>`;
     }
     if (f.tipo === 'triangulo') {
-      const x = f.x * imgDim.w;
-      const y = f.y * imgDim.h;
-      const ancho = f.ancho * imgDim.w;
-      const alto = f.alto * imgDim.h;
+      const x = f.x * d.w;
+      const y = f.y * d.h;
+      const ancho = f.ancho * d.w;
+      const alto = f.alto * d.h;
       const crecimiento = f.crecimiento ?? 1;
       const yBase = y + alto / 2;
       const pillarH = alto * crecimiento;
@@ -417,10 +443,10 @@ function App() {
       const gradientId = `pilar_${f.id}`;
       return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><ellipse cx="${x}" cy="${yBase}" rx="${halfW * 1.8}" ry="${ellipseRy}" fill="rgba(30,10,0,0.5)" /><rect x="${x - halfW}" y="${yTop}" width="${ancho}" height="${pillarH}" rx="${halfW * 0.3}" fill="url(#${gradientId})" />`;
     }
-    const cx = f.x * imgDim.w;
-    const cy = f.y * imgDim.h;
-    const rx = f.ancho * imgDim.w / 2;
-    const ry = f.alto * imgDim.h / 2;
+    const cx = f.x * d.w;
+    const cy = f.y * d.h;
+    const rx = f.ancho * d.w / 2;
+    const ry = f.alto * d.h / 2;
     return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${common}/>`;
   };
 
