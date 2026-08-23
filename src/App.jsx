@@ -843,20 +843,6 @@ function App() {
                   >
                     {exportando ? 'Exportando...' : 'Exportar'}
                   </button>
-                  <button
-                    onClick={() => { setModoCorte(prev => !prev); if (modoCorte) setAviso('Modo corte desactivado'); else setAviso('Modo corte activado — haz click en la línea de tiempo para cortar'); }}
-                    style={{ background: modoCorte ? '#ef4444' : '#475569', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                  >
-                    {modoCorte ? '✕ CORTAR' : '✂ CORTAR'}
-                  </button>
-                  {cortes.length > 0 && (
-                    <button
-                      onClick={() => { setCortes([]); setAviso('Todos los cortes eliminados'); }}
-                      style={{ background: '#1e293b', border: '1px solid #ef4444', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                    >
-                      Limpiar cortes ({cortes.length})
-                    </button>
-                  )}
                 </div>
                 {capturas.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
