@@ -548,7 +548,6 @@ function App() {
       const drawFrame = (frameIdx) => {
         const t = Math.min(frameIdx / totalFrames, 1);
         ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(bgImg, 0, 0, w, h);
 
         const groups = [];
         const individualCircs = circs.map(c => ({ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto }));
@@ -614,6 +613,7 @@ function App() {
             }
           }
         });
+        ctx.drawImage(bgImg, 0, 0, w, h);
       };
 
       const frameImages = [];
