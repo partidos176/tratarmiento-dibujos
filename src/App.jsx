@@ -551,9 +551,8 @@ function App() {
         ctx.drawImage(bgImg, 0, 0, w, h);
 
         const groups = [];
-        circs.forEach(c => {
-          groups.push([{ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto }]);
-        });
+        const individualCircs = circs.map(c => ({ x: c.x, y: c.y, color: c.color, opacidad: c.opacidad, ancho: c.ancho, alto: c.alto }));
+        if (individualCircs.length > 0) groups.push(individualCircs);
         circuits.forEach(c => {
           const els = (c.elipses || []).map(el => ({ x: el.x, y: el.y, color: c.color, opacidad: c.opacidad, ancho: (el.rx || 0.03) * 2, alto: (el.ry || 0.02) * 2 }));
           if (els.length > 0) groups.push(els);
