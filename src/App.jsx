@@ -605,6 +605,15 @@ function App() {
                   }}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
+                <button
+                  onClick={() => { const v = videoRef.current; if (v) { if (v.fullscreenEnabled) { v.requestFullscreen?.() || v.webkitRequestFullscreen?.(); } else { const container = v.parentElement; if (container.requestFullscreen) container.requestFullscreen(); } } }}
+                  title="Pantalla completa"
+                  style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 3 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                </button>
                 {clipActivo && clipActivo.videoUrl && (
                   <video
                     ref={(el) => {
