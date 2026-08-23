@@ -383,7 +383,7 @@ function App() {
   };
 
   const svgFigura = (f, dim) => {
-    const d = dim || imgDim;
+    const d = (dim && dim.w != null) ? dim : imgDim;
     const pat = f.rayado
       ? `<defs><pattern id="rayado-${f.id}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${f.color}" strokeWidth="2.5"/></pattern></defs>`
       : '';
