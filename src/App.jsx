@@ -216,7 +216,7 @@ function App() {
           activeClip.currentTime = 0;
           activeClip.play().catch(() => {});
         }
-        if (activeClip && (t - clipStartTime) >= 2) {
+        if (activeClip && (t - clipStartTime) >= (clipEls[clipIdx].c.duracion || 4)) {
           activeClip.pause();
           activeClip = null;
           clipIdx++;
@@ -827,6 +827,14 @@ function App() {
                       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                       <circle cx="12" cy="13" r="4" />
                     </svg>
+                  </button>
+                  <button
+                    onClick={exportarVideo}
+                    disabled={exportando}
+                    style={{ background: '#e11d48', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
+                    title="Exportar el video de la línea de tiempo"
+                  >
+                    {exportando ? 'Exportando...' : 'Exportar'}
                   </button>
                 </div>
                 {capturas.length > 0 && (
