@@ -659,6 +659,7 @@ function App() {
                 <video
                   ref={videoRef}
                   muted
+                  controls
                   src={videoUrl}
                   onClick={togglePlay}
                   onPlay={() => setReproduciendo(true)}
