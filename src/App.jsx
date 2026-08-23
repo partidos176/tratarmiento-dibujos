@@ -191,6 +191,11 @@ function App() {
       };
 
       orig.addEventListener('timeupdate', () => {
+        if (orig.currentTime >= 4) {
+          orig.pause();
+          terminar(false);
+          return;
+        }
         if (!playingClip && idx < clipEls.length && orig.currentTime >= clipEls[idx].c.insertarEn) {
           playingClip = true;
           orig.pause();
@@ -206,13 +211,11 @@ function App() {
           orig.play();
         });
       });
-      orig.addEventListener('ended', () => terminar(false));
       orig.addEventListener('error', () => terminar(true));
 
       rec.start(250);
       loop();
       await orig.play();
-      setTimeout(() => terminar(false), 4000);
     } catch (e) {
       setExportando(false);
       setAviso('Error al exportar: ' + String(e));
