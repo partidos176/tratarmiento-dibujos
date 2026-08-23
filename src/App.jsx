@@ -467,7 +467,7 @@ function App() {
       let frame = 0;
       let timer;
       const dibujarFrame = () => {
-        const t = Math.min(2000, frame * 33);
+        const t = Math.min(4000, frame * 33);
         const svgStr = svgFn(t);
         const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
         const img = new Image();
@@ -475,7 +475,7 @@ function App() {
           ctx.drawImage(img, 0, 0, w, h);
           URL.revokeObjectURL(url);
           frame++;
-          if (frame * 33 <= 2000) {
+          if (frame * 33 <= 4000) {
             timer = setTimeout(dibujarFrame, 33);
           } else {
             setTimeout(() => { try { rec.stop(); } catch (e) { reject(e); } }, 50);
