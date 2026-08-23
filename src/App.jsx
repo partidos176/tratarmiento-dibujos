@@ -622,7 +622,7 @@ function App() {
         frameImages.push(ctx.getImageData(0, 0, w, h));
       }
 
-      const stream = canvas.captureStream(30);
+      const stream = canvas.captureStream(0);
       const videoTrack = stream.getVideoTracks()[0];
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
@@ -640,35 +640,41 @@ function App() {
         setExportando(false);
       };
 
-      const lastFrame = frameImages[frameImages.length - 1];
-
       rec.start();
-      let frameIdx = 0;
-      const iv = setInterval(() => {
-        if (frameIdx < frameImages.length) {
-          ctx.putImageData(frameImages[frameIdx], 0, 0);
-          try { videoTrack.requestFrame(); } catch (e) {}
-          frameIdx++;
-        } else if (frameIdx === frameImages.length) {
-          frameIdx++;
-          ctx.putImageData(lastFrame, 0, 0);
-          try { videoTrack.requestFrame(); } catch (e) {}
-        } else if (frameIdx === frameImages.length + 1) {
-          frameIdx++;
-          ctx.putImageData(lastFrame, 0, 0);
-          try { videoTrack.requestFrame(); } catch (e) {}
+      const frameMs = 1000 / 30;
+      let idx = 0;
+      const totalMs = frameImages.length * frameMs;
+      const startRec = performance.now();
+
+      const loop = () => {
+        const now = performance.now();
+        const elapsed = now - startRec;
+        if (elapsed < totalMs) {
+          const fi = Math.min(Math.floor(elapsed / frameMs), frameImages.length - 1);
+          if (fi !== idx) {
+            idx = fi;
+            ctx.putImageData(frameImages[idx], 0, 0);
+            videoTrack.requestFrame();
+          }
+          requestAnimationFrame(loop);
         } else {
-          clearInterval(iv);
+          ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
+          videoTrack.requestFrame();
           setTimeout(() => {
-            ctx.putImageData(lastFrame, 0, 0);
-            try { videoTrack.requestFrame(); } catch (e) {}
+            ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
+            videoTrack.requestFrame();
             setTimeout(() => {
-              try { rec.stop(); } catch (e) { setExportando(false); }
+              ctx.putImageData(frameImages[frameImages.length - 1], 0, 0);
+              videoTrack.requestFrame();
+              setTimeout(() => {
+                try { rec.stop(); } catch (e) { setExportando(false); }
+              }, 500);
             }, 500);
-          }, 2000);
+          }, 1000);
         }
-      }, 1000 / 30);
-      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 15000);
+      };
+      requestAnimationFrame(loop);
+      setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch (e) {} }, 20000);
     } catch (e) {
       setExportando(false);
       setAviso('Error al generar animación');
