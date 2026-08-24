@@ -1,5 +1,28 @@
 import { useState, useRef, useEffect } from 'react';
 
+const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
+  const v = [p1, p2, p3];
+  const s = [];
+  for (let i = 0; i < 3; i++) {
+    const c = v[i];
+    const a = v[(i + 2) % 3];
+    const b = v[(i + 1) % 3];
+    const la = Math.hypot(a.x - c.x, a.y - c.y);
+    const lb = Math.hypot(b.x - c.x, b.y - c.y);
+    const k = Math.min(radio, la / 2, lb / 2);
+    const ua = { x: (a.x - c.x) / (la || 1), y: (a.y - c.y) / (la || 1) };
+    const ub = { x: (b.x - c.x) / (lb || 1), y: (b.y - c.y) / (lb || 1) };
+    s.push({ in: { x: c.x + ua.x * k, y: c.y + ua.y * k }, ctrl: c, out: { x: c.x + ub.x * k, y: c.y + ub.y * k } });
+  }
+  let d = `M ${s[0].in.x} ${s[0].in.y}`;
+  for (let i = 0; i < 3; i++) {
+    d += ` Q ${s[i].ctrl.x} ${s[i].ctrl.y} ${s[i].out.x} ${s[i].out.y}`;
+    const nx = s[(i + 1) % 3];
+    d += ` L ${nx.in.x} ${nx.in.y}`;
+  }
+  return d + ' Z';
+};
+
 function App() {
   const [archivo, setArchivo] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
@@ -389,7 +412,7 @@ function App() {
     if (e <= 0.001) return '';
     const d = (dim && dim.w != null) ? dim : imgDim;
     const pat = f.rayado
-      ? `<defs><pattern id="rayado-${f.id}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${f.color}" strokeWidth="2.5"/></pattern></defs>`
+      ? `<defs><pattern id="rayado-${f.id}" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${f.color}" strokeWidth="4"/></pattern></defs>`
       : '';
     const fill = f.sinRelleno ? 'none' : (f.rayado ? `url(#rayado-${f.id})` : f.color);
     const op = (f.opacidad ?? 0.5) * (f.tipo === 'texto' ? e : 1);
@@ -523,11 +546,11 @@ function App() {
       const ancho = f.ancho * d.w;
       const alto = f.alto * d.h;
       const yBase = y + alto / 2;
-      const pillarH = alto * e;
-      const yTop = yBase - pillarH;
-      const halfW = ancho / 2;
+      const hh = alto * e;
+      const hw = (ancho / 2) * e;
       const gradientId = `pilar_${f.id}`;
-      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><rect x="${x - halfW}" y="${yTop}" width="${ancho}" height="${pillarH}" rx="${halfW * 0.3}" fill="url(#${gradientId})" />`;
+      const pd = pathTrianguloRedondeado({ x, y: yBase - hh }, { x: x - hw, y: yBase }, { x: x + hw, y: yBase }, Math.min(ancho, alto) * 0.12);
+      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><path d="${pd}" fill="url(#${gradientId})" />`;
     }
 
     const cx = f.x * d.w;
@@ -1341,8 +1364,8 @@ function App() {
                     >
                       <defs>
                         {figuras.filter(f => f.rayado).map(f => (
-                          <pattern key={f.id} id={`rayado-${f.id}`} patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
-                            <line x1="0" y1="0" x2="0" y2="5" stroke={f.color} strokeWidth="2.5" />
+                          <pattern key={f.id} id={`rayado-${f.id}`} patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+                            <line x1="0" y1="0" x2="0" y2="7" stroke={f.color} strokeWidth="4" />
                           </pattern>
                         ))}
                       </defs>
@@ -1373,7 +1396,7 @@ function App() {
                           },
                         };
 const shape = f.tipo === 'triangulo'
-                          ? <rect {...shapeProps} x={x - ancho / 2} y={y - alto / 2} width={ancho} height={alto} rx={ancho * 0.15} />
+                          ? <path {...shapeProps} d={pathTrianguloRedondeado({ x, y: y - alto / 2 }, { x: x - ancho / 2, y: y + alto / 2 }, { x: x + ancho / 2, y: y + alto / 2 }, Math.min(ancho, alto) * 0.12)} />
                           : f.tipo === 'circulo'
                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
                             : f.tipo === 'linea'
