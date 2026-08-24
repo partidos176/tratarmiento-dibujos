@@ -23,6 +23,22 @@ const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   return d + ' Z';
 };
 
+const puntoEnElipse = (el, dim, angGrados, factorE = 1) => {
+  const erx = (el.rx ?? 0.08) * dim.w * factorE;
+  const ery = (el.ry ?? 0.08) * dim.h * factorE;
+  const rad = angGrados * Math.PI / 180;
+  return { x: el.x * dim.w + Math.cos(rad) * erx, y: el.y * dim.h + Math.sin(rad) * ery };
+};
+
+const interseccionLineaElipse = (de, hacia, dim) => {
+  const dx = (hacia.x - de.x) * dim.w, dy = (hacia.y - de.y) * dim.h;
+  const arx = (de.rx ?? 0.08) * dim.w, ary = (de.ry ?? 0.08) * dim.h;
+  const dist = Math.hypot(dx, dy);
+  if (dist <= 0.001 || arx <= 0.001 || ary <= 0.001) return null;
+  const t = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
+  return { x: de.x * dim.w + dx * t, y: de.y * dim.h + dy * t };
+};
+
 function App() {
   const [archivo, setArchivo] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
@@ -66,7 +82,6 @@ function App() {
   const triAnimElapsedRef = useRef(0);
   const triAnimIdRef = useRef(null);
   const circuitoAnimRef = useRef(null);
-
   useEffect(() => () => {
     if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
   }, []);
@@ -460,31 +475,29 @@ function App() {
       const elipses = f.elipses || [{ x: f.x1 ?? 0.2, y: f.y1 ?? 0.5, rx: f.rx1 ?? 0.08, ry: f.ry1 ?? 0.08 }, { x: f.x2 ?? 0.8, y: f.y2 ?? 0.5, rx: f.rx2 ?? 0.08, ry: f.ry2 ?? 0.08 }];
       const grosor = (f.grosor || 0.005) * d.h;
       let parts = '';
-      for (let i = 0; i < elipses.length - 1; i++) {
-        const a = elipses[i], b = elipses[i + 1];
-        const ax = a.x * d.w, ay = a.y * d.h;
-        const bx = b.x * d.w, by = b.y * d.h;
-        const arx = (a.rx ?? 0.08) * d.w;
-        const ary = (a.ry ?? 0.08) * d.h;
-        const brx = (b.rx ?? 0.08) * d.w;
-        const bry = (b.ry ?? 0.08) * d.h;
-        const dx = bx - ax, dy = by - ay;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 0.001 && arx > 0.001 && ary > 0.001 && brx > 0.001 && bry > 0.001) {
-          const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
-          const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
-          const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
-          const lx2 = bx - dx * tB, ly2 = by - dy * tB;
-          const lineEndX = lx1 + (lx2 - lx1) * e;
-          const lineEndY = ly1 + (ly2 - ly1) * e;
-          parts += `<line x1="${lx1}" y1="${ly1}" x2="${lineEndX}" y2="${lineEndY}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
-        }
+      for (let i = 1; i < elipses.length; i++) {
+        const a = elipses[i - 1], b = elipses[i];
+        const tramo = (f.tramos || [])[i - 1] || {};
+        const pa = tramo.angA != null ? puntoEnElipse(a, d, tramo.angA) : interseccionLineaElipse(a, b, d);
+        const pb = tramo.angB != null ? puntoEnElipse(b, d, tramo.angB) : interseccionLineaElipse(b, a, d);
+        if (!pa || !pb) continue;
+        const lineEndX = pa.x + (pb.x - pa.x) * e;
+        const lineEndY = pa.y + (pb.y - pa.y) * e;
+        parts += `<line x1="${pa.x}" y1="${pa.y}" x2="${lineEndX}" y2="${lineEndY}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
       }
       elipses.forEach(el => {
         const ex = el.x * d.w, ey = el.y * d.h;
         const erx = (el.rx ?? 0.08) * d.w * e, ery = (el.ry ?? 0.08) * d.h * e;
+        const rot = el.rot ?? 270;
+        const hueco = el.hueco ?? 110;
         if (erx > 0.001 && ery > 0.001) {
-          parts += `<ellipse cx="${ex}" cy="${ey}" rx="${erx}" ry="${ery}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
+          const a1 = (rot + hueco / 2) * Math.PI / 180;
+          const a2 = a1 + (360 - hueco) * Math.PI / 180;
+          const x1 = ex + Math.cos(a1) * erx;
+          const y1 = ey + Math.sin(a1) * ery;
+          const x2 = ex + Math.cos(a2) * erx;
+          const y2 = ey + Math.sin(a2) * ery;
+          parts += `<path d="M ${x1} ${y1} A ${erx} ${ery} 0 ${360 - hueco > 180 ? 1 : 0} 1 ${x2} ${y2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
         }
       });
       return parts;
@@ -1342,6 +1355,34 @@ function App() {
                         } else if (d.tipo === 'circuitoRadioY') {
                           const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => i === d.indice ? { ...el, ry: Math.max(0.01, Math.abs(p.y - el.y)) } : el);
                           actualizarFigura(d.id, { elipses });
+                        } else if (d.tipo === 'circuitoRot') {
+                          const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => {
+                            if (i !== d.indice) return el;
+                            const ang = Math.atan2((p.y - el.y) * imgDim.h, (p.x - el.x) * imgDim.w) * 180 / Math.PI;
+                            return { ...el, rot: ((ang - (el.hueco ?? 110) / 2) % 360 + 360) % 360 };
+                          });
+                          actualizarFigura(d.id, { elipses });
+                        } else if (d.tipo === 'circuitoHueco') {
+                          const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => {
+                            if (i !== d.indice) return el;
+                            const ang = (Math.atan2((p.y - el.y) * imgDim.h, (p.x - el.x) * imgDim.w) * 180 / Math.PI + 360) % 360;
+                            let dif = ((ang - (el.rot ?? 270)) % 360 + 360) % 360;
+                            if (dif > 180) dif -= 360;
+                            return { ...el, hueco: Math.max(8, Math.min(340, Math.abs(dif) * 2)) };
+                          });
+                          actualizarFigura(d.id, { elipses });
+                        } else if (d.tipo === 'circuitoTramoA' || d.tipo === 'circuitoTramoB') {
+                          const fig = figuras.find(f => f.id === d.id);
+                          const a = fig?.elipses?.[d.indice];
+                          const b = fig?.elipses?.[d.indice + 1];
+                          if (fig && a && b) {
+                            const ref = d.tipo === 'circuitoTramoA' ? a : b;
+                            const ang = (Math.atan2((p.y - ref.y) * imgDim.h, (p.x - ref.x) * imgDim.w) * 180 / Math.PI + 360) % 360;
+                            const tramos = [...(fig.tramos || [])];
+                            while (tramos.length < fig.elipses.length - 1) tramos.push({});
+                            tramos[d.indice] = { ...(tramos[d.indice] || {}), [d.tipo === 'circuitoTramoA' ? 'angA' : 'angB']: ang };
+                            actualizarFigura(d.id, { tramos });
+                          }
                         } else if (d.tipo === 'lineaPunto') {
                           if (d.cual === 'p1') {
                             actualizarFigura(d.id, { x1: p.x, y1: p.y, cx: d.cx + (p.x - d.px), cy: d.cy + (p.y - d.py) });
@@ -1453,20 +1494,26 @@ const shape = f.tipo === 'triangulo'
                                         {elipses.map((el, i) => {
                                           if (i === 0) return null;
                                           const a = elipses[i - 1], b = el;
-                                          const ax = a.x * imgDim.w, ay = a.y * imgDim.h;
-                                          const bx = b.x * imgDim.w, by = b.y * imgDim.h;
-                                          const arx = (a.rx ?? 0.08) * imgDim.w, ary = (a.ry ?? 0.08) * imgDim.h;
-                                          const brx = (b.rx ?? 0.08) * imgDim.w, bry = (b.ry ?? 0.08) * imgDim.h;
-                                          const dx = bx - ax, dy = by - ay, dist = Math.hypot(dx, dy);
-                                          if (dist <= 0) return null;
-                                          const ux = dx / dist, uy = dy / dist;
-                                          return (
-                                            <line key={`l${i}`} x1={ax + ux * arx} y1={ay + uy * ary} x2={bx - ux * brx} y2={by - uy * bry} stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} strokeLinecap="round" />
-                                          );
+                                          const tramo = (f.tramos || [])[i - 1] || {};
+                                          const pa = tramo.angA != null ? puntoEnElipse(a, imgDim, tramo.angA) : interseccionLineaElipse(a, b, imgDim);
+                                          const pb = tramo.angB != null ? puntoEnElipse(b, imgDim, tramo.angB) : interseccionLineaElipse(b, a, imgDim);
+                                          if (!pa || !pb) return null;
+                                          return <line key={`l${i}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} strokeLinecap="round" />;
                                         })}
-                                        {elipses.map((el, i) => (
-                                          <ellipse key={i} cx={el.x * imgDim.w} cy={el.y * imgDim.h} rx={(el.rx ?? 0.08) * imgDim.w} ry={(el.ry ?? 0.08) * imgDim.h} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} />
-                                        ))}
+                                        {elipses.map((el, i) => {
+                                          const erx = (el.rx ?? 0.08) * imgDim.w;
+                                          const ery = (el.ry ?? 0.08) * imgDim.h;
+                                          if (erx <= 0 || ery <= 0) return null;
+                                          const rot = el.rot ?? 270;
+                                          const hueco = el.hueco ?? 110;
+                                          const a1 = (rot + hueco / 2) * Math.PI / 180;
+                                          const a2 = a1 + (360 - hueco) * Math.PI / 180;
+                                          const ax = el.x * imgDim.w + Math.cos(a1) * erx;
+                                          const ay = el.y * imgDim.h + Math.sin(a1) * ery;
+                                          const bx = el.x * imgDim.w + Math.cos(a2) * erx;
+                                          const by = el.y * imgDim.h + Math.sin(a2) * ery;
+                                          return <path key={i} d={`M ${ax} ${ay} A ${erx} ${ery} 0 ${360 - hueco > 180 ? 1 : 0} 1 ${bx} ${by}`} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={grosorPx} strokeLinecap="round" />;
+                                        })}
                                       </g>
                                     );
                                   })()
@@ -1642,27 +1689,116 @@ const shape = f.tipo === 'triangulo'
                                         e.currentTarget.setPointerCapture(e.pointerId);
                                       }}
                                     />
-                                    <circle
-                                      cx={el.x * imgDim.w}
-                                      cy={(el.y + (el.ry ?? 0.08)) * imgDim.h}
-                                      r={6}
-                                      fill="#fb923c"
-                                      stroke="#0ea5e9"
-                                      strokeWidth="2"
-                                      style={{ pointerEvents: 'all', cursor: 'ns-resize' }}
-                                      title={`Alto aro ${i + 1}`}
-                                      onClick={(e) => e.stopPropagation()}
-                                      onPointerDown={(e) => {
-                                        setFiguraSeleccionada(f.id);
-                                        if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
-                                        const p = puntoImagen(e);
-                                        if (!p) return;
-                                        dragRef.current = { tipo: 'circuitoRadioY', id: f.id, indice: i };
-                                        e.currentTarget.setPointerCapture(e.pointerId);
-                                      }}
-                                    />
-                                  </g>
-                                ))}
+                                     <circle
+                                       cx={el.x * imgDim.w}
+                                       cy={(el.y + (el.ry ?? 0.08)) * imgDim.h}
+                                       r={6}
+                                       fill="#fb923c"
+                                       stroke="#0ea5e9"
+                                       strokeWidth="2"
+                                       style={{ pointerEvents: 'all', cursor: 'ns-resize' }}
+                                       title={`Alto aro ${i + 1}`}
+                                       onClick={(e) => e.stopPropagation()}
+                                       onPointerDown={(e) => {
+                                         setFiguraSeleccionada(f.id);
+                                         if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                         const p = puntoImagen(e);
+                                         if (!p) return;
+                                         dragRef.current = { tipo: 'circuitoRadioY', id: f.id, indice: i };
+                                         e.currentTarget.setPointerCapture(e.pointerId);
+                                       }}
+                                     />
+                                     <circle
+                                       cx={(el.x + Math.cos(((el.rot ?? 270) + (el.hueco ?? 110) / 2) * Math.PI / 180) * (el.rx ?? 0.08)) * imgDim.w}
+                                       cy={(el.y + Math.sin(((el.rot ?? 270) + (el.hueco ?? 110) / 2) * Math.PI / 180) * (el.ry ?? 0.08)) * imgDim.h}
+                                       r={6}
+                                       fill="#f472b6"
+                                       stroke="#0ea5e9"
+                                       strokeWidth="2"
+                                       style={{ pointerEvents: 'all', cursor: 'grab' }}
+                                       title={`Girar aro ${i + 1}`}
+                                       onClick={(e) => e.stopPropagation()}
+                                       onPointerDown={(e) => {
+                                         setFiguraSeleccionada(f.id);
+                                         if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                         const p = puntoImagen(e);
+                                         if (!p) return;
+                                         dragRef.current = { tipo: 'circuitoRot', id: f.id, indice: i };
+                                         e.currentTarget.setPointerCapture(e.pointerId);
+                                       }}
+                                     />
+                                     <circle
+                                       cx={(el.x + Math.cos((el.rot ?? 270) * Math.PI / 180) * (el.rx ?? 0.08) * 1.35) * imgDim.w}
+                                       cy={(el.y + Math.sin((el.rot ?? 270) * Math.PI / 180) * (el.ry ?? 0.08) * 1.35) * imgDim.h}
+                                       r={6}
+                                       fill="#a3e635"
+                                       stroke="#0ea5e9"
+                                       strokeWidth="2"
+                                       style={{ pointerEvents: 'all', cursor: 'crosshair' }}
+                                       title={`Hueco aro ${i + 1}`}
+                                       onClick={(e) => e.stopPropagation()}
+                                       onPointerDown={(e) => {
+                                         setFiguraSeleccionada(f.id);
+                                         if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                         const p = puntoImagen(e);
+                                         if (!p) return;
+                                         dragRef.current = { tipo: 'circuitoHueco', id: f.id, indice: i };
+                                         e.currentTarget.setPointerCapture(e.pointerId);
+                                       }}
+                                     />
+                                     {i < (f.elipses || []).length - 1 && (() => {
+                                       const b = f.elipses[i + 1];
+                                       const tramo = (f.tramos || [])[i] || {};
+                                       const pa = tramo.angA != null ? puntoEnElipse(el, imgDim, tramo.angA) : interseccionLineaElipse(el, b, imgDim);
+                                       const pb = tramo.angB != null ? puntoEnElipse(b, imgDim, tramo.angB) : interseccionLineaElipse(b, el, imgDim);
+                                       if (!pa || !pb) return null;
+                                       return (
+                                         <>
+                                           <circle
+                                             cx={pa.x}
+                                             cy={pa.y}
+                                             r={5}
+                                             fill="#2dd4bf"
+                                             stroke="#0ea5e9"
+                                             strokeWidth="2"
+                                             style={{ pointerEvents: 'all', cursor: 'move' }}
+                                             title={`Salida del tramo ${i + 1} hacia el aro ${i + 2} (doble clic: automático)`}
+                                             onClick={(e) => e.stopPropagation()}
+                                             onDoubleClick={(e) => { e.stopPropagation(); actualizarFigura(f.id, { tramos: (figuras.find(ff => ff.id === f.id)?.tramos || []).map((t, j) => j === i ? { ...t, angA: undefined } : t) }); }}
+                                             onPointerDown={(e) => {
+                                               setFiguraSeleccionada(f.id);
+                                               if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                               const p = puntoImagen(e);
+                                               if (!p) return;
+                                               dragRef.current = { tipo: 'circuitoTramoA', id: f.id, indice: i };
+                                               e.currentTarget.setPointerCapture(e.pointerId);
+                                             }}
+                                           />
+                                           <circle
+                                             cx={pb.x}
+                                             cy={pb.y}
+                                             r={5}
+                                             fill="#818cf8"
+                                             stroke="#0ea5e9"
+                                             strokeWidth="2"
+                                             style={{ pointerEvents: 'all', cursor: 'move' }}
+                                             title={`Entrada del tramo ${i + 1} en el aro ${i + 2} (doble clic: automático)`}
+                                             onClick={(e) => e.stopPropagation()}
+                                             onDoubleClick={(e) => { e.stopPropagation(); actualizarFigura(f.id, { tramos: (figuras.find(ff => ff.id === f.id)?.tramos || []).map((t, j) => j === i ? { ...t, angB: undefined } : t) }); }}
+                                             onPointerDown={(e) => {
+                                               setFiguraSeleccionada(f.id);
+                                               if (circuitoAnimRef.current) { cancelAnimationFrame(circuitoAnimRef.current); circuitoAnimRef.current = null; }
+                                               const p = puntoImagen(e);
+                                               if (!p) return;
+                                               dragRef.current = { tipo: 'circuitoTramoB', id: f.id, indice: i };
+                                               e.currentTarget.setPointerCapture(e.pointerId);
+                                             }}
+                                           />
+                                         </>
+                                       );
+                                     })()}
+                                   </g>
+                                 ))}
                               </>
                             ) : (
                               <circle
