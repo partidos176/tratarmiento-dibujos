@@ -342,14 +342,14 @@ function App() {
     const y2 = 0.5;
     const cx = (x1 + x2) / 2;
     const cy = (y1 + y2) / 2;
-    setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2: x1, y2: y1, cx: x1, cy: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 0 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2, y2, cx, cy, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 1, crecimiento: 0 }]);
     setFiguraSeleccionada(id);
     if (flechaAnimRef.current) cancelAnimationFrame(flechaAnimRef.current);
     const t0 = performance.now();
     const paso = (t) => {
       const p = Math.min(1, (t - t0) / 1000);
       const e = 1 - Math.pow(1 - p, 3);
-      setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, cx: x1 + (cx - x1) * e, cy: y1 + (cy - y1) * e, cabeza: e } : f));
+      setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
       if (p < 1) flechaAnimRef.current = requestAnimationFrame(paso);
       else flechaAnimRef.current = null;
     };
@@ -385,93 +385,156 @@ function App() {
   };
 
   const svgFigura = (f, dim) => {
+    const e = f.crecimiento ?? 1;
+    if (e <= 0.001) return '';
     const d = (dim && dim.w != null) ? dim : imgDim;
     const pat = f.rayado
       ? `<defs><pattern id="rayado-${f.id}" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${f.color}" strokeWidth="2.5"/></pattern></defs>`
       : '';
     const fill = f.sinRelleno ? 'none' : (f.rayado ? `url(#rayado-${f.id})` : f.color);
-    const op = f.opacidad ?? 0.5;
+    const op = (f.opacidad ?? 0.5) * (f.tipo === 'texto' ? e : 1);
     const common = `fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : op}" stroke="${f.color}" stroke-opacity="${op}" stroke-width="2"`;
+
     if (f.tipo === 'polilinea') {
-      const pts = (f.puntos || []).map(p => `${p.x * d.w},${p.y * d.h}`);
+      const pts = f.puntos || [];
+      if (pts.length === 0) return '';
       const grosor = (f.grosor || 0.006) * d.h;
       const radio = Math.max(5, grosor * 1.2);
-      const pol = pts.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round" stroke-linejoin="round"/>` : '';
-      const circs = pts.map((p, i) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="${radio}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" stroke="#ffffff" stroke-width="1"/>`).join('');
-      return `${pol}${circs}`;
+      if (pts.length === 1) {
+        return `<circle cx="${pts[0].x * d.w}" cy="${pts[0].y * d.h}" r="${radio * e}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" stroke="#ffffff" stroke-width="1"/>`;
+      }
+      const segLengths = [];
+      let totalLen = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const segLen = Math.hypot((pts[i + 1].x - pts[i].x) * d.w, (pts[i + 1].y - pts[i].y) * d.h);
+        segLengths.push(segLen);
+        totalLen += segLen;
+      }
+      const targetLen = totalLen * e;
+      let accum = 0;
+      const activePts = [`${pts[0].x * d.w},${pts[0].y * d.h}`];
+      const activeCircs = [`<circle cx="${pts[0].x * d.w}" cy="${pts[0].y * d.h}" r="${radio * Math.min(1, e * 3)}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" stroke="#ffffff" stroke-width="1"/>`];
+      for (let i = 0; i < segLengths.length; i++) {
+        const seg = segLengths[i];
+        if (accum + seg <= targetLen) {
+          accum += seg;
+          activePts.push(`${pts[i + 1].x * d.w},${pts[i + 1].y * d.h}`);
+          activeCircs.push(`<circle cx="${pts[i + 1].x * d.w}" cy="${pts[i + 1].y * d.h}" r="${radio * Math.min(1, Math.max(0, (e - accum / (totalLen || 1)) * 3 + 1))}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" stroke="#ffffff" stroke-width="1"/>`);
+        } else {
+          const rem = targetLen - accum;
+          const frac = seg > 0 ? rem / seg : 0;
+          const curX = (pts[i].x + (pts[i + 1].x - pts[i].x) * frac) * d.w;
+          const curY = (pts[i].y + (pts[i + 1].y - pts[i].y) * frac) * d.h;
+          activePts.push(`${curX},${curY}`);
+          break;
+        }
+      }
+      const pol = activePts.length > 1 ? `<polyline points="${activePts.join(' ')}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round" stroke-linejoin="round"/>` : '';
+      return `${pol}${activeCircs.join('')}`;
     }
+
     if (f.tipo === 'circuito') {
-      const elipses = f.elipses || [{x:f.x1??0.2,y:f.y1??0.5,rx:f.rx1??0.08,ry:f.ry1??0.08},{x:f.x2??0.8,y:f.y2??0.5,rx:f.rx2??0.08,ry:f.ry2??0.08}];
+      const elipses = f.elipses || [{ x: f.x1 ?? 0.2, y: f.y1 ?? 0.5, rx: f.rx1 ?? 0.08, ry: f.ry1 ?? 0.08 }, { x: f.x2 ?? 0.8, y: f.y2 ?? 0.5, rx: f.rx2 ?? 0.08, ry: f.ry2 ?? 0.08 }];
       const grosor = (f.grosor || 0.005) * d.h;
       let parts = '';
       for (let i = 0; i < elipses.length - 1; i++) {
         const a = elipses[i], b = elipses[i + 1];
         const ax = a.x * d.w, ay = a.y * d.h;
         const bx = b.x * d.w, by = b.y * d.h;
-        const arx = (a.rx ?? 0.08) * d.w, ary = (a.ry ?? 0.08) * d.h;
-        const brx = (b.rx ?? 0.08) * d.w, bry = (b.ry ?? 0.08) * d.h;
+        const arx = (a.rx ?? 0.08) * d.w;
+        const ary = (a.ry ?? 0.08) * d.h;
+        const brx = (b.rx ?? 0.08) * d.w;
+        const bry = (b.ry ?? 0.08) * d.h;
         const dx = bx - ax, dy = by - ay;
-        if (dx !== 0 || dy !== 0) {
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.001 && arx > 0.001 && ary > 0.001 && brx > 0.001 && bry > 0.001) {
           const tA = 1 / Math.sqrt(Math.pow(dx / arx, 2) + Math.pow(dy / ary, 2));
           const tB = 1 / Math.sqrt(Math.pow(dx / brx, 2) + Math.pow(dy / bry, 2));
           const lx1 = ax + dx * tA, ly1 = ay + dy * tA;
           const lx2 = bx - dx * tB, ly2 = by - dy * tB;
-          parts += `<line x1="${lx1}" y1="${ly1}" x2="${lx2}" y2="${ly2}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
+          const lineEndX = lx1 + (lx2 - lx1) * e;
+          const lineEndY = ly1 + (ly2 - ly1) * e;
+          parts += `<line x1="${lx1}" y1="${ly1}" x2="${lineEndX}" y2="${lineEndY}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"/>`;
         }
       }
-      elipses.forEach(e => {
-        const ex = e.x * d.w, ey = e.y * d.h;
-        const erx = (e.rx ?? 0.08) * d.w, ery = (e.ry ?? 0.08) * d.h;
-        parts += `<ellipse cx="${ex}" cy="${ey}" rx="${erx}" ry="${ery}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
+      elipses.forEach(el => {
+        const ex = el.x * d.w, ey = el.y * d.h;
+        const erx = (el.rx ?? 0.08) * d.w * e, ery = (el.ry ?? 0.08) * d.h * e;
+        if (erx > 0.001 && ery > 0.001) {
+          parts += `<ellipse cx="${ex}" cy="${ey}" rx="${erx}" ry="${ery}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}"/>`;
+        }
       });
       return parts;
     }
+
     if (f.tipo === 'flecha') {
+      const grosor = (f.grosor || 0.005) * d.h;
       const x1 = f.x1 * d.w;
       const y1 = f.y1 * d.h;
       const x2 = f.x2 * d.w;
       const y2 = f.y2 * d.h;
-      const cx = f.cx * d.w;
-      const cy = f.cy * d.h;
-      const grosor = (f.grosor || 0.005) * d.h;
-      const ang = Math.atan2(y2 - cy, x2 - cx);
-      const L = grosor * 6 * (f.cabeza ?? 1);
+      const cx = (f.cx ?? (f.x1 + f.x2) / 2) * d.w;
+      const cy = (f.cy ?? (f.y1 + f.y2) / 2) * d.h;
+
+      const qcx = (1 - e) * x1 + e * cx;
+      const qcy = (1 - e) * y1 + e * cy;
+      const q1x = (1 - e) * (1 - e) * x1 + 2 * (1 - e) * e * cx + e * e * x2;
+      const q1y = (1 - e) * (1 - e) * y1 + 2 * (1 - e) * e * cy + e * e * y2;
+
+      let tx = (1 - e) * (cx - x1) + e * (x2 - cx);
+      let ty = (1 - e) * (cy - y1) + e * (y2 - cy);
+      if (Math.hypot(tx, ty) < 1e-6) {
+        tx = x2 - x1;
+        ty = y2 - y1;
+      }
+      const ang = Math.atan2(ty, tx);
+      const headScale = Math.min(1, e * 2);
+      const L = grosor * 6 * headScale * (f.cabeza ?? 1);
       const a = Math.PI / 6;
-      const hx1 = x2 - L * Math.cos(ang - a);
-      const hy1 = y2 - L * Math.sin(ang - a);
-      const hx2 = x2 - L * Math.cos(ang + a);
-      const hy2 = y2 - L * Math.sin(ang + a);
+      const hx1 = q1x - L * Math.cos(ang - a);
+      const hy1 = q1y - L * Math.sin(ang - a);
+      const hx2 = q1x - L * Math.cos(ang + a);
+      const hy2 = q1y - L * Math.sin(ang + a);
       const dash = f.discontinuo ? ` stroke-dasharray="${grosor * 3},${grosor * 2}"` : '';
-      return `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"${dash}/><polygon points="${x2},${y2} ${hx1},${hy1} ${hx2},${hy2}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}"/>`;
+      const pathStr = `<path d="M ${x1} ${y1} Q ${qcx} ${qcy} ${q1x} ${q1y}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${grosor}" stroke-linecap="round"${dash}/>`;
+      const polyStr = (headScale > 0.05 && L > 0.5) ? `<polygon points="${q1x},${q1y} ${hx1},${hy1} ${hx2},${hy2}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}"/>` : '';
+      return `${pathStr}${polyStr}`;
     }
+
     if (f.tipo === 'linea') {
-      return `<line x1="${f.x1 * d.w}" y1="${f.y1 * d.h}" x2="${f.x2 * d.w}" y2="${f.y2 * d.h}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${(f.grosor || 0.005) * d.h}" stroke-linecap="round"/>`;
+      const x1 = f.x1 * d.w, y1 = f.y1 * d.h;
+      const x2 = f.x2 * d.w, y2 = f.y2 * d.h;
+      const endX = x1 + (x2 - x1) * e;
+      const endY = y1 + (y2 - y1) * e;
+      return `<line x1="${x1}" y1="${y1}" x2="${endX}" y2="${endY}" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${(f.grosor || 0.005) * d.h}" stroke-linecap="round"/>`;
     }
+
     if (f.tipo === 'texto') {
       const x = f.x * d.w;
       const y = f.y * d.h;
       const tam = (f.fontSize || 0.06) * d.h;
       const txt = String(f.texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<text x="${x}" y="${y}" font-size="${tam}" fill="${f.color}" fill-opacity="${f.opacidad ?? 1}" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">${txt}</text>`;
+      return `<text x="${x}" y="${y}" font-size="${tam}" fill="${f.color}" fill-opacity="${(f.opacidad ?? 1) * e}" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">${txt}</text>`;
     }
+
     if (f.tipo === 'triangulo') {
       const x = f.x * d.w;
       const y = f.y * d.h;
       const ancho = f.ancho * d.w;
       const alto = f.alto * d.h;
-      const crecimiento = f.crecimiento ?? 1;
       const yBase = y + alto / 2;
-      const pillarH = alto * crecimiento;
+      const pillarH = alto * e;
       const yTop = yBase - pillarH;
       const halfW = ancho / 2;
-      const ellipseRy = alto * 0.06 * crecimiento;
       const gradientId = `pilar_${f.id}`;
       return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><rect x="${x - halfW}" y="${yTop}" width="${ancho}" height="${pillarH}" rx="${halfW * 0.3}" fill="url(#${gradientId})" />`;
     }
+
     const cx = f.x * d.w;
     const cy = f.y * d.h;
-    const rx = f.ancho * d.w / 2;
-    const ry = f.alto * d.h / 2;
+    const rx = (f.ancho * d.w / 2) * e;
+    const ry = (f.alto * d.h / 2) * e;
+    if (rx <= 0.001 || ry <= 0.001) return '';
     return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${common}/>`;
   };
 
@@ -538,18 +601,10 @@ function App() {
       const frameImages = [];
       for (let i = 0; i <= totalFrames; i++) {
         const t = i / totalFrames;
-        const e = t >= 1 ? 1 : 1 - Math.pow(1 - t, 3);
-        const figAnim = figuras.map(f => {
-          if (f.tipo === 'circulo') return { ...f, ancho: f.ancho * e, alto: f.alto * e };
-          if (f.tipo === 'triangulo') return { ...f, crecimiento: e };
-          if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
-          if (f.tipo === 'circuito') {
-            const elipses = (f.elipses || []).map(el => ({ ...el, rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e }));
-            return { ...f, elipses };
-          }
-          return f;
-        });
-        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${capturaSeleccionada.dataUrl}" width="${w}" height="${h}"/>${figAnim.map(svgFigura).join('')}</svg>`;
+        const p = Math.min(1, Math.max(0, (t * 4000 - 200) / 3600));
+        const e = 1 - Math.pow(1 - p, 3);
+        const figAnim = figuras.map(f => ({ ...f, crecimiento: e }));
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${capturaSeleccionada.dataUrl}" width="${w}" height="${h}"/>${figAnim.map(f => svgFigura(f, { w, h })).join('')}</svg>`;
         const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const img = await new Promise((res, rej) => {
@@ -615,9 +670,10 @@ function App() {
   };
 
   const guardarCaptura = async () => {
-    if (!capturaSeleccionada || !imgDim) return;
+    if (!capturaSeleccionada || !imgDim || exportando) return;
+    setExportando(true);
     try {
-      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figuras.map(svgFigura).join('')}</svg>`;
+      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figuras.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
       const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const img = new Image();
@@ -632,21 +688,10 @@ function App() {
       let videoUrl = null;
       try {
         const svgFn = (t) => {
-          const e = t >= 1000 ? 1 : 1 - Math.pow(1 - Math.min(1, t / 1000), 3);
-          const figAnim = figuras.map(f => {
-            if (f.tipo === 'triangulo') return { ...f, crecimiento: e };
-            if (f.tipo === 'circulo') return { ...f, ancho: f.ancho * e, alto: f.alto * e };
-            if (f.tipo === 'linea') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e };
-            if (f.tipo === 'flecha') return { ...f, x2: f.x1 + (f.x2 - f.x1) * e, y2: f.y1 + (f.y2 - f.y1) * e, cx: f.x1 + (f.cx - f.x1) * e, cy: f.y1 + (f.cy - f.y1) * e, cabeza: e };
-            if (f.tipo === 'circuito') {
-              const elipses = (f.elipses || []).map((el) => {
-                return { x: el.x, y: el.y, rx: (el.rx ?? 0.03) * e, ry: (el.ry ?? 0.02) * e };
-              });
-              return { ...f, elipses };
-            }
-            return f;
-          });
-          return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(svgFigura).join('')}</svg>`;
+          const p = Math.min(1, Math.max(0, (t - 200) / 3600));
+          const e = 1 - Math.pow(1 - p, 3);
+          const figAnim = figuras.map(f => ({ ...f, crecimiento: e }));
+          return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
         };
         videoUrl = await generarVideo(svgFn, imgDim.w, imgDim.h);
       } catch (e) {
@@ -657,6 +702,8 @@ function App() {
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
     } catch (e) {
       console.error('Error al guardar la captura', e);
+    } finally {
+      setExportando(false);
     }
   };
 
@@ -996,19 +1043,11 @@ function App() {
               </button>
               <button
                 onClick={guardarCaptura}
-                style={{ background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                disabled={exportando}
+                style={{ background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
               >
-                GUARDAR
+                {exportando ? 'GENERANDO...' : 'VIDEO'}
               </button>
-              {figuras.some(f => f.tipo === 'circulo' || f.tipo === 'circuito') && (
-                <button
-                  onClick={animarElipses}
-                  disabled={exportando}
-                  style={{ background: '#8b5cf6', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
-                >
-                  {exportando ? 'Generando...' : 'Animar'}
-                </button>
-              )}
               {figuraSeleccionada && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'texto' && (
@@ -1123,7 +1162,7 @@ function App() {
                   <polyline points="11,5 19,5 19,13" />
                 </svg>
               </button>
-             <button
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   if (modoCirculoClick) {
@@ -1136,7 +1175,18 @@ function App() {
                           const original = sessionCircles[i] || {};
                           return { x: p.x, y: p.y, rx: (original.ancho || 0.04) / 2, ry: (original.alto || 0.025) / 2 };
                         });
-                        const circuito = { id: Date.now(), tipo: 'circuito', elipses, color: '#38bdf8', opacidad: 1, grosor: 0.003 };
+                        const id = Date.now();
+                        const circuito = { id, tipo: 'circuito', elipses, color: '#38bdf8', opacidad: 1, grosor: 0.003, crecimiento: 0 };
+                        if (circuitoAnimRef.current) cancelAnimationFrame(circuitoAnimRef.current);
+                        const t0 = performance.now();
+                        const paso = (t) => {
+                          const pp = Math.min(1, (t - t0) / 1000);
+                          const e = 1 - Math.pow(1 - pp, 3);
+                          setFiguras(curr => curr.map(f => f.id === id ? { ...f, crecimiento: e } : f));
+                          if (pp < 1) circuitoAnimRef.current = requestAnimationFrame(paso);
+                          else circuitoAnimRef.current = null;
+                        };
+                        circuitoAnimRef.current = requestAnimationFrame(paso);
                         return [...prev.filter(f => !sessionIds.includes(f.id)), circuito];
                       });
                     } else if (pts.length === 1) {
@@ -1185,7 +1235,7 @@ function App() {
                   const cx = (x1 + x2) / 2;
                   const cy = (y1 + y2) / 2;
                   const id = Date.now();
-                  setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2: x1, y2: y1, cx: x1, cy: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 0 }]);
+                  setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2, y2, cx, cy, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 1, crecimiento: 0 }]);
                   setFiguraSeleccionada(id);
                   flechaOrigenRef.current = null;
                   setAviso('');
@@ -1194,7 +1244,7 @@ function App() {
                   const paso = (t) => {
                     const pp = Math.min(1, (t - t0) / 1000);
                     const e = 1 - Math.pow(1 - pp, 3);
-                    setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2: x1 + (x2 - x1) * e, y2: y1 + (y2 - y1) * e, cx: x1 + (cx - x1) * e, cy: y1 + (cy - y1) * e, cabeza: e } : f));
+                    setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
                     if (pp < 1) flechaAnimRef.current = requestAnimationFrame(paso);
                     else flechaAnimRef.current = null;
                   };
