@@ -37,3 +37,11 @@ body {
 #video-container:fullscreen button {
   display: none;
 }
+
+#video-container video::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+
+#video-container video::-moz-fullscreen-button {
+  display: none !important;
+}
