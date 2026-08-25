@@ -58,6 +58,7 @@ function App() {
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [exportando, setExportando] = useState(false);
+  const [progresoVideo, setProgresoVideo] = useState(0);
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
   const [modoPolilinea, setModoPolilinea] = useState(false);
   const [puntosPolilinea, setPuntosPolilinea] = useState([]);
@@ -574,7 +575,7 @@ function App() {
     return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${common}/>`;
   };
 
-  const generarVideo = (svgFn, w, h) => new Promise((resolve, reject) => {
+  const generarVideo = (svgFn, w, h, onProgress) => new Promise((resolve, reject) => {
     try {
       const totalFrames = 120;
       const frameDuration = 1000 / 30;
@@ -592,6 +593,7 @@ function App() {
         }));
       }
       Promise.all(promises).then((frames) => {
+        if (onProgress) onProgress(20);
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
@@ -603,6 +605,7 @@ function App() {
         rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
         rec.onstop = () => {
           stream.getTracks().forEach(t => t.stop());
+          if (onProgress) onProgress(100);
           resolve(URL.createObjectURL(new Blob(chunks, { type: mime })));
         };
         rec.onerror = reject;
@@ -613,9 +616,11 @@ function App() {
             ctx.drawImage(frames[idx], 0, 0, w, h);
           }
           idx++;
+          if (onProgress && idx % 10 === 0) onProgress(20 + Math.round((idx / frames.length) * 80));
           if (idx < frames.length) {
             setTimeout(drawNext, frameDuration);
           } else {
+            if (onProgress) onProgress(95);
             try { rec.stop(); } catch (e) { reject(e); }
           }
         };
@@ -708,6 +713,7 @@ function App() {
   const guardarCaptura = async () => {
     if (!capturaSeleccionada || !imgDim || exportando) return;
     setExportando(true);
+    setProgresoVideo(0);
     try {
       const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figuras.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
       const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -721,6 +727,7 @@ function App() {
       ctx.drawImage(img, 0, 0);
       const nueva = canvas.toDataURL('image/png');
       URL.revokeObjectURL(url);
+      setProgresoVideo(10);
       let videoUrl = null;
       try {
         const svgFn = (t) => {
@@ -729,17 +736,18 @@ function App() {
           const figAnim = figuras.map(f => ({ ...f, crecimiento: e }));
           return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
         };
-        videoUrl = await generarVideo(svgFn, imgDim.w, imgDim.h);
+        videoUrl = await generarVideo(svgFn, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-      setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo }]);
+      setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: null }]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
       setExportando(false);
+      setProgresoVideo(0);
     }
   };
 
@@ -842,6 +850,7 @@ function App() {
                       const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
                       if (cl) {
                         prevTiempoRef.current = cl.insertarEn + (cl.duracion || 4);
+                        v.pause();
                         setClipActivo(cl);
                         setReproduciendo(true);
                         return;
@@ -1047,13 +1056,11 @@ function App() {
                           <button
                             onClick={() => {
                               setCapturas(prev => prev.map(x => x.id === c.id ? { ...x, insertarEn: c.tiempo } : x));
-                              setAviso(`Video modificado colocado en ${formatoTiempo(c.tiempo)} (su punto original)`);
-                              setAbrirCarpetaAlOK(true);
                             }}
-                            title="Colocar el video en el punto de su captura original"
-                            style={{ background: '#0f172a', border: '1px solid #16a34a', borderRadius: '8px', padding: '0.4rem 0.6rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer' }}
+                            title={c.insertarEn != null ? 'Ya insertado en su punto' : 'Insertar video en el punto de su captura original'}
+                            style={{ background: c.insertarEn != null ? '#16a34a' : '#0f172a', border: `1px solid #16a34a`, borderRadius: '8px', padding: '0.4rem 0.6rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: c.insertarEn != null ? '#ffffff' : '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer' }}
                           >
-                            Colocar en su punto
+                            {c.insertarEn != null ? 'Insertado' : 'Insertar'}
                           </button>
                         )}
                         <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>
@@ -1073,16 +1080,16 @@ function App() {
             <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
               <button
                 onClick={() => { guardarCaptura(); setCapturaSeleccionada(null); setCapturaGuardada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                BORRAR
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
               <button
                 onClick={guardarCaptura}
                 disabled={exportando}
                 style={{ background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
               >
-                {exportando ? 'GENERANDO...' : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>}
+                {exportando ? `${progresoVideo}%` : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>}
               </button>
               {figuraSeleccionada && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
