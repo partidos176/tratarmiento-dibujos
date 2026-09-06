@@ -43,7 +43,7 @@ function TratamientoApp({ videoInicial }) {
   const [archivo, setArchivo] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [hoja, setHoja] = useState('Presentación');
+  const [hoja, setHoja] = useState('Cortes');
   const [progreso, setProgreso] = useState(0);
   const [duracion, setDuracion] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(false);
@@ -119,7 +119,7 @@ function TratamientoApp({ videoInicial }) {
   const svgRef = useRef(null);
   const dragRef = useRef(null);
 
-  const hojas = ['Presentación', 'Edición', 'Cortes'];
+  const hojas = ['Cortes', 'Presentación', 'Edición'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
