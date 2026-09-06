@@ -132,6 +132,7 @@ function TratamientoApp({ videoInicial }) {
   const cancelarVideoRef = useRef(false);
   const videoRef = useRef(null);
   const videoRefCortes = useRef(null);
+  const corteCargadoRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
@@ -186,6 +187,7 @@ function TratamientoApp({ videoInicial }) {
     setArchivo(f);
     setVideoUrl(f ? URL.createObjectURL(f) : '');
     setProgreso(0);
+    corteCargadoRef.current = null;
   };
 
   const formatoTiempo = (s) => {
@@ -334,16 +336,20 @@ function TratamientoApp({ videoInicial }) {
       };
 
       const marcarCortesExportados = () => {
-        setCortesEditados(prev => {
-          const copia = { ...prev };
-          (clips || []).forEach(cl => {
-            if (cl.tiempo == null) return;
-            let mejor = null, mejorD = Infinity;
-            cortes.forEach(ct => { const d = Math.abs(ct - cl.tiempo); if (d < mejorD) { mejorD = d; mejor = ct; } });
-            if (mejor != null && mejorD <= 2) copia[String(mejor)] = true;
+        const marcar = (lista) => {
+          setCortesEditados(prev => {
+            const copia = { ...prev };
+            lista.forEach(t => {
+              if (t == null) return;
+              let mejor = null, mejorD = Infinity;
+              cortes.forEach(ct => { const d = Math.abs(ct - t); if (d < mejorD) { mejorD = d; mejor = ct; } });
+              if (mejor != null && mejorD <= 2) copia[String(mejor)] = true;
+            });
+            return copia;
           });
-          return copia;
-        });
+        };
+        marcar((clips || []).map(cl => cl.tiempo));
+        if (corteCargadoRef.current != null) marcar([corteCargadoRef.current]);
       };
       const terminar = async (error, cancelado = false) => {
         if (terminado) return;
@@ -1355,6 +1361,7 @@ function TratamientoApp({ videoInicial }) {
                   if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
                   setArchivoCortes(null);
                   setVideoUrlCortes('');
+                  corteCargadoRef.current = null;
                 }}
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
               >
@@ -1443,6 +1450,7 @@ function TratamientoApp({ videoInicial }) {
                         setNombreVideo(nombre);
                         setVideoUrl(url);
                         setProgreso(0);
+                        corteCargadoRef.current = Math.max(0, ct);
                         setHoja('Presentación');
                       } catch (err) {
                         console.error('Error generando el clip:', err);
