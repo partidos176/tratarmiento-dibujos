@@ -945,15 +945,31 @@ function TratamientoApp({ videoInicial }) {
         capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null
       };
       const blob = new Blob([JSON.stringify(proyecto)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       const sugerido = `proyecto-edicion-${fecha}`;
       const pedido = window.prompt('Nombre del proyecto:', sugerido);
-      if (pedido == null) { URL.revokeObjectURL(url); return; }
+      if (pedido == null) return;
       const limpio = (pedido.trim() === '' ? sugerido : pedido.trim()).replace(/[\\/:*?"<>|]/g, '_');
+      const nombreArchivo = limpio.toLowerCase().endsWith('.json') ? limpio : limpio + '.json';
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: nombreArchivo,
+            types: [{ description: 'Proyecto de edición', accept: { 'application/json': ['.json'] } }]
+          });
+          const escribible = await handle.createWritable();
+          await escribible.write(blob);
+          await escribible.close();
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;
+          console.warn('Diálogo de guardado falló, usando descarga directa', e);
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
       a.href = url;
-      a.download = limpio.toLowerCase().endsWith('.json') ? limpio : limpio + '.json';
+      a.download = nombreArchivo;
       document.body.appendChild(a);
       a.click();
       a.remove();
