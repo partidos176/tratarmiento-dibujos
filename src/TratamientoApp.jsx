@@ -61,8 +61,6 @@ function TratamientoApp({ videoInicial }) {
   const [aviso, setAviso] = useState(null);
   const [exportando, setExportando] = useState(false);
   const [nombreVideo, setNombreVideo] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [youtubeId, setYoutubeId] = useState(null);
   const [progresoVideo, setProgresoVideo] = useState(0);
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
   const [modoPolilinea, setModoPolilinea] = useState(false);
@@ -121,29 +119,7 @@ function TratamientoApp({ videoInicial }) {
   const svgRef = useRef(null);
   const dragRef = useRef(null);
 
-  const hojas = ['Presentación', 'Edición', 'Youtube'];
-
-  const extraerIdYoutube = (url) => {
-    if (!url) return null;
-    const t = String(url).trim();
-    let m = t.match(/[?&]v=([A-Za-z0-9_-]{6,})/);
-    if (m) return m[1];
-    m = t.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/);
-    if (m) return m[1];
-    m = t.match(/youtube\.com\/(shorts|live|embed)\/([A-Za-z0-9_-]{6,})/);
-    if (m) return m[2];
-    if (/^[A-Za-z0-9_-]{6,}$/.test(t)) return t;
-    return null;
-  };
-
-  const cargarYoutube = () => {
-    const id = extraerIdYoutube(youtubeUrl);
-    if (!id) {
-      window.alert('Enlace de YouTube no válido');
-      return;
-    }
-    setYoutubeId(id);
-  };
+  const hojas = ['Presentación', 'Edición'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -1342,47 +1318,6 @@ function TratamientoApp({ videoInicial }) {
                 )}
               </div>
             </>
-          )}
-        </div>
-      ) : hoja === 'Youtube' ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%', maxWidth: '800px' }}>
-            <input
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') cargarYoutube(); }}
-              placeholder="Pega el enlace de YouTube"
-              style={{ flex: 1, minWidth: 0, background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '0.7rem 1rem', color: '#e2e8f0', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
-            />
-            <button
-              onClick={cargarYoutube}
-              style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-            >
-              Cargar
-            </button>
-            {youtubeId && (
-              <button
-                onClick={() => { setYoutubeId(null); setYoutubeUrl(''); }}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-              >
-                Eliminar
-              </button>
-            )}
-          </div>
-          {youtubeId ? (
-            <div style={{ width: '100%', maxWidth: '900px', aspectRatio: '16 / 9' }}>
-              <iframe
-                src={`https://www.youtube.com/embed/${youtubeId}`}
-                title="Vídeo de YouTube"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                style={{ width: '100%', height: '100%', border: '1px solid #334155', borderRadius: '12px', background: '#000000' }}
-              />
-            </div>
-          ) : (
-            <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
-              Pega un enlace de YouTube (vídeo, Short o youtu.be) y pulsa Cargar para verlo aquí.
-            </p>
           )}
         </div>
       ) : (
