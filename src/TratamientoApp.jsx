@@ -68,6 +68,8 @@ function TratamientoApp({ videoInicial }) {
   const [modoPolilinea, setModoPolilinea] = useState(false);
   const [puntosPolilinea, setPuntosPolilinea] = useState([]);
   const [cortes, setCortes] = useState([]);
+  const [duracionCortes, setDuracionCortes] = useState({});
+  const [nombreCortes, setNombreCortes] = useState({});
   const [modoCorte, setModoCorte] = useState(false);
   const [modoCirculoClick, setModoCirculoClick] = useState(false);
   const [modoFlechaClick, setModoFlechaClick] = useState(false);
@@ -1391,7 +1393,7 @@ function TratamientoApp({ videoInicial }) {
             </span>
             {cortes.length > 0 && (
               <button
-                onClick={() => setCortes([])}
+                onClick={() => { setCortes([]); setDuracionCortes({}); setNombreCortes({}); }}
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.6rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
               >
                 Limpiar
@@ -1405,13 +1407,25 @@ function TratamientoApp({ videoInicial }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '600px' }}>
               {cortes.map((ct, i) => (
-                <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer' }}>
+                <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'wrap' }}>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
-                  <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', flex: 1 }}>
+                  <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
                     P{i + 1}: {formatoTiempo(i === 0 ? 0 : cortes[i - 1])} — {formatoTiempo(i + 1 < cortes.length ? cortes[i + 1] : duracion)}
                   </span>
+                  <input
+                    value={nombreCortes[String(ct)] ?? ''}
+                    onChange={(e) => { const v = e.target.value; setNombreCortes(prev => ({ ...prev, [String(ct)]: v })); }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Nombre"
+                    style={{ flex: 1, minWidth: '100px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: Math.max(1, (prev[String(ct)] ?? 5) - 1) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                    <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 5}s</span>
+                    <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: (prev[String(ct)] ?? 5) + 1 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                  </div>
                   <button
-                    onClick={() => { setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
+                    onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
                     title={`Eliminar corte en ${formatoTiempo(ct)}`}
                     style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
                   >
