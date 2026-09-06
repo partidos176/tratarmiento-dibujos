@@ -1371,7 +1371,9 @@ function TratamientoApp({ videoInicial }) {
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '800px' }}>
-              {cortes.map((ct, i) => (
+              {(() => {
+                const ord = [...cortes].sort((a, b) => a - b);
+                return ord.map((ct, i) => (
                 <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
                   <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
@@ -1422,15 +1424,17 @@ function TratamientoApp({ videoInicial }) {
                       }
                     }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Presentación'}</button>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
-                    title={`Eliminar corte en ${formatoTiempo(ct)}`}
-                    style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
-                  >
-                    ×
-                  </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((x) => x !== ct)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
+                      title={`Eliminar corte en ${formatoTiempo(ct)}`}
+                      style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
                 </div>
-              ))}
+                );
+              })()}
+            </div>
             </div>
           )}
         </div>
