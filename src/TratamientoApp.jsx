@@ -1375,10 +1375,10 @@ function TratamientoApp({ videoInicial }) {
                 const ord = [...cortes].sort((a, b) => b - a);
                 return ord.map((ct, i) => (
                 <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
-                  <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
                   <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                    P{i + 1}: {formatoTiempo(ct)} — {formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}
+                    P{ord.length - i}: {formatoTiempo(ct)} — {formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}
                   </span>
                   <input
                     value={nombreCortes[String(ct)] ?? ''}
@@ -1396,7 +1396,7 @@ function TratamientoApp({ videoInicial }) {
                       const src = videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para generar el clip'); return; }
                       const dur = duracionCortes[String(ct)] ?? 15;
-                      const nombre = (nombreCortes[String(ct)] || '').trim() || `P${i + 1}`;
+                      const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - i}`;
                       setGenerandoClip(ct);
                       setProgresoClips(prev => ({ ...prev, [String(ct)]: 0 }));
                       const t0Clip = Date.now();
