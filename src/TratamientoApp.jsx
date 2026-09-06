@@ -1364,14 +1364,6 @@ function TratamientoApp({ videoInicial }) {
             <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Cortes ({cortes.length})
             </span>
-            {cortes.length > 0 && (
-              <button
-                onClick={() => { setCortes([]); setDuracionCortes({}); setNombreCortes({}); }}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.6rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-              >
-                Limpiar
-              </button>
-            )}
           </div>
           {cortes.length === 0 ? (
             <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
