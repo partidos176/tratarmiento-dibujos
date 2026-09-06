@@ -42,6 +42,8 @@ const interseccionLineaElipse = (de, hacia, dim) => {
 function TratamientoApp({ videoInicial }) {
   const [archivo, setArchivo] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [archivoCortes, setArchivoCortes] = useState(null);
+  const [videoUrlCortes, setVideoUrlCortes] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoja, setHoja] = useState('Cortes');
   const [progreso, setProgreso] = useState(0);
@@ -1323,10 +1325,42 @@ function TratamientoApp({ videoInicial }) {
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-          {videoUrl && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>ARCHIVO:</span>
+              <input
+                type="file"
+                accept="video/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (!file) return;
+                  if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
+                  setArchivoCortes(file);
+                  setVideoUrlCortes(URL.createObjectURL(file));
+                }}
+              />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {archivoCortes ? archivoCortes.name : '-'}
+              </span>
+            </label>
+            {archivoCortes && (
+              <button
+                onClick={() => {
+                  if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
+                  setArchivoCortes(null);
+                  setVideoUrlCortes('');
+                }}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                ELIMINAR
+              </button>
+            )}
+          </div>
+          {videoUrlCortes && (
             <video
               ref={videoRefCortes}
-              src={videoUrl}
+              src={videoUrlCortes}
               muted
               controls
               playsInline
