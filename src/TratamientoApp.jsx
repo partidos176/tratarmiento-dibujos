@@ -892,8 +892,12 @@ function TratamientoApp({ videoInicial }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const sugerido = `proyecto-edicion-${fecha}`;
+      const pedido = window.prompt('Nombre del proyecto:', sugerido);
+      if (pedido == null) { URL.revokeObjectURL(url); return; }
+      const limpio = (pedido.trim() === '' ? sugerido : pedido.trim()).replace(/[\\/:*?"<>|]/g, '_');
       a.href = url;
-      a.download = `proyecto-edicion-${fecha}.json`;
+      a.download = limpio.toLowerCase().endsWith('.json') ? limpio : limpio + '.json';
       document.body.appendChild(a);
       a.click();
       a.remove();
