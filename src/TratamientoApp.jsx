@@ -1435,7 +1435,6 @@ function TratamientoApp({ videoInicial }) {
                 ));
               })()}
             </div>
-            </div>
           )}
         </div>
       ) : (
