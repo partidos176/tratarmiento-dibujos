@@ -1428,7 +1428,6 @@ function TratamientoApp({ videoInicial }) {
                         setNombreVideo(nombre);
                         setVideoUrl(url);
                         setProgreso(0);
-                        setAviso(`Clip ${nombre} cargado en Presentación`);
                         setHoja('Presentación');
                       } catch (err) {
                         console.error('Error generando el clip:', err);
