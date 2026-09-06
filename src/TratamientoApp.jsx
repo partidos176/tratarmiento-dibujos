@@ -70,6 +70,56 @@ function TratamientoApp({ videoInicial }) {
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
+  const [generandoClip, setGenerandoClip] = useState(null);
+
+  const generarClipCorte = (fileUrl, inicio, dur) => new Promise((resolve, reject) => {
+    try {
+      const v = document.createElement('video');
+      v.muted = true;
+      v.preload = 'auto';
+      v.src = fileUrl;
+      const limpiar = () => { try { v.pause(); } catch (_) {} v.removeAttribute('src'); try { v.load(); } catch (_) {} };
+      v.onerror = () => { limpiar(); reject(new Error('No se pudo leer el vídeo')); };
+      v.onloadedmetadata = () => {
+        const fin = Math.max(0, inicio) + Math.max(1, dur);
+        v.currentTime = Math.min(Math.max(0, inicio), Math.max(0, (v.duration || fin) - 0.2));
+      };
+      v.onseeked = () => {
+        try {
+          const stream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
+          if (!stream) throw new Error('El navegador no permite capturar este vídeo');
+          let mr;
+          try {
+            mr = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 });
+          } catch (_) {
+            mr = new MediaRecorder(stream);
+          }
+          const partes = [];
+          mr.ondataavailable = (ev) => { if (ev.data && ev.data.size) partes.push(ev.data); };
+          const fin = Math.max(0, inicio) + Math.max(1, dur);
+          let terminado = false;
+          const terminar = () => {
+            if (terminado) return;
+            terminado = true;
+            try { v.removeEventListener('timeupdate', vigilar); } catch (_) {}
+            try { if (mr.state !== 'inactive') mr.stop(); } catch (_) {}
+            try { v.pause(); } catch (_) {}
+          };
+          const vigilar = () => { if (v.currentTime >= fin || v.ended) terminar(); };
+          mr.onstop = () => { limpiar(); resolve(new Blob(partes, { type: 'video/webm' })); };
+          v.addEventListener('timeupdate', vigilar);
+          mr.start(500);
+          v.play().catch((err) => { terminar(); limpiar(); reject(err); });
+          setTimeout(() => { if (!terminado) { terminar(); } }, (Math.max(1, dur) + 10) * 1000);
+        } catch (err) {
+          limpiar();
+          reject(err);
+        }
+      };
+    } catch (err) {
+      reject(err);
+    }
+  });
   const [modoCorte, setModoCorte] = useState(false);
   const [modoCirculoClick, setModoCirculoClick] = useState(false);
   const [modoFlechaClick, setModoFlechaClick] = useState(false);
@@ -1323,7 +1373,7 @@ function TratamientoApp({ videoInicial }) {
                           </button>
                         )}
                         <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>
-                          {formatoTiempo(c.tiempo)}
+                          {c.nombre ? `${c.nombre} · ` : ''}{formatoTiempo(c.tiempo)}
                         </span>
                       </div>
                     ))}
@@ -1431,7 +1481,27 @@ function TratamientoApp({ videoInicial }) {
                     <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: Math.max(1, (prev[String(ct)] ?? 15) - 1) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
                     <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
                     <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: (prev[String(ct)] ?? 15) + 1 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
-                    <button onClick={(e) => { e.stopPropagation(); if (!videoUrl && !videoUrlCortes) { setAviso('Carga primero un vídeo para ver el corte'); return; } if (!videoUrl && videoUrlCortes) { setArchivo(archivoCortes); setVideoUrl(videoUrlCortes); setProgreso(0); } presentacionSeekRef.current = Math.max(0, ct); finVistaPreviaRef.current = Math.max(0, ct) + (duracionCortes[String(ct)] ?? 15); setHoja('Presentación'); }} title="Ver el corte en Presentación" style={{ background: '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Presentación</button>
+                    <button onClick={async (e) => {
+                      e.stopPropagation();
+                      const src = videoUrlCortes || videoUrl;
+                      if (!src) { setAviso('Carga primero un vídeo para generar el clip'); return; }
+                      const dur = duracionCortes[String(ct)] ?? 15;
+                      const nombre = (nombreCortes[String(ct)] || '').trim() || `P${i + 1}`;
+                      setGenerandoClip(ct);
+                      try {
+                        const blob = await generarClipCorte(src, Math.max(0, ct), dur);
+                        const url = URL.createObjectURL(blob);
+                        const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
+                        setCapturas(prev => [...prev, { id: nuevoId, dataUrl: null, videoUrl: url, duracion: dur, figuras: [], tiempo: Math.max(0, ct), insertarEn: null, nombre }]);
+                        setAviso(`Clip ${nombre} insertado: arrástralo a la línea de tiempo`);
+                        setHoja('Presentación');
+                      } catch (err) {
+                        console.error('Error generando el clip:', err);
+                        setAviso('No se pudo generar el clip: ' + ((err && err.message) || err));
+                      } finally {
+                        setGenerandoClip(null);
+                      }
+                    }} title="Generar el clip e insertarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? '…' : 'Presentación'}</button>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
