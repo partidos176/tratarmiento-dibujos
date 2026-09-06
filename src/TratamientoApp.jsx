@@ -1332,7 +1332,7 @@ function TratamientoApp({ videoInicial }) {
                 title="Guardar proyecto en archivo"
                 style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
               >
-                Guardar
+                Guardar proyecto
               </button>
               <label
                 title="Abrir proyecto desde archivo"
