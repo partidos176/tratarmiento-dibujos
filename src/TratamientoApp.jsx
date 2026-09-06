@@ -385,7 +385,6 @@ function TratamientoApp({ videoInicial }) {
             enlace.click();
             document.body.removeChild(enlace);
             setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
-            setAviso('Vídeo descargado (webm)');
             marcarCortesExportados();
           }
           return;
