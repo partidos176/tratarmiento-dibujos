@@ -245,6 +245,22 @@ function TratamientoApp({ videoInicial }) {
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   };
 
+  const fijarDuracion = (v) => {
+    const d = v ? v.duration : 0;
+    if (Number.isFinite(d) && d > 0) { setDuracion(d); return; }
+    if (!v) { setDuracion(0); return; }
+    const onDur = () => {
+      try {
+        const dd = v.duration;
+        if (Number.isFinite(dd) && dd > 0) setDuracion(dd);
+        v.currentTime = 0;
+      } catch (_) {}
+      v.removeEventListener('durationchange', onDur);
+    };
+    v.addEventListener('durationchange', onDur);
+    try { v.currentTime = Number.MAX_SAFE_INTEGER; } catch (_) { setDuracion(0); }
+  };
+
   const periodo = 0;
   const tActual = videoRef.current ? videoRef.current.currentTime : 0;
   const inicioVentana = 0;
@@ -1203,7 +1219,7 @@ function TratamientoApp({ videoInicial }) {
                   onClick={togglePlay}
                   onPlay={() => setReproduciendo(true)}
                   onPause={() => setReproduciendo(false)}
-                  onLoadedMetadata={(e) => { setDuracion(e.currentTarget.duration || 0); }}
+                  onLoadedMetadata={(e) => { fijarDuracion(e.currentTarget); }}
                   onTimeUpdate={(e) => {
                     const v = e.currentTarget;
                     const d = v.duration || 0;
@@ -1430,7 +1446,7 @@ function TratamientoApp({ videoInicial }) {
               controls
               playsInline
               preload="metadata"
-              onLoadedMetadata={(e) => setDuracion(e.currentTarget.duration || 0)}
+              onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
               style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flexShrink: 0 }}>
