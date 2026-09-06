@@ -71,6 +71,7 @@ function TratamientoApp({ videoInicial }) {
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
+  const [progresoClips, setProgresoClips] = useState({});
 
   const generarClipCorte = (fileUrl, inicio, dur) => new Promise((resolve, reject) => {
     try {
@@ -1402,6 +1403,12 @@ function TratamientoApp({ videoInicial }) {
                       const dur = duracionCortes[String(ct)] ?? 15;
                       const nombre = (nombreCortes[String(ct)] || '').trim() || `P${i + 1}`;
                       setGenerandoClip(ct);
+                      setProgresoClips(prev => ({ ...prev, [String(ct)]: 0 }));
+                      const t0Clip = Date.now();
+                      const intervaloClip = setInterval(() => {
+                        const pct = Math.min(99, Math.round(((Date.now() - t0Clip) / 1000 / Math.max(1, dur)) * 100));
+                        setProgresoClips(prev => ({ ...prev, [String(ct)]: pct }));
+                      }, 250);
                       try {
                         const blob = await generarClipCorte(src, Math.max(0, ct), dur);
                         const url = URL.createObjectURL(blob);
@@ -1416,9 +1423,11 @@ function TratamientoApp({ videoInicial }) {
                         console.error('Error generando el clip:', err);
                         setAviso('No se pudo generar el clip: ' + ((err && err.message) || err));
                       } finally {
+                        clearInterval(intervaloClip);
+                        setProgresoClips(prev => { const copia = { ...prev }; delete copia[String(ct)]; return copia; });
                         setGenerandoClip(null);
                       }
-                    }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? '…' : 'Presentación'}</button>
+                    }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Presentación'}</button>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
