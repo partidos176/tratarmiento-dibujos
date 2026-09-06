@@ -1432,7 +1432,7 @@ function TratamientoApp({ videoInicial }) {
                       ×
                     </button>
                 </div>
-                );
+                ));
               })()}
             </div>
             </div>
