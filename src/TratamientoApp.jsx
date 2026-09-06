@@ -70,6 +70,7 @@ function TratamientoApp({ videoInicial }) {
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
+  const [cortesEditados, setCortesEditados] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
 
@@ -332,6 +333,18 @@ function TratamientoApp({ videoInicial }) {
         }
       };
 
+      const marcarCortesExportados = () => {
+        setCortesEditados(prev => {
+          const copia = { ...prev };
+          (clips || []).forEach(cl => {
+            if (cl.tiempo == null) return;
+            let mejor = null, mejorD = Infinity;
+            cortes.forEach(ct => { const d = Math.abs(ct - cl.tiempo); if (d < mejorD) { mejorD = d; mejor = ct; } });
+            if (mejor != null && mejorD <= 2) copia[String(mejor)] = true;
+          });
+          return copia;
+        });
+      };
       const terminar = async (error, cancelado = false) => {
         if (terminado) return;
         terminado = true;
@@ -363,6 +376,7 @@ function TratamientoApp({ videoInicial }) {
             document.body.removeChild(enlace);
             setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
             setAviso('Vídeo generado y descargado');
+            marcarCortesExportados();
           } catch (e) {
             const enlace = document.createElement('a');
             enlace.href = URL.createObjectURL(blob);
@@ -372,6 +386,7 @@ function TratamientoApp({ videoInicial }) {
             document.body.removeChild(enlace);
             setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
             setAviso('Vídeo descargado (webm)');
+            marcarCortesExportados();
           }
           return;
         }
@@ -1442,12 +1457,15 @@ function TratamientoApp({ videoInicial }) {
                     }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Presentación'}</button>
                   </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((x) => x !== ct)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
+                      onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
                       title={`Eliminar corte en ${formatoTiempo(ct)}`}
                       style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
                     >
                       ×
                     </button>
+                    {cortesEditados[String(ct)] && (
+                      <span style={{ background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '0.65rem', borderRadius: '6px', padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Editado</span>
+                    )}
                 </div>
                 ));
               })()}
