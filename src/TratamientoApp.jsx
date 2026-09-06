@@ -1206,7 +1206,7 @@ function TratamientoApp({ videoInicial }) {
                   <span>{formatoTiempo(videoRef.current ? videoRef.current.currentTime : 0)}</span>
                   <span>{formatoTiempo(totalDuracion)}</span>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
                   <button
                     onClick={togglePlay}
                     style={{ background: reproduciendo ? '#f59e0b' : '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
