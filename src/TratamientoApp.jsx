@@ -1411,7 +1411,7 @@ function TratamientoApp({ videoInicial }) {
                 <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'wrap' }}>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
                   <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                    P{i + 1}: {formatoTiempo(i === 0 ? 0 : cortes[i - 1])} — {formatoTiempo(i + 1 < cortes.length ? cortes[i + 1] : duracion)}
+                    P{i + 1}: {formatoTiempo(ct)} — {formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}
                   </span>
                   <input
                     value={nombreCortes[String(ct)] ?? ''}
