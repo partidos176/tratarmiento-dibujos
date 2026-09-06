@@ -928,7 +928,7 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
-  const guardarProyecto = () => {
+  const guardarProyecto = async () => {
     try {
       const lista = (capturas || []).map((c) => {
         const base = (capturaSeleccionada && c.id === capturaSeleccionada.id)
