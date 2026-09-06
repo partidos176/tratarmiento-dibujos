@@ -872,6 +872,69 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
+  const guardarProyecto = () => {
+    try {
+      const lista = (capturas || []).map((c) => {
+        const base = (capturaSeleccionada && c.id === capturaSeleccionada.id)
+          ? { ...c, figuras }
+          : c;
+        const { videoUrl: _omit, ...resto } = base;
+        return resto;
+      });
+      const proyecto = {
+        app: 'tratamiento-dibujos',
+        version: 1,
+        guardado: new Date().toISOString(),
+        capturas: lista,
+        capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null
+      };
+      const blob = new Blob([JSON.stringify(proyecto)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `proyecto-edicion-${fecha}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch (e) {
+      console.error('Error al guardar el proyecto', e);
+      window.alert('No se pudo guardar el proyecto: ' + (e?.message || e));
+    }
+  };
+
+  const abrirProyecto = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data || !Array.isArray(data.capturas)) throw new Error('Archivo no válido');
+        const lista = data.capturas.filter((c) => c && c.dataUrl).map((c, i) => ({
+          id: c.id ?? (Date.now() + i),
+          dataUrl: c.dataUrl,
+          videoUrl: null,
+          duracion: c.duracion ?? 4,
+          figuras: Array.isArray(c.figuras) ? c.figuras : [],
+          tiempo: c.tiempo ?? 0,
+          insertarEn: c.insertarEn ?? null
+        }));
+        setCapturas(lista);
+        const sel = lista.find((c) => c.id === data.capturaSeleccionadaId) || lista[0] || null;
+        setCapturaSeleccionada(sel);
+        setFiguras(sel ? (sel.figuras || []) : []);
+        setCapturaGuardada(null);
+        setImgDim(null);
+        setFiguraSeleccionada(null);
+      } catch (e) {
+        console.error('Error al abrir el proyecto', e);
+        window.alert('No se pudo abrir el proyecto: ' + (e?.message || e));
+      }
+    };
+    reader.readAsText(file);
+  };
+
   useEffect(() => {
     const onFsChange = () => {
       const v = videoRef.current;
@@ -1261,6 +1324,25 @@ function TratamientoApp({ videoInicial }) {
               >
                 {exportando ? `${progresoVideo}%` : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>}
               </button>
+              <button
+                onClick={guardarProyecto}
+                title="Guardar proyecto en archivo"
+                style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                Guardar
+              </button>
+              <label
+                title="Abrir proyecto desde archivo"
+                style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                Abrir
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => { abrirProyecto(e.target.files && e.target.files[0]); e.target.value = ''; }}
+                />
+              </label>
               <button
                 onClick={() => { guardarCaptura(); setCapturaSeleccionada(null); setCapturaGuardada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '4rem' }}
