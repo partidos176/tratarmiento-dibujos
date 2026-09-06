@@ -946,7 +946,7 @@ function TratamientoApp({ videoInicial }) {
       };
       const blob = new Blob([JSON.stringify(proyecto)], { type: 'application/json' });
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-      const sugerido = `proyecto-edicion-${fecha}`;
+      const sugerido = (nombreVideo && nombreVideo.trim() !== '' ? nombreVideo.trim() : `proyecto-edicion-${fecha}`);
       const pedido = window.prompt('Nombre del proyecto:', sugerido);
       if (pedido == null) return;
       const limpio = (pedido.trim() === '' ? sugerido : pedido.trim()).replace(/[\\/:*?"<>|]/g, '_');
