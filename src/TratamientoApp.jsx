@@ -1336,9 +1336,9 @@ function TratamientoApp({ videoInicial }) {
               </button>
               <label
                 title="Abrir proyecto desde archivo"
-                style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                style={{ background: '#f97316', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
               >
-                Abrir
+                Abrir proyecto
                 <input
                   type="file"
                   accept=".json,application/json"
