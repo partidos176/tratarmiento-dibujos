@@ -91,9 +91,14 @@ function TratamientoApp({ videoInicial }) {
     setCortesEditados(objStr(data.cortesEditados));
   };
 
-  const exportarCortes = () => {
+  const exportarCortes = async () => {
     try {
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 2, guardado: new Date().toISOString(), ...datosCortes(), edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaSeleccionada ? { ...capturaSeleccionada, videoUrl: null } : null } }, null, 2)], { type: 'application/json' });
+      let capturaConImagen = null;
+      if (capturaSeleccionada) {
+        capturaConImagen = { ...capturaSeleccionada, videoUrl: null };
+        capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.dataUrl, figuras);
+      }
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 2, guardado: new Date().toISOString(), ...datosCortes(), edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       const nombreArchivo = `cortes-${fecha}.json`;
       const url = URL.createObjectURL(blob);
@@ -1028,15 +1033,52 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
+  const componerImagenEditada = (dataUrl, figs) => new Promise((resolve) => {
+    try {
+      if (!dataUrl) { resolve(null); return; }
+      const lista = Array.isArray(figs) ? figs : [];
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const w = img.naturalWidth || 0, h = img.naturalHeight || 0;
+          if (!w || !h) { resolve(dataUrl); return; }
+          const dim = { w, h };
+          const partes = lista.map((f) => svgFigura(f, dim)).filter(Boolean);
+          if (partes.length === 0) { resolve(dataUrl); return; }
+          const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image href="${dataUrl}" width="${w}" height="${h}"/>${partes.join('')}</svg>`;
+          const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const im2 = new Image();
+          im2.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(im2, 0, 0);
+              URL.revokeObjectURL(url);
+              resolve(canvas.toDataURL('image/png'));
+            } catch (e) { URL.revokeObjectURL(url); resolve(dataUrl); }
+          };
+          im2.onerror = () => { URL.revokeObjectURL(url); resolve(dataUrl); };
+          im2.src = url;
+        } catch (e) { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    } catch (e) { resolve(null); }
+  });
+
   const guardarProyecto = async () => {
     try {
-      const lista = (capturas || []).map((c) => {
+      const lista = [];
+      for (const c of (capturas || [])) {
+        const figs = (capturaSeleccionada && c.id === capturaSeleccionada.id) ? figuras : (c.figuras || []);
         const base = (capturaSeleccionada && c.id === capturaSeleccionada.id)
           ? { ...c, figuras }
           : c;
         const { videoUrl: _omit, ...resto } = base;
-        return resto;
-      });
+        resto.imagenEditada = await componerImagenEditada(resto.dataUrl, figs);
+        lista.push(resto);
+      }
       const proyecto = {
         app: 'tratamiento-dibujos',
         version: 2,
@@ -1091,6 +1133,7 @@ function TratamientoApp({ videoInicial }) {
         const lista = data.capturas.filter((c) => c && c.dataUrl).map((c, i) => ({
           id: c.id ?? (Date.now() + i),
           dataUrl: c.dataUrl,
+          imagenEditada: c.imagenEditada || null,
           videoUrl: null,
           duracion: c.duracion ?? 4,
           figuras: Array.isArray(c.figuras) ? c.figuras : [],
@@ -1374,7 +1417,7 @@ function TratamientoApp({ videoInicial }) {
                             />
                           ) : (
                             <img
-                              src={c.dataUrl}
+                              src={c.imagenEditada || c.dataUrl}
                               alt={`Captura ${i + 1}`}
                               onClick={() => {
                                 setFiguras(c.figuras || []);
