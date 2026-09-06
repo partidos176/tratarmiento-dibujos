@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import TratamientoApp from './TratamientoApp';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -40,8 +39,7 @@ const interseccionLineaElipse = (de, hacia, dim) => {
   return { x: de.x * dim.w + dx * t, y: de.y * dim.h + dy * t };
 };
 
-function App() {
-  const [vista, setVista] = useState('principal');
+function TratamientoApp({ videoInicial }) {
   const [archivo, setArchivo] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -52,6 +50,8 @@ function App() {
   const [capturas, setCapturas] = useState([]);
   const [capturaSeleccionada, setCapturaSeleccionada] = useState(null);
   const [capturaGuardada, setCapturaGuardada] = useState(null);
+  const [capturaDuracion, setCapturaDuracion] = useState(null);
+  const [fotoCompleta, setFotoCompleta] = useState(false);
   const [figuras, setFiguras] = useState([]);
   const [figuraSeleccionada, setFiguraSeleccionada] = useState(null);
   const [imgDim, setImgDim] = useState(null);
@@ -60,6 +60,7 @@ function App() {
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [exportando, setExportando] = useState(false);
+  const [nombreVideo, setNombreVideo] = useState('');
   const [progresoVideo, setProgresoVideo] = useState(0);
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
   const [modoPolilinea, setModoPolilinea] = useState(false);
@@ -69,7 +70,10 @@ function App() {
   const [modoCirculoClick, setModoCirculoClick] = useState(false);
   const [modoFlechaClick, setModoFlechaClick] = useState(false);
   const flechaOrigenRef = useRef(null);
+  const [modoLineaClick, setModoLineaClick] = useState(false);
+  const lineaOrigenRef = useRef(null);
   const elipsesSessionRef = useRef([]);
+  const cancelarVideoRef = useRef(false);
   const videoRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
@@ -88,12 +92,36 @@ function App() {
   useEffect(() => () => {
     if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
   }, []);
+
+  const editorRef = useRef(null);
+  useEffect(() => {
+    const onFs = () => {
+      setFotoCompleta(!!(editorRef.current && document.fullscreenElement === editorRef.current));
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  useEffect(() => {
+    setCapturaDuracion(null);
+  }, [capturaGuardada]);
+
+  useEffect(() => {
+    if (!videoInicial) return;
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    const url = URL.createObjectURL(videoInicial);
+    const file = videoInicial instanceof File ? videoInicial : new File([videoInicial], 'corte.mp4', { type: 'video/mp4' });
+    setArchivo(file);
+    setVideoUrl(url);
+    setProgreso(0);
+    setHoja('Presentación');
+  }, [videoInicial]);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
 
   const hojas = ['Presentación', 'Edición'];
 
-  const colores = ['#38bdf8', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#facc15', '#ffffff'];
+  const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
   const handleFile = (e) => {
     const f = e.target.files[0] || null;
@@ -151,40 +179,43 @@ function App() {
     setProgreso(x);
   };
 
-  const exportarVideo = async () => {
-    const original = videoRef.current;
-    if (!original || !duracion) return;
-    setExportando(true);
-    try {
+    const exportarVideo = async (nombre) => {
+      const original = videoRef.current;
+      if (!original || !duracion) return;
+      setExportando(true);
+      let orig = null;
+      let clipEls = [];
+      try {
+      cancelarVideoRef.current = false;
       const w = original.videoWidth || 640;
       const h = original.videoHeight || 360;
       const clips = capturas.filter(c => c.videoUrl && c.insertarEn != null).sort((a, b) => a.insertarEn - b.insertarEn);
 
       const tempImgDim = { w, h };
 
-      const buildFiguresSvg = () => {
-        if (figuras.length === 0) return null;
-        const parts = figuras.map(f => svgFigura(f, tempImgDim)).filter(Boolean);
-        if (parts.length === 0) return null;
+      const capturasConFiguras = capturas.filter(c => c.figuras && c.figuras.length > 0 && c.tiempo != null && !c.videoUrl);
+
+      const figureImgs = [];
+      for (const cap of capturasConFiguras) {
+        const parts = cap.figuras.map(f => svgFigura(f, tempImgDim)).filter(Boolean);
+        if (parts.length === 0) continue;
         const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${parts.join('')}</svg>`;
         const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-        return URL.createObjectURL(blob);
-      };
-
-      const svgUrl = buildFiguresSvg();
-      let figuresImg = null;
-      if (svgUrl) {
-        figuresImg = await new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => { URL.revokeObjectURL(svgUrl); resolve(img); };
-          img.onerror = () => { URL.revokeObjectURL(svgUrl); resolve(null); };
-          img.src = svgUrl;
+        const url = URL.createObjectURL(blob);
+        const img = await new Promise((resolve) => {
+          const i = new Image();
+          i.onload = () => { URL.revokeObjectURL(url); resolve(i); };
+          i.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+          i.src = url;
         });
+        if (img) figureImgs.push({ time: cap.tiempo, img, duration: 3 });
       }
 
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
       const stream = canvas.captureStream(30);
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
@@ -192,7 +223,7 @@ function App() {
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
 
-      const orig = document.createElement('video');
+      orig = document.createElement('video');
       orig.muted = true;
       orig.playsInline = true;
       orig.preload = 'auto';
@@ -200,41 +231,94 @@ function App() {
 
       await new Promise((res, rej) => { orig.onloadedmetadata = res; orig.onerror = rej; });
 
-      const clipEls = clips.map(c => {
+      orig.style.position = 'fixed';
+      orig.style.opacity = '0.01';
+      orig.style.pointerEvents = 'none';
+      orig.style.width = '1px';
+      orig.style.height = '1px';
+      orig.style.left = '0px';
+      orig.style.top = '0px';
+      document.body.appendChild(orig);
+
+      clipEls = clips.map(c => {
         const v = document.createElement('video');
         v.muted = true;
         v.playsInline = true;
         v.preload = 'auto';
         v.src = c.videoUrl;
+        v.style.position = 'fixed';
+        v.style.opacity = '0.01';
+        v.style.pointerEvents = 'none';
+        v.style.width = '1px';
+        v.style.height = '1px';
+        v.style.left = '0px';
+        v.style.top = '0px';
+        document.body.appendChild(v);
         return { c, v };
       });
       await Promise.all(clipEls.map(({ v }) => new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; })));
 
       let activeClip = null;
-      let clipStartTime = 0;
       let clipIdx = 0;
       let raf = 0;
       let terminado = false;
 
       const drawFrame = () => {
-        ctx.drawImage(orig, 0, 0, w, h);
-        if (activeClip) {
-          ctx.drawImage(activeClip, 0, 0, w, h);
+        try { ctx.drawImage(orig, 0, 0, w, h); } catch (e) { /* noop */ }
+        const t = orig.currentTime;
+        for (const fi of figureImgs) {
+          if (t >= fi.time && t <= fi.time + fi.duration) {
+            try { ctx.drawImage(fi.img, 0, 0, w, h); } catch (e) { /* noop */ }
+          }
         }
-        if (figuresImg) {
-          ctx.drawImage(figuresImg, 0, 0, w, h);
+        if (activeClip && activeClip.readyState >= 2) {
+          try { ctx.drawImage(activeClip, 0, 0, w, h); } catch (e) { /* noop */ }
         }
       };
 
-      const terminar = async (error) => {
+      const terminar = async (error, cancelado = false) => {
         if (terminado) return;
         terminado = true;
+        cancelarVideoRef.current = false;
         cancelAnimationFrame(raf);
         try { rec.stop(); } catch (e) { /* noop */ }
+        try { document.body.removeChild(orig); } catch (e) { /* noop */ }
+        try { document.body.removeChild(canvas); } catch (e) { /* noop */ }
+        clipEls.forEach(({ v }) => { try { document.body.removeChild(v); } catch (e) { /* noop */ } });
         setExportando(false);
+        if (cancelado) { setAviso('Exportación cancelada'); return; }
         if (error) { setAviso('Error al exportar el video'); return; }
         await new Promise(res => { rec.onstop = res; });
         const blob = new Blob(chunks, { type: mime });
+        if (nombre) {
+          const baseName = (String(nombre).replace(/\.[^.]+$/, '') || 'video');
+          try {
+            setAviso('Convirtiendo a MP4...');
+            const ffmpeg = await loadFFmpeg();
+            await ffmpeg.writeFile('input_export.webm', new Uint8Array(await blob.arrayBuffer()));
+            await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-an', 'output_export.mp4']);
+            const out = await ffmpeg.readFile('output_export.mp4');
+            const mp4Blob = new Blob([out], { type: 'video/mp4' });
+            const enlace = document.createElement('a');
+            enlace.href = URL.createObjectURL(mp4Blob);
+            enlace.download = baseName + '.mp4';
+            document.body.appendChild(enlace);
+            enlace.click();
+            document.body.removeChild(enlace);
+            setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
+            setAviso('Vídeo generado y descargado');
+          } catch (e) {
+            const enlace = document.createElement('a');
+            enlace.href = URL.createObjectURL(blob);
+            enlace.download = baseName + '.webm';
+            document.body.appendChild(enlace);
+            enlace.click();
+            document.body.removeChild(enlace);
+            setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
+            setAviso('Vídeo descargado (webm)');
+          }
+          return;
+        }
         try {
           const resp = await fetch('/export-video', {
             method: 'POST',
@@ -254,18 +338,24 @@ function App() {
       };
 
       const loop = () => {
-        const t = orig.currentTime;
-        if (!activeClip && clipIdx < clipEls.length && t >= clipEls[clipIdx].c.insertarEn) {
+        if (cancelarVideoRef.current) { terminar(false, true); return; }
+        if (!activeClip && clipIdx < clipEls.length && orig.currentTime >= clipEls[clipIdx].c.insertarEn) {
+          orig.pause();
           activeClip = clipEls[clipIdx].v;
-          clipStartTime = t;
           activeClip.currentTime = 0;
           activeClip.play().catch(() => {});
         }
-        if (activeClip && (t - clipStartTime) >= (clipEls[clipIdx].c.duracion || 4)) {
-          activeClip.pause();
-          activeClip = null;
-          clipIdx++;
+        if (activeClip) {
+          const cl = clipEls[clipIdx].c;
+          if (activeClip.ended || activeClip.currentTime >= (cl.duracion || 4)) {
+            activeClip.pause();
+            activeClip = null;
+            clipIdx++;
+            orig.play().catch(() => {});
+          }
         }
+        const pct = duracion > 0 ? Math.min(99, Math.round((orig.currentTime / duracion) * 100)) : 0;
+        setAviso('Exportando... ' + pct + '%');
         drawFrame();
         if (!terminado) raf = requestAnimationFrame(loop);
       };
@@ -277,8 +367,12 @@ function App() {
       loop();
       await orig.play();
     } catch (e) {
+      console.error('Export error:', e);
       setExportando(false);
-      setAviso('Error al exportar el video');
+      try { if (orig) document.body.removeChild(orig); } catch (err) { /* noop */ }
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (err) { /* noop */ }
+      if (typeof clipEls !== 'undefined') clipEls.forEach(({ v }) => { try { document.body.removeChild(v); } catch (err) { /* noop */ } });
+      setAviso('Error al exportar el video: ' + (e.message || String(e)));
     }
   };
 
@@ -297,7 +391,7 @@ function App() {
 
   const anadirTriangulo = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.06, alto: 0.35, color: '#f97316', opacidad: 0.7, crecimiento: 0 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'triangulo', x: 0.5, y: 0.5, ancho: 0.06, alto: 0.35, color: '#f97316', opacidad: 0.7, crecimiento: 0.6 }]);
     setFiguraSeleccionada(id);
     if (triAnimRef.current) cancelAnimationFrame(triAnimRef.current);
     triAnimIdRef.current = id;
@@ -310,7 +404,7 @@ function App() {
       }
       triAnimStartRef.current = t;
       const p = Math.min(1, triAnimElapsedRef.current / 4000);
-      const e = 1 - Math.pow(1 - p, 2.5);
+      const e = 0.6 + 0.4 * (1 - Math.pow(1 - p, 2.5));
       setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e } : f));
       if (p < 1) triAnimRef.current = requestAnimationFrame(paso);
       else triAnimRef.current = null;
@@ -349,9 +443,15 @@ function App() {
     setFiguraSeleccionada(id);
   };
 
+  const anadirCirculoHueco = () => {
+    const id = Date.now();
+    setFiguras(prev => [...prev, { id, tipo: 'c', x: 0.5, y: 0.5, ancho: 0.1, alto: 0.1, color: '#38bdf8', opacidad: 1, grosor: 0.005, rot: 0, hueco: 90, crecimiento: 1 }]);
+    setFiguraSeleccionada(id);
+  };
+
   const anadirTexto = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'texto', x: 0.5, y: 0.5, fontSize: 0.06, color: '#ffffff', opacidad: 1, texto: 'Texto' }]);
+    setFiguras(prev => [...prev, { id, tipo: 'texto', x: 0.5, y: 0.5, fontSize: 0.06, color: '#ffffff', opacidad: 1, texto: 'Texto', negrita: false }]);
     setFiguraSeleccionada(id);
   };
 
@@ -553,7 +653,7 @@ function App() {
       const y = f.y * d.h;
       const tam = (f.fontSize || 0.06) * d.h;
       const txt = String(f.texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<text x="${x}" y="${y}" font-size="${tam}" fill="${f.color}" fill-opacity="${(f.opacidad ?? 1) * e}" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">${txt}</text>`;
+      return `<text x="${x}" y="${y}" font-size="${tam}" fill="${f.color}" fill-opacity="${(f.opacidad ?? 1) * e}" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif" font-weight="${f.negrita ? 800 : 400}">${txt}</text>`;
     }
 
     if (f.tipo === 'triangulo') {
@@ -561,12 +661,31 @@ function App() {
       const y = f.y * d.h;
       const ancho = f.ancho * d.w;
       const alto = f.alto * d.h;
-      const yBase = y + alto / 2;
+      const apexY = y - alto / 2;
       const hh = alto * e;
       const hw = (ancho / 2) * e;
+      const baseY = apexY + hh;
       const gradientId = `pilar_${f.id}`;
-      const pd = pathTrianguloRedondeado({ x, y: yBase - hh }, { x: x - hw, y: yBase }, { x: x + hw, y: yBase }, Math.min(ancho, alto) * 0.12);
-      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><path d="${pd}" fill="url(#${gradientId})" />`;
+      const pd = pathTrianguloRedondeado({ x, y: apexY }, { x: x - hw, y: baseY }, { x: x + hw, y: baseY }, Math.min(ancho, alto) * 0.12 * e);
+      return `${pat}<defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${f.color}" stop-opacity="${f.opacidad ?? 1}"/><stop offset="100%" stop-color="${f.color}" stop-opacity="${(f.opacidad ?? 1) * 0.35}"/></linearGradient></defs><path d="${pd}" fill="url(#${gradientId})" />`;
+    }
+
+    if (f.tipo === 'c') {
+      const ex = f.x * d.w;
+      const ey = f.y * d.h;
+      const erx = (f.ancho / 2) * d.w * e;
+      const ery = (f.alto / 2) * d.h * e;
+      const hueco = f.hueco ?? 90;
+      const rot = f.rot ?? 0;
+      const a1 = (rot + hueco / 2) * Math.PI / 180;
+      const a2 = a1 + (360 - hueco) * Math.PI / 180;
+      const x1 = ex + Math.cos(a1) * erx;
+      const y1 = ey + Math.sin(a1) * ery;
+      const x2 = ex + Math.cos(a2) * erx;
+      const y2 = ey + Math.sin(a2) * ery;
+      const large = (360 - hueco) > 180 ? 1 : 0;
+      const sw = (f.grosor ?? 0.005) * d.h;
+      return `<path d="M ${x1} ${y1} A ${erx} ${ery} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${sw}" stroke-linecap="round"/>`;
     }
 
     const cx = f.x * d.w;
@@ -785,32 +904,8 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [figuraSeleccionada]);
 
-  if (vista === 'segundo') {
-    return (
-      <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <div style={{ display: 'flex', padding: '1rem 2rem 0' }}>
-          <button
-            onClick={() => setVista('principal')}
-            style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-          >
-            Primero
-          </button>
-        </div>
-        <TratamientoApp />
-      </main>
-    );
-  }
-
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 2rem 0' }}>
-        <button
-          onClick={() => setVista('segundo')}
-          style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-        >
-          Segundo
-        </button>
-      </div>
       <div style={{ display: 'flex', gap: '0.5rem', padding: '1.5rem 2rem 0', borderBottom: '1px solid #1e293b' }}>
         {hojas.map(h => (
           <button
@@ -924,6 +1019,35 @@ function App() {
                     )}
                   </svg>
                 </button>
+                <button
+                  onClick={() => {
+                    const name = nombreVideo.trim() || (archivo ? archivo.name.replace(/\.[^.]+$/, '') : 'video');
+                    exportarVideo(name);
+                  }}
+                  title="Descargar vídeo"
+                  style={{ position: 'absolute', top: '8px', right: '50px', background: 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 3 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
+                {exportando && (
+                  <button
+                    onClick={() => { cancelarVideoRef.current = true; }}
+                    title="Cancelar exportación"
+                    style={{ position: 'absolute', top: '8px', right: '92px', background: 'rgba(220,38,38,0.9)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.8rem', fontWeight: 800, zIndex: 3 }}
+                  >
+                    Cancelar
+                  </button>
+                )}
+                <input
+                  value={nombreVideo}
+                  onChange={(e) => setNombreVideo(e.target.value)}
+                  placeholder="Nombre del vídeo"
+                  style={{ position: 'absolute', top: '8px', left: '8px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '180px', zIndex: 3 }}
+                />
                 {clipActivo && clipActivo.videoUrl && (
                   <video
                     ref={(el) => {
@@ -1041,6 +1165,7 @@ function App() {
                     </svg>
                   </button>
                 </div>
+
                 {capturas.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
                     {capturas.map((c, i) => (
@@ -1105,14 +1230,29 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
+        <div ref={editorRef} style={{ flex: 1, position: 'relative', display: 'flex' }}>
           {capturaSeleccionada && (
             <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
               <button
-                onClick={() => { guardarCaptura(); setCapturaSeleccionada(null); setCapturaGuardada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => {
+                  const el = editorRef.current;
+                  if (!el) return;
+                  if (!document.fullscreenElement) {
+                    el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
+                  } else {
+                    document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+                  }
+                }}
+                title="Pantalla completa"
+                style={{ background: '#facc15', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {fotoCompleta ? (
+                    <><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" /></>
+                  ) : (
+                    <><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></>
+                  )}
+                </svg>
               </button>
               <button
                 onClick={guardarCaptura}
@@ -1121,17 +1261,46 @@ function App() {
               >
                 {exportando ? `${progresoVideo}%` : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>}
               </button>
+              <button
+                onClick={() => { guardarCaptura(); setCapturaSeleccionada(null); setCapturaGuardada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '4rem' }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
               {figuraSeleccionada && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'texto' && (
-                    <input
-                      value={figuras.find(f => f.id === figuraSeleccionada)?.texto || ''}
-                      onChange={(e) => actualizarFigura(figuraSeleccionada, { texto: e.target.value })}
-                      placeholder="Escribe el texto"
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: '180px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.6rem', fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', color: '#e2e8f0', outline: 'none' }}
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                      <input
+                        value={figuras.find(f => f.id === figuraSeleccionada)?.texto || ''}
+                        onChange={(e) => actualizarFigura(figuraSeleccionada, { texto: e.target.value })}
+                        placeholder="Escribe el texto"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ width: '180px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.6rem', fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', color: '#e2e8f0', outline: 'none' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          onClick={() => actualizarFigura(figuraSeleccionada, { negrita: !figuras.find(f => f.id === figuraSeleccionada)?.negrita })}
+                          title="Negrita"
+                          style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.negrita ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '8px', padding: '0.4rem 0.7rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+                        >
+                          B
+                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem' }}>
+                          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tamaño</span>
+                          <input
+                            type="range"
+                            min="2"
+                            max="20"
+                            value={Math.round((figuras.find(f => f.id === figuraSeleccionada)?.fontSize ?? 0.06) * 100)}
+                            onChange={(e) => actualizarFigura(figuraSeleccionada, { fontSize: Number(e.target.value) / 100 })}
+                            title="Tamaño de la fuente"
+                            style={{ width: '110px', cursor: 'pointer' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem', background: '#1e293b', padding: '0.6rem', borderRadius: '12px', border: '1px solid #334155' }}>
                     {colores.map(c => (
@@ -1143,7 +1312,7 @@ function App() {
                       />
                     ))}
                   </div>
-                  {[ 'linea', 'flecha', 'polilinea', 'circuito'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) ? (
+                  {[ 'linea', 'flecha', 'polilinea', 'circuito', 'c'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Grosor
@@ -1159,6 +1328,22 @@ function App() {
                       />
                     </div>
                   ) : null}
+                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'c' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Rotar
+                      </span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
+                        onChange={(e) => actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) })}
+                        title="Rotación de la C"
+                        style={{ width: '120px', cursor: 'pointer' }}
+                      />
+                    </div>
+                  )}
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'flecha' && (
                     <button
                       onClick={() => actualizarFigura(figuraSeleccionada, { discontinuo: !figuras.find(f => f.id === figuraSeleccionada)?.discontinuo })}
@@ -1201,6 +1386,15 @@ function App() {
               </svg>
             </button>
             <button
+              onClick={anadirCirculoHueco}
+              title="Añadir C"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
+                <path d="M 18 5 A 9 9 0 1 0 18 19" />
+              </svg>
+            </button>
+            <button
               onClick={anadirTexto}
               title="Añadir texto"
               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
@@ -1212,9 +1406,14 @@ function App() {
               </svg>
             </button>
             <button
-              onClick={anadirLinea}
-              title="Dibujar línea"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
+                lineaOrigenRef.current = null;
+                setModoLineaClick(prev => !prev);
+              }}
+              title={modoLineaClick ? 'Cancelar línea' : 'Añadir línea con clicks'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoLineaClick ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
                 <line x1="4" y1="20" x2="20" y2="4" />
@@ -1224,11 +1423,11 @@ function App() {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
-                  setAviso('');
-                  anadirFlecha();
+                  flechaOrigenRef.current = null;
+                  setModoFlechaClick(prev => !prev);
                 }}
-                title="Añadir flecha"
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+                title={modoFlechaClick ? 'Cancelar flecha' : 'Añadir flecha con clicks'}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoFlechaClick ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
               >
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="4" y1="20" x2="19" y2="5" />
@@ -1299,7 +1498,6 @@ function App() {
               if (p) {
                 if (!flechaOrigenRef.current) {
                   flechaOrigenRef.current = { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) };
-                  setAviso('Ahora click para colocar la punta');
                 } else {
                   const x1 = flechaOrigenRef.current.x;
                   const y1 = flechaOrigenRef.current.y;
@@ -1311,7 +1509,7 @@ function App() {
                   setFiguras(prev => [...prev, { id, tipo: 'flecha', x1, y1, x2, y2, cx, cy, color: '#38bdf8', opacidad: 1, grosor: 0.005, discontinuo: false, cabeza: 1, crecimiento: 0 }]);
                   setFiguraSeleccionada(id);
                   flechaOrigenRef.current = null;
-                  setAviso('');
+                  setModoFlechaClick(false);
                   if (flechaAnimRef.current) cancelAnimationFrame(flechaAnimRef.current);
                   const t0 = performance.now();
                   const paso = (t) => {
@@ -1322,6 +1520,26 @@ function App() {
                     else flechaAnimRef.current = null;
                   };
                   flechaAnimRef.current = requestAnimationFrame(paso);
+                }
+              }
+              return;
+            }
+            if (modoLineaClick) {
+              const p = puntoImagen(e);
+              if (p) {
+                if (!lineaOrigenRef.current) {
+                  lineaOrigenRef.current = { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) };
+                } else {
+                  const x1 = lineaOrigenRef.current.x;
+                  const y1 = lineaOrigenRef.current.y;
+                  const x2 = Math.min(1, Math.max(0, p.x));
+                  const y2 = Math.min(1, Math.max(0, p.y));
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'linea', x1, y1, x2: x1, y2: y1, color: '#38bdf8', opacidad: 1, grosor: 0.005 }]);
+                  setFiguras(prev => prev.map(f => f.id === id ? { ...f, x2, y2 } : f));
+                  setFiguraSeleccionada(id);
+                  lineaOrigenRef.current = null;
+                  setModoLineaClick(false);
                 }
               }
               return;
@@ -1344,14 +1562,14 @@ function App() {
             }
           }}>
             {capturaSeleccionada ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ position: 'relative', display: 'inline-block' }} onClick={() => setFiguraSeleccionada(null)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', ...(fotoCompleta ? { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' } : {}) }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', ...(fotoCompleta ? { width: '100%', height: '100%' } : {}) }}>
+                  <div style={{ position: 'relative', display: 'inline-block', ...(fotoCompleta ? { width: '100%', height: '100%' } : {}) }} onClick={() => setFiguraSeleccionada(null)}>
                   <img
                     src={capturaSeleccionada.dataUrl}
                     alt="Captura en edición"
                     onLoad={(e) => setImgDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                    style={{ display: 'block', maxWidth: '100%', maxHeight: '92vh', borderRadius: '12px', border: '1px solid #334155' }}
+                    style={{ display: 'block', ...(fotoCompleta ? { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' } : { maxWidth: '100%', maxHeight: '80vh' }), borderRadius: '12px', border: '1px solid #334155' }}
                   />
                   {imgDim && (
                     <svg
@@ -1454,8 +1672,8 @@ function App() {
                         const alto = f.alto * imgDim.h;
                         const sel = figuraSeleccionada === f.id;
                         const shapeProps = {
-                          fill: f.rayado ? `url(#rayado-${f.id})` : f.color,
-                          fillOpacity: f.opacidad ?? 0.5,
+                          fill: f.sinRelleno ? 'none' : (f.rayado ? `url(#rayado-${f.id})` : f.color),
+                          fillOpacity: f.sinRelleno ? 0 : (f.opacidad ?? 0.5),
                           stroke: f.color,
                           strokeWidth: sel ? 3 : 2,
                           style: { pointerEvents: 'all', cursor: 'move' },
@@ -1473,10 +1691,38 @@ function App() {
                             e.currentTarget.setPointerCapture(e.pointerId);
                           },
                         };
-const shape = f.tipo === 'triangulo'
-                          ? <path {...shapeProps} d={pathTrianguloRedondeado({ x, y: y - alto / 2 }, { x: x - ancho / 2, y: y + alto / 2 }, { x: x + ancho / 2, y: y + alto / 2 }, Math.min(ancho, alto) * 0.12)} />
-                          : f.tipo === 'circulo'
-                            ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
+ const shape = f.tipo === 'triangulo'
+                          ? (() => {
+                              const eTri = f.crecimiento ?? 1;
+                              const apexYTri = y - alto / 2;
+                              const hhTri = alto * eTri;
+                              const hwTri = (ancho / 2) * eTri;
+                              const baseYTri = apexYTri + hhTri;
+                              const dTri = pathTrianguloRedondeado({ x, y: apexYTri }, { x: x - hwTri, y: baseYTri }, { x: x + hwTri, y: baseYTri }, Math.min(ancho, alto) * 0.12 * eTri);
+                              return <path {...shapeProps} d={dTri} />;
+                            })()
+                           : f.tipo === 'circulo'
+                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
+                           : f.tipo === 'c'
+                             ? (() => {
+                                 const eC = f.crecimiento ?? 1;
+                                 const exC = x;
+                                 const eyC = y;
+                                 const erxC = (ancho / 2) * eC;
+                                 const eryC = (alto / 2) * eC;
+                                 const huecoC = f.hueco ?? 90;
+                                 const rotC = f.rot ?? 0;
+                                 const a1C = (rotC + huecoC / 2) * Math.PI / 180;
+                                 const a2C = a1C + (360 - huecoC) * Math.PI / 180;
+                                 const x1C = exC + Math.cos(a1C) * erxC;
+                                 const y1C = eyC + Math.sin(a1C) * eryC;
+                                 const x2C = exC + Math.cos(a2C) * erxC;
+                                 const y2C = eyC + Math.sin(a2C) * eryC;
+                                 const largeC = (360 - huecoC) > 180 ? 1 : 0;
+                                 const swC = (f.grosor ?? 0.005) * imgDim.h;
+                                 const dC = `M ${x1C} ${y1C} A ${erxC} ${eryC} 0 ${largeC} 1 ${x2C} ${y2C}`;
+                                 return <path {...shapeProps} d={dC} fill="none" stroke={f.color} strokeOpacity={f.opacidad ?? 1} strokeWidth={swC} strokeLinecap="round" />;
+                               })()
                             : f.tipo === 'linea'
                               ? <line
                                   x1={f.x1 * imgDim.w}
@@ -1578,7 +1824,7 @@ const shape = f.tipo === 'triangulo'
                                       </g>
                                     );
                                   })()
-                              : <text
+                                : <text
                                   x={x}
                                   y={y}
                                   fontSize={(f.fontSize || 0.06) * imgDim.h}
@@ -1588,6 +1834,7 @@ const shape = f.tipo === 'triangulo'
                                   strokeWidth={sel ? 1 : 0}
                                   textAnchor="middle"
                                   dominantBaseline="central"
+                                  fontWeight={f.negrita ? 800 : 400}
                                   style={{ pointerEvents: 'all', cursor: 'move', userSelect: 'none' }}
                                   onClick={shapeProps.onClick}
                                   onPointerDown={shapeProps.onPointerDown}
@@ -1883,6 +2130,7 @@ const shape = f.tipo === 'triangulo'
                           muted
                           controls
                           playsInline
+                          onLoadedMetadata={(e) => setCapturaDuracion(e.currentTarget.duration || 0)}
                           onClick={(e) => {
                             const v = e.currentTarget;
                             if (v.paused) v.play(); else v.pause();
@@ -1907,6 +2155,11 @@ const shape = f.tipo === 'triangulo'
                         ×
                       </button>
                     </div>
+                    {capturaDuracion != null && (
+                      <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
+                        Duración: {formatoTiempo(capturaDuracion)}
+                      </span>
+                    )}
                   </div>
                 )}
                 <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -1924,6 +2177,14 @@ const shape = f.tipo === 'triangulo'
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.4rem 1.8rem', maxWidth: '340px', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
             <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: '#e2e8f0' }}>{aviso}</p>
+            {exportando && (
+              <button
+                onClick={() => { cancelarVideoRef.current = true; }}
+                style={{ marginTop: '1rem', marginRight: '0.6rem', background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1.6rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+            )}
             <button
               onClick={() => {
                 if (abrirCarpetaAlOK) {
@@ -1943,4 +2204,4 @@ const shape = f.tipo === 'triangulo'
   );
 }
 
-export default App;
+export default TratamientoApp;
