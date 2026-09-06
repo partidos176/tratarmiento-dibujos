@@ -75,6 +75,7 @@ function TratamientoApp({ videoInicial }) {
   const elipsesSessionRef = useRef([]);
   const cancelarVideoRef = useRef(false);
   const videoRef = useRef(null);
+  const videoRefCortes = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
@@ -1322,6 +1323,18 @@ function TratamientoApp({ videoInicial }) {
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+          {videoUrl && (
+            <video
+              ref={videoRefCortes}
+              src={videoUrl}
+              muted
+              controls
+              playsInline
+              preload="metadata"
+              onLoadedMetadata={(e) => setDuracion(e.currentTarget.duration || 0)}
+              style={{ width: '100%', maxWidth: '900px', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+            />
+          )}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Cortes ({cortes.length})
@@ -1342,7 +1355,7 @@ function TratamientoApp({ videoInicial }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '600px' }}>
               {cortes.map((ct, i) => (
-                <div key={`corte-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem' }}>
+                <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer' }}>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
                   <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', flex: 1 }}>
                     P{i + 1}: {formatoTiempo(i === 0 ? 0 : cortes[i - 1])} — {formatoTiempo(i + 1 < cortes.length ? cortes[i + 1] : duracion)}
