@@ -1349,7 +1349,7 @@ function TratamientoApp({ videoInicial }) {
             )}
           </div>
           {videoUrlCortes && (
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', width: '100%', maxWidth: '1080px' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch', width: '100%', maxWidth: '1080px' }}>
             <video
               ref={videoRefCortes}
               src={videoUrlCortes}
@@ -1360,6 +1360,7 @@ function TratamientoApp({ videoInicial }) {
               onLoadedMetadata={(e) => setDuracion(e.currentTarget.duration || 0)}
               style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
             />
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flexShrink: 0 }}>
             <button
               onClick={() => {
                 const v = videoRefCortes.current;
@@ -1374,6 +1375,7 @@ function TratamientoApp({ videoInicial }) {
             >
               Corte
             </button>
+            </div>
             </div>
           )}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
