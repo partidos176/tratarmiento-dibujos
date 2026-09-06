@@ -119,7 +119,7 @@ function TratamientoApp({ videoInicial }) {
   const svgRef = useRef(null);
   const dragRef = useRef(null);
 
-  const hojas = ['Presentación', 'Edición'];
+  const hojas = ['Presentación', 'Edición', 'Cortes'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -1318,6 +1318,45 @@ function TratamientoApp({ videoInicial }) {
                 )}
               </div>
             </>
+          )}
+        </div>
+      ) : hoja === 'Cortes' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Cortes ({cortes.length})
+            </span>
+            {cortes.length > 0 && (
+              <button
+                onClick={() => setCortes([])}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.6rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+          {cortes.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
+              Sin cortes. Márcalos en Presentación activando el modo corte y pinchando en la línea de tiempo.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '600px' }}>
+              {cortes.map((ct, i) => (
+                <div key={`corte-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem' }}>
+                  <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
+                  <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', flex: 1 }}>
+                    P{i + 1}: {formatoTiempo(i === 0 ? 0 : cortes[i - 1])} — {formatoTiempo(i + 1 < cortes.length ? cortes[i + 1] : duracion)}
+                  </span>
+                  <button
+                    onClick={() => { setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
+                    title={`Eliminar corte en ${formatoTiempo(ct)}`}
+                    style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       ) : (
