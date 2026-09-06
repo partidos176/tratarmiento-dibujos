@@ -1358,6 +1358,7 @@ function TratamientoApp({ videoInicial }) {
             )}
           </div>
           {videoUrlCortes && (
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', width: '100%', maxWidth: '1080px' }}>
             <video
               ref={videoRefCortes}
               src={videoUrlCortes}
@@ -1366,8 +1367,23 @@ function TratamientoApp({ videoInicial }) {
               playsInline
               preload="metadata"
               onLoadedMetadata={(e) => setDuracion(e.currentTarget.duration || 0)}
-              style={{ width: '100%', maxWidth: '900px', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+              style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
             />
+            <button
+              onClick={() => {
+                const v = videoRefCortes.current;
+                if (!v) return;
+                const t = v.currentTime || 0;
+                const existe = cortes.some(c => Math.abs(c - t) < 0.3);
+                if (existe) return;
+                setCortes(prev => [...prev, t].sort((a, b) => a - b));
+                setAviso(`Corte en ${formatoTiempo(t)}`);
+              }}
+              style={{ background: '#ef4444', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+            >
+              Corte
+            </button>
+            </div>
           )}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
