@@ -1376,16 +1376,15 @@ function TratamientoApp({ videoInicial }) {
               style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flexShrink: 0 }}>
-            <button
-              onClick={() => {
-                const v = videoRefCortes.current;
-                if (!v) return;
-                const t = v.currentTime || 0;
-                const existe = cortes.some(c => Math.abs(c - t) < 0.3);
-                if (existe) return;
-                setCortes(prev => [...prev, t].sort((a, b) => a - b));
-                setAviso(`Corte en ${formatoTiempo(t)}`);
-              }}
+              <button
+                onClick={() => {
+                  const v = videoRefCortes.current;
+                  if (!v) return;
+                  const t = v.currentTime || 0;
+                  const existe = cortes.some(c => Math.abs(c - t) < 0.3);
+                  if (existe) return;
+                  setCortes(prev => [...prev, t].sort((a, b) => a - b));
+                }}
               style={{ background: '#ef4444', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
             >
               Corte
