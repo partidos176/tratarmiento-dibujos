@@ -1062,12 +1062,6 @@ function TratamientoApp({ videoInicial }) {
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
                 <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
-                <input
-                  value={nombreVideo}
-                  onChange={(e) => setNombreVideo(e.target.value)}
-                  placeholder="Nombre del vídeo"
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '180px' }}
-                />
                 {exportando && (
                   <button
                     onClick={() => { cancelarVideoRef.current = true; }}
@@ -1225,10 +1219,17 @@ function TratamientoApp({ videoInicial }) {
                     title="Capturar imagen"
                   >
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1 2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                       <circle cx="12" cy="13" r="4" />
                     </svg>
                   </button>
+                  <input
+                    value={nombreVideo}
+                    onChange={(e) => setNombreVideo(e.target.value)}
+                    placeholder="Nombre del vídeo"
+                    title="Nombre del vídeo que se genera"
+                    style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '0.7rem 1rem', color: '#e2e8f0', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '200px' }}
+                  />
                 </div>
 
                 {capturas.length > 0 && (
