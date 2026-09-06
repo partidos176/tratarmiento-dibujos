@@ -81,6 +81,7 @@ function TratamientoApp({ videoInicial }) {
   const videoRef = useRef(null);
   const videoRefCortes = useRef(null);
   const presentacionSeekRef = useRef(null);
+  const finVistaPreviaRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
@@ -1065,8 +1066,14 @@ function TratamientoApp({ videoInicial }) {
                   onClick={togglePlay}
                   onPlay={() => setReproduciendo(true)}
                   onPause={() => setReproduciendo(false)}
-                  onLoadedMetadata={(e) => { setDuracion(e.currentTarget.duration || 0); if (presentacionSeekRef.current != null) { try { e.currentTarget.currentTime = presentacionSeekRef.current; } catch (_) {} presentacionSeekRef.current = null; } }}
+                  onLoadedMetadata={(e) => { setDuracion(e.currentTarget.duration || 0); if (presentacionSeekRef.current != null) { try { e.currentTarget.currentTime = presentacionSeekRef.current; e.currentTarget.play().catch(() => {}); setReproduciendo(true); } catch (_) {} presentacionSeekRef.current = null; } }}
                   onTimeUpdate={(e) => {
+                    if (finVistaPreviaRef.current != null && e.currentTarget.currentTime >= finVistaPreviaRef.current) {
+                      finVistaPreviaRef.current = null;
+                      e.currentTarget.pause();
+                      setReproduciendo(false);
+                      return;
+                    }
                     const v = e.currentTarget;
                     const d = v.duration || 0;
                     setDuracion(d);
@@ -1424,7 +1431,7 @@ function TratamientoApp({ videoInicial }) {
                     <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: Math.max(1, (prev[String(ct)] ?? 15) - 1) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
                     <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
                     <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: (prev[String(ct)] ?? 15) + 1 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
-                    <button onClick={(e) => { e.stopPropagation(); presentacionSeekRef.current = Math.max(0, ct); setHoja('Presentación'); }} title="Ver en Presentación" style={{ background: '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Presentación</button>
+                    <button onClick={(e) => { e.stopPropagation(); presentacionSeekRef.current = Math.max(0, ct); finVistaPreviaRef.current = Math.max(0, ct) + (duracionCortes[String(ct)] ?? 15); setHoja('Presentación'); }} title="Ver el corte en Presentación" style={{ background: '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Presentación</button>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
