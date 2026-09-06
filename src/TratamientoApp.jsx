@@ -1061,6 +1061,36 @@ function TratamientoApp({ videoInicial }) {
                   }}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
+                <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
+                <input
+                  value={nombreVideo}
+                  onChange={(e) => setNombreVideo(e.target.value)}
+                  placeholder="Nombre del vídeo"
+                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '180px' }}
+                />
+                {exportando && (
+                  <button
+                    onClick={() => { cancelarVideoRef.current = true; }}
+                    title="Cancelar exportación"
+                    style={{ background: 'rgba(220,38,38,0.9)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.8rem', fontWeight: 800 }}
+                  >
+                    Cancelar
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    const name = nombreVideo.trim() || (archivo ? archivo.name.replace(/\.[^.]+$/, '') : 'video');
+                    exportarVideo(name);
+                  }}
+                  title="Descargar vídeo"
+                  style={{ background: 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
                 <button
                   onClick={() => {
                     const container = document.getElementById('video-container');
@@ -1072,7 +1102,7 @@ function TratamientoApp({ videoInicial }) {
                     }
                   }}
                   title="Pantalla completa"
-                  style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 3 }}
+                  style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem' }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     {isFullscreen ? (
@@ -1082,35 +1112,7 @@ function TratamientoApp({ videoInicial }) {
                     )}
                   </svg>
                 </button>
-                <button
-                  onClick={() => {
-                    const name = nombreVideo.trim() || (archivo ? archivo.name.replace(/\.[^.]+$/, '') : 'video');
-                    exportarVideo(name);
-                  }}
-                  title="Descargar vídeo"
-                  style={{ position: 'absolute', top: '8px', right: '50px', background: 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem', zIndex: 3 }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
-                {exportando && (
-                  <button
-                    onClick={() => { cancelarVideoRef.current = true; }}
-                    title="Cancelar exportación"
-                    style={{ position: 'absolute', top: '8px', right: '92px', background: 'rgba(220,38,38,0.9)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.8rem', fontWeight: 800, zIndex: 3 }}
-                  >
-                    Cancelar
-                  </button>
-                )}
-                <input
-                  value={nombreVideo}
-                  onChange={(e) => setNombreVideo(e.target.value)}
-                  placeholder="Nombre del vídeo"
-                  style={{ position: 'absolute', top: '8px', left: '8px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '180px', zIndex: 3 }}
-                />
+                </div>
                 {clipActivo && clipActivo.videoUrl && (
                   <video
                     ref={(el) => {
