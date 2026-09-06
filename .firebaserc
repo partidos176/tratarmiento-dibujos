@@ -1,3 +1,5 @@
 {
-  "projects": {}
+  "projects": {
+    "default": "prueba-60d41"
+  }
 }
