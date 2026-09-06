@@ -1407,6 +1407,7 @@ function TratamientoApp({ videoInicial }) {
                         const url = URL.createObjectURL(blob);
                         if (videoUrl && videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(videoUrl); } catch (_) {} }
                         setArchivo({ name: `${nombre}.webm` });
+                        setNombreVideo(nombre);
                         setVideoUrl(url);
                         setProgreso(0);
                         setAviso(`Clip ${nombre} cargado en Presentación`);
