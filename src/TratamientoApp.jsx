@@ -93,7 +93,7 @@ function TratamientoApp({ videoInicial }) {
 
   const exportarCortes = () => {
     try {
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 1, guardado: new Date().toISOString(), ...datosCortes() }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 2, guardado: new Date().toISOString(), ...datosCortes(), edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaSeleccionada ? { ...capturaSeleccionada, videoUrl: null } : null } }, null, 2)], { type: 'application/json' });
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       const nombreArchivo = `cortes-${fecha}.json`;
       const url = URL.createObjectURL(blob);
@@ -115,7 +115,21 @@ function TratamientoApp({ videoInicial }) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        aplicarCortes(JSON.parse(reader.result));
+        const data = JSON.parse(reader.result);
+        aplicarCortes(data);
+        if (data.edicion) {
+          const cap = data.edicion.captura;
+          if (cap && cap.dataUrl) {
+            const limpia = { ...cap, videoUrl: null };
+            setCapturas(prev => prev.some(c => c.id === limpia.id) ? prev.map(c => c.id === limpia.id ? limpia : c) : [...prev, limpia]);
+            setCapturaSeleccionada(limpia);
+            setFiguras(Array.isArray(data.edicion.figuras) ? data.edicion.figuras : (limpia.figuras || []));
+          } else if (Array.isArray(data.edicion.figuras)) {
+            setFiguras(data.edicion.figuras);
+          }
+          setFiguraSeleccionada(null);
+          setImgDim(null);
+        }
         setAviso('Cortes recuperados');
       } catch (e) {
         console.error('Error al importar los cortes', e);
