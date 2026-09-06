@@ -969,6 +969,27 @@ function TratamientoApp({ videoInicial }) {
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', padding: '1rem 2rem 0' }}>
+        <button
+          onClick={guardarProyecto}
+          title="Guardar proyecto en archivo"
+          style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+        >
+          Guardar proyecto
+        </button>
+        <label
+          title="Abrir proyecto desde archivo"
+          style={{ background: '#f97316', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+        >
+          Abrir proyecto
+          <input
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => { abrirProyecto(e.target.files && e.target.files[0]); e.target.value = ''; }}
+          />
+        </label>
+      </div>
       <div style={{ display: 'flex', gap: '0.5rem', padding: '1.5rem 2rem 0', borderBottom: '1px solid #1e293b' }}>
         {hojas.map(h => (
           <button
@@ -1327,25 +1348,6 @@ function TratamientoApp({ videoInicial }) {
               >
                 {exportando ? `${progresoVideo}%` : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>}
               </button>
-              <button
-                onClick={guardarProyecto}
-                title="Guardar proyecto en archivo"
-                style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-              >
-                Guardar proyecto
-              </button>
-              <label
-                title="Abrir proyecto desde archivo"
-                style={{ background: '#f97316', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-              >
-                Abrir proyecto
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { abrirProyecto(e.target.files && e.target.files[0]); e.target.value = ''; }}
-                />
-              </label>
               <button
                 onClick={() => { guardarCaptura(); setCapturaSeleccionada(null); setCapturaGuardada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '4rem' }}
