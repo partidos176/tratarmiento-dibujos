@@ -136,9 +136,9 @@ function TratamientoApp({ videoInicial }) {
     setProgreso(0);
   };
 
-  const formatoTiempo = (s, dec = 2) => {
-    const frac = (s % 1).toFixed(dec).slice(1);
-    return `${String(Math.floor(s)).padStart(2, '0')}${frac}`;
+  const formatoTiempo = (s) => {
+    const total = Math.max(0, Math.floor(s || 0));
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   };
 
   const periodo = 0;
