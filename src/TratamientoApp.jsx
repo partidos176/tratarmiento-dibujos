@@ -130,8 +130,6 @@ function TratamientoApp({ videoInicial }) {
   const cancelarVideoRef = useRef(false);
   const videoRef = useRef(null);
   const videoRefCortes = useRef(null);
-  const presentacionSeekRef = useRef(null);
-  const finVistaPreviaRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
@@ -1116,14 +1114,8 @@ function TratamientoApp({ videoInicial }) {
                   onClick={togglePlay}
                   onPlay={() => setReproduciendo(true)}
                   onPause={() => setReproduciendo(false)}
-                  onLoadedMetadata={(e) => { setDuracion(e.currentTarget.duration || 0); if (presentacionSeekRef.current != null) { try { e.currentTarget.currentTime = presentacionSeekRef.current; e.currentTarget.play().catch(() => {}); setReproduciendo(true); } catch (_) {} presentacionSeekRef.current = null; } }}
+                  onLoadedMetadata={(e) => { setDuracion(e.currentTarget.duration || 0); }}
                   onTimeUpdate={(e) => {
-                    if (finVistaPreviaRef.current != null && e.currentTarget.currentTime >= finVistaPreviaRef.current) {
-                      finVistaPreviaRef.current = null;
-                      e.currentTarget.pause();
-                      setReproduciendo(false);
-                      return;
-                    }
                     const v = e.currentTarget;
                     const d = v.duration || 0;
                     setDuracion(d);
@@ -1491,9 +1483,11 @@ function TratamientoApp({ videoInicial }) {
                       try {
                         const blob = await generarClipCorte(src, Math.max(0, ct), dur);
                         const url = URL.createObjectURL(blob);
-                        const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-                        setCapturas(prev => [...prev, { id: nuevoId, dataUrl: null, videoUrl: url, duracion: dur, figuras: [], tiempo: Math.max(0, ct), insertarEn: null, nombre }]);
-                        setAviso(`Clip ${nombre} insertado: arrástralo a la línea de tiempo`);
+                        if (videoUrl && videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(videoUrl); } catch (_) {} }
+                        setArchivo({ name: `${nombre}.webm` });
+                        setVideoUrl(url);
+                        setProgreso(0);
+                        setAviso(`Clip ${nombre} cargado en Presentación`);
                         setHoja('Presentación');
                       } catch (err) {
                         console.error('Error generando el clip:', err);
@@ -1501,7 +1495,7 @@ function TratamientoApp({ videoInicial }) {
                       } finally {
                         setGenerandoClip(null);
                       }
-                    }} title="Generar el clip e insertarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? '…' : 'Presentación'}</button>
+                    }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? '…' : 'Presentación'}</button>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setCortes(prev => prev.filter((_, j) => j !== i)); setAviso(`Corte en ${formatoTiempo(ct)} eliminado`); }}
