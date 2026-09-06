@@ -1170,20 +1170,6 @@ function TratamientoApp({ videoInicial }) {
                 )}
                 <button
                   onClick={() => {
-                    const name = nombreVideo.trim() || (archivo ? archivo.name.replace(/\.[^.]+$/, '') : 'video');
-                    exportarVideo(name);
-                  }}
-                  title="Descargar vídeo"
-                  style={{ background: 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '8px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: '#ffffff', fontSize: '0.85rem' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => {
                     const container = document.getElementById('video-container');
                     if (!container) return;
                     if (!document.fullscreenElement) {
@@ -1250,6 +1236,20 @@ function TratamientoApp({ videoInicial }) {
                     title="Nombre del vídeo que se genera"
                     style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '0.7rem 1rem', color: '#e2e8f0', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '200px', minWidth: 0, flex: '1 1 auto' }}
                   />
+                  <button
+                    onClick={() => {
+                      const name = nombreVideo.trim() || (archivo ? archivo.name.replace(/\.[^.]+$/, '') : 'video');
+                      exportarVideo(name);
+                    }}
+                    title="Descargar vídeo"
+                    style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', cursor: 'pointer' }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </button>
                 </div>
 
                 {capturas.length > 0 && (
