@@ -74,8 +74,58 @@ function TratamientoApp({ videoInicial }) {
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
 
-  const generarClipCorte = (fileUrl, inicio, dur) => new Promise((resolve, reject) => {
+  const datosCortes = () => ({
+    cortes: [...cortes].sort((a, b) => a - b),
+    duracionCortes: { ...duracionCortes },
+    nombreCortes: { ...nombreCortes },
+    cortesEditados: { ...cortesEditados }
+  });
+
+  const aplicarCortes = (data) => {
+    if (!data || !Array.isArray(data.cortes)) throw new Error('Archivo no válido');
+    const lista = data.cortes.filter((c) => Number.isFinite(Number(c))).map((c) => Number(c)).sort((a, b) => a - b);
+    const objStr = (o) => (o && typeof o === 'object' ? { ...o } : {});
+    setCortes(lista);
+    setDuracionCortes(objStr(data.duracionCortes));
+    setNombreCortes(objStr(data.nombreCortes));
+    setCortesEditados(objStr(data.cortesEditados));
+  };
+
+  const exportarCortes = () => {
     try {
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 1, guardado: new Date().toISOString(), ...datosCortes() }, null, 2)], { type: 'application/json' });
+      const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const nombreArchivo = `cortes-${fecha}.json`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch (e) {
+      console.error('Error al exportar los cortes', e);
+      window.alert('No se pudieron exportar los cortes: ' + (e?.message || e));
+    }
+  };
+
+  const importarCortes = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        aplicarCortes(JSON.parse(reader.result));
+        setAviso('Cortes recuperados');
+      } catch (e) {
+        console.error('Error al importar los cortes', e);
+        window.alert('No se pudieron importar los cortes: ' + (e?.message || e));
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const generarClipCorte = (fileUrl, inicio, dur) => new Promise((resolve, reject) => {    try {
       const v = document.createElement('video');
       v.muted = true;
       v.preload = 'auto';
@@ -959,10 +1009,11 @@ function TratamientoApp({ videoInicial }) {
       });
       const proyecto = {
         app: 'tratamiento-dibujos',
-        version: 1,
+        version: 2,
         guardado: new Date().toISOString(),
         capturas: lista,
-        capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null
+        capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null,
+        ...datosCortes()
       };
       const blob = new Blob([JSON.stringify(proyecto)], { type: 'application/json' });
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -1017,6 +1068,7 @@ function TratamientoApp({ videoInicial }) {
           insertarEn: c.insertarEn ?? null
         }));
         setCapturas(lista);
+        try { aplicarCortes(data); } catch (_) {}
         const sel = lista.find((c) => c.id === data.capturaSeleccionadaId) || lista[0] || null;
         setCapturaSeleccionada(sel);
         setFiguras(sel ? (sel.figuras || []) : []);
@@ -1402,6 +1454,25 @@ function TratamientoApp({ videoInicial }) {
             <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Cortes ({cortes.length})
             </span>
+            <button
+              onClick={exportarCortes}
+              title="Guardar cortes en archivo"
+              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+            >
+              Exportar
+            </button>
+            <label
+              title="Recuperar cortes desde archivo"
+              style={{ background: '#f97316', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+            >
+              Importar
+              <input
+                type="file"
+                accept=".json,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => { importarCortes(e.target.files && e.target.files[0]); e.target.value = ''; }}
+              />
+            </label>
           </div>
           {cortes.length === 0 ? (
             <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
