@@ -1479,6 +1479,19 @@ function TratamientoApp({ videoInicial }) {
                             {c.insertarEn != null ? 'Insertado' : 'Insertar'}
                           </button>
                         )}
+                        {(() => {
+                          const cortesAsignados = cortes.filter(ct => {
+                            const f = fotoPorCorte[String(ct)];
+                            if (!f) return false;
+                            const capId = (f && typeof f === 'object') ? f.capturaId : f;
+                            return capId === c.id;
+                          });
+                          return cortesAsignados.length > 0 ? (
+                            <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.65rem', color: '#38bdf8', textAlign: 'center' }}>
+                              {cortesAsignados.map(ct => formatoTiempo(ct)).join(', ')}
+                            </span>
+                          ) : null;
+                        })()}
                         <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>
                           {c.nombre ? `${c.nombre} · ` : ''}{formatoTiempo(c.tiempo)}
                         </span>
