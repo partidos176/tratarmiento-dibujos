@@ -1777,9 +1777,6 @@ function TratamientoApp({ videoInicial }) {
                           style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
                       );
                     })()}
-                    {cortesEditados[String(ct)] && (
-                      <span style={{ background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '0.65rem', borderRadius: '6px', padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Editado</span>
-                    )}
                 </div>
                 ));
               })()}
