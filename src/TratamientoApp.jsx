@@ -177,6 +177,86 @@ function TratamientoApp({ videoInicial }) {
     });
   }, [figuras]);
 
+  const SESION_KEY = 'sesion';
+  const sesionListaRef = useRef(false);
+  const estadoSesionRef = useRef(null);
+  const idbAbrir = () => new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open('tratamiento-dibujos', 1);
+      req.onupgradeneeded = () => { try { req.result.createObjectStore('kv'); } catch (_) {} };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch (e) { reject(e); }
+  });
+  const idbPoner = async (valor) => {
+    const db = await idbAbrir();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(valor, SESION_KEY);
+      tx.oncomplete = () => { try { db.close(); } catch (_) {} resolve(); };
+      tx.onerror = () => reject(tx.error);
+    });
+  };
+  const idbLeer = async () => {
+    const db = await idbAbrir();
+    const valor = await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const rq = tx.objectStore('kv').get(SESION_KEY);
+      rq.onsuccess = () => resolve(rq.result);
+      rq.onerror = () => reject(rq.error);
+    });
+    try { db.close(); } catch (_) {}
+    return valor;
+  };
+  const construirFotoSesion = () => ({
+    v: 1,
+    guardado: Date.now(),
+    capturas: (capturas || []).filter(c => c && c.dataUrl).map(c => ({ ...c, videoUrl: null })),
+    capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null,
+    figuras: [...figuras],
+    ...datosCortes()
+  });
+  useEffect(() => {
+    estadoSesionRef.current = construirFotoSesion();
+  });
+  useEffect(() => {
+    if (!sesionListaRef.current) return;
+    const t = setTimeout(() => {
+      const foto = estadoSesionRef.current;
+      if (foto) { try { idbPoner(foto).catch(() => {}); } catch (_) {} }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [capturas, cortes, figuras, duracionCortes, nombreCortes, cortesEditados, fotoPorCorte, capturaSeleccionada]);
+  useEffect(() => {
+    const alOcultar = () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (!sesionListaRef.current) return;
+      const foto = estadoSesionRef.current;
+      if (foto) { try { idbPoner(foto).catch(() => {}); } catch (_) {} }
+    };
+    document.addEventListener('visibilitychange', alOcultar);
+    return () => document.removeEventListener('visibilitychange', alOcultar);
+  }, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await idbLeer();
+        if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
+          setCapturas(s.capturas);
+          try { aplicarCortes(s); } catch (_) {}
+          if (Array.isArray(s.figuras)) setFiguras(s.figuras);
+          const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
+          setCapturaSeleccionada(sel);
+          setCapturaGuardada(null);
+          setImgDim(null);
+          setFiguraSeleccionada(null);
+          setAviso('Sesión anterior recuperada');
+        }
+      } catch (_) {}
+      sesionListaRef.current = true;
+    })();
+  }, []);
+
   const generarClipCorte = (fileUrl, inicio, dur) => new Promise((resolve, reject) => {    try {
       const v = document.createElement('video');
       v.muted = true;
