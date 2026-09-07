@@ -2021,7 +2021,7 @@ function TratamientoApp({ videoInicial }) {
                     src={capturaSeleccionada.dataUrl}
                     alt="Captura en edición"
                     onLoad={(e) => setImgDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                    style={{ display: 'block', ...(fotoCompleta ? { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' } : { maxWidth: '100%', maxHeight: '80vh' }), borderRadius: '12px', border: '1px solid #334155' }}
+                    style={{ display: 'block', pointerEvents: 'none', ...(fotoCompleta ? { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' } : { maxWidth: '100%', maxHeight: '80vh' }), borderRadius: '12px', border: '1px solid #334155' }}
                   />
                   {imgDim && (
                     <svg
