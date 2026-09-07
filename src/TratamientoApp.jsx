@@ -164,6 +164,19 @@ function TratamientoApp({ videoInicial }) {
     reader.readAsText(file);
   };
 
+    useEffect(() => {
+    if (!capturaSeleccionada) return;
+    const id = capturaSeleccionada.id;
+    setCapturas(prev => {
+      const ix = prev.findIndex(c => c.id === id);
+      if (ix < 0) return prev;
+      if (prev[ix].figuras === figuras) return prev;
+      const copia = [...prev];
+      copia[ix] = { ...copia[ix], figuras };
+      return copia;
+    });
+  }, [figuras]);
+
   const generarClipCorte = (fileUrl, inicio, dur) => new Promise((resolve, reject) => {    try {
       const v = document.createElement('video');
       v.muted = true;
