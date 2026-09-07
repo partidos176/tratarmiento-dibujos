@@ -120,8 +120,8 @@ function TratamientoApp({ videoInicial }) {
         .map(c => ({ ...c, videoUrl: null }));
       if (capturaConImagen && !fotos.some(f => f.id === capturaConImagen.id)) fotos.push(capturaConImagen);
       const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 3, guardado: new Date().toISOString(), ...datosCortes(), fotos, edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
-      const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-      const nombreArchivo = `cortes-${fecha}.json`;
+      const baseVideo = (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'cortes';
+      const nombreArchivo = `${baseVideo}.json`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
