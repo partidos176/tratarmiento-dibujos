@@ -92,6 +92,18 @@ function TratamientoApp({ videoInicial }) {
     setNombreCortes(objStr(data.nombreCortes));
     setCortesEditados(objStr(data.cortesEditados));
     setFotoPorCorte(objStr(data.fotoPorCorte));
+    if (Array.isArray(data.fotos)) {
+      setCapturas(prev => {
+        const copia = [...prev];
+        data.fotos.forEach(f => {
+          if (!f || f.id == null || !f.dataUrl) return;
+          const limpia = { ...f, videoUrl: null };
+          const ix = copia.findIndex(c => c.id === limpia.id);
+          if (ix >= 0) copia[ix] = limpia; else copia.push(limpia);
+        });
+        return copia;
+      });
+    }
   };
 
   const exportarCortes = async () => {
@@ -101,7 +113,12 @@ function TratamientoApp({ videoInicial }) {
         capturaConImagen = { ...capturaSeleccionada, videoUrl: null };
         capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.dataUrl, figuras);
       }
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 2, guardado: new Date().toISOString(), ...datosCortes(), edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
+      const idsFotos = new Set(Object.values(fotoPorCorte || {}));
+      const fotos = (capturas || [])
+        .filter(c => c && idsFotos.has(c.id) && c.dataUrl)
+        .map(c => ({ ...c, videoUrl: null }));
+      if (capturaConImagen && !fotos.some(f => f.id === capturaConImagen.id)) fotos.push(capturaConImagen);
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 3, guardado: new Date().toISOString(), ...datosCortes(), fotos, edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
       const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       const nombreArchivo = `cortes-${fecha}.json`;
       const url = URL.createObjectURL(blob);
