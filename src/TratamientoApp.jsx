@@ -1196,95 +1196,6 @@ function TratamientoApp({ videoInicial }) {
     } catch (e) { resolve(null); }
   });
 
-  const guardarProyecto = async () => {
-    try {
-      const lista = [];
-      for (const c of (capturas || [])) {
-        const figs = (capturaSeleccionada && c.id === capturaSeleccionada.id) ? figuras : (c.figuras || []);
-        const base = (capturaSeleccionada && c.id === capturaSeleccionada.id)
-          ? { ...c, figuras }
-          : c;
-        const { videoUrl: _omit, ...resto } = base;
-        resto.imagenEditada = await componerImagenEditada(resto.dataUrl, figs);
-        lista.push(resto);
-      }
-      const proyecto = {
-        app: 'tratamiento-dibujos',
-        version: 2,
-        guardado: new Date().toISOString(),
-        capturas: lista,
-        capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null,
-        ...datosCortes()
-      };
-      const blob = new Blob([JSON.stringify(proyecto)], { type: 'application/json' });
-      const fecha = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-      const sugerido = (nombreVideo && nombreVideo.trim() !== '' ? nombreVideo.trim() : `proyecto-edicion-${fecha}`);
-      const pedido = window.prompt('Nombre del proyecto:', sugerido);
-      if (pedido == null) return;
-      const limpio = (pedido.trim() === '' ? sugerido : pedido.trim()).replace(/[\\/:*?"<>|]/g, '_');
-      const nombreArchivo = limpio.toLowerCase().endsWith('.json') ? limpio : limpio + '.json';
-      if (window.showSaveFilePicker) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: nombreArchivo,
-            types: [{ description: 'Proyecto de edición', accept: { 'application/json': ['.json'] } }]
-          });
-          const escribible = await handle.createWritable();
-          await escribible.write(blob);
-          await escribible.close();
-          return;
-        } catch (e) {
-          if (e && e.name === 'AbortError') return;
-          console.warn('Diálogo de guardado falló, usando descarga directa', e);
-        }
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = nombreArchivo;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
-    } catch (e) {
-      console.error('Error al guardar el proyecto', e);
-      window.alert('No se pudo guardar el proyecto: ' + (e?.message || e));
-    }
-  };
-
-  const abrirProyecto = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result);
-        if (!data || !Array.isArray(data.capturas)) throw new Error('Archivo no válido');
-        const lista = data.capturas.filter((c) => c && c.dataUrl).map((c, i) => ({
-          id: c.id ?? (Date.now() + i),
-          dataUrl: c.dataUrl,
-          imagenEditada: c.imagenEditada || null,
-          videoUrl: null,
-          duracion: c.duracion ?? 4,
-          figuras: Array.isArray(c.figuras) ? c.figuras : [],
-          tiempo: c.tiempo ?? 0,
-          insertarEn: c.insertarEn ?? null
-        }));
-        setCapturas(lista);
-        try { aplicarCortes(data); } catch (_) {}
-        const sel = lista.find((c) => c.id === data.capturaSeleccionadaId) || lista[0] || null;
-        setCapturaSeleccionada(sel);
-        setFiguras(sel ? (sel.figuras || []) : []);
-        setCapturaGuardada(null);
-        setImgDim(null);
-        setFiguraSeleccionada(null);
-      } catch (e) {
-        console.error('Error al abrir el proyecto', e);
-        window.alert('No se pudo abrir el proyecto: ' + (e?.message || e));
-      }
-    };
-    reader.readAsText(file);
-  };
-
   useEffect(() => {
     const onFsChange = () => {
       const v = videoRef.current;
@@ -1319,27 +1230,6 @@ function TratamientoApp({ videoInicial }) {
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', padding: '1rem 2rem 0' }}>
-        <button
-          onClick={guardarProyecto}
-          title="Guardar proyecto en archivo"
-          style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-        >
-          Guardar proyecto
-        </button>
-        <label
-          title="Abrir proyecto desde archivo"
-          style={{ background: '#f97316', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-        >
-          Abrir proyecto
-          <input
-            type="file"
-            accept=".json,application/json"
-            style={{ display: 'none' }}
-            onChange={(e) => { abrirProyecto(e.target.files && e.target.files[0]); e.target.value = ''; }}
-          />
-        </label>
-      </div>
       <div style={{ display: 'flex', gap: '0.5rem', padding: '1.5rem 2rem 0', borderBottom: '1px solid #1e293b' }}>
         {hojas.map(h => (
           <button
