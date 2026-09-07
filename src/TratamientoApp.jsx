@@ -568,7 +568,6 @@ function TratamientoApp({ videoInicial }) {
         if (nombre) {
           const baseName = (String(nombre).replace(/\.[^.]+$/, '') || 'video');
           try {
-            setAviso('Convirtiendo a MP4...');
             const ffmpeg = await loadFFmpeg();
             await ffmpeg.writeFile('input_export.webm', new Uint8Array(await blob.arrayBuffer()));
             await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-an', 'output_export.mp4']);
