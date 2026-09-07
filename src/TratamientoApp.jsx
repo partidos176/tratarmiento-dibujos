@@ -71,6 +71,7 @@ function TratamientoApp({ videoInicial }) {
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
   const [cortesEditados, setCortesEditados] = useState({});
+  const [fotoPorCorte, setFotoPorCorte] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
 
@@ -78,7 +79,8 @@ function TratamientoApp({ videoInicial }) {
     cortes: [...cortes].sort((a, b) => a - b),
     duracionCortes: { ...duracionCortes },
     nombreCortes: { ...nombreCortes },
-    cortesEditados: { ...cortesEditados }
+    cortesEditados: { ...cortesEditados },
+    fotoPorCorte: { ...fotoPorCorte }
   });
 
   const aplicarCortes = (data) => {
@@ -89,6 +91,7 @@ function TratamientoApp({ videoInicial }) {
     setDuracionCortes(objStr(data.duracionCortes));
     setNombreCortes(objStr(data.nombreCortes));
     setCortesEditados(objStr(data.cortesEditados));
+    setFotoPorCorte(objStr(data.fotoPorCorte));
   };
 
   const exportarCortes = async () => {
@@ -1032,6 +1035,15 @@ function TratamientoApp({ videoInicial }) {
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: null }]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
+      const tCap = capturaSeleccionada.tiempo;
+      if (tCap != null) {
+        let mejor = null, mejorD = Infinity;
+        cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
+        if (mejor != null && mejorD <= 10) {
+          const k = String(mejor);
+          setFotoPorCorte(prev => ({ ...prev, [k]: nuevoId }));
+        }
+      }
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
@@ -1614,12 +1626,23 @@ function TratamientoApp({ videoInicial }) {
                     }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Presentación'}</button>
                   </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
+                      onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
                       title={`Eliminar corte en ${formatoTiempo(ct)}`}
                       style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
                     >
                       ×
                     </button>
+                    {(() => {
+                      const capId = fotoPorCorte[String(ct)];
+                      const cap = capId != null ? capturas.find(c => c.id === capId) : null;
+                      const srcFoto = cap ? (cap.imagenEditada || cap.dataUrl) : null;
+                      if (!srcFoto) return null;
+                      return (
+                        <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
+                          onClick={(e) => { e.stopPropagation(); setCapturaSeleccionada(cap); setFiguras(cap.figuras || []); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                      );
+                    })()}
                     {cortesEditados[String(ct)] && (
                       <span style={{ background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '0.65rem', borderRadius: '6px', padding: '0.25rem 0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Editado</span>
                     )}
