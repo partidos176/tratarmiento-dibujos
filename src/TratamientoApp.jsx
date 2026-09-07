@@ -1145,7 +1145,7 @@ function TratamientoApp({ videoInicial }) {
         console.error('Error al generar el video de la captura', e);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: null };
+      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: videoUrl ? (capturaSeleccionada.tiempo ?? 0) : null };
       setCapturas(prev => [...prev, nuevaEntrada]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
       setCapturaSeleccionada(nuevaEntrada);
@@ -1432,7 +1432,7 @@ function TratamientoApp({ videoInicial }) {
                     {capturas.map((c, i) => (
                       <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                         <div style={{ position: 'relative' }}>
-                          {c.videoUrl ? (
+                          {(c.videoUrl && c.insertarEn == null) ? (
                             <video
                               src={c.videoUrl}
                               muted
