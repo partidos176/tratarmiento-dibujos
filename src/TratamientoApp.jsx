@@ -62,7 +62,7 @@ function TratamientoApp({ videoInicial }) {
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
   const [exportando, setExportando] = useState(false);
-  const [videoGenerado, setVideoGenerado] = useState(null);
+  const [progresoExport, setProgresoExport] = useState(0);
   const [nombreVideo, setNombreVideo] = useState('');
   const [progresoVideo, setProgresoVideo] = useState(0);
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
@@ -443,8 +443,7 @@ function TratamientoApp({ videoInicial }) {
       const original = videoRef.current;
       if (!original || !duracion) return;
       setExportando(true);
-      if (videoGenerado && videoGenerado.url) { try { URL.revokeObjectURL(videoGenerado.url); } catch (_) {} }
-      setVideoGenerado(null);
+      setProgresoExport(0);
       let orig = null;
       let clipEls = [];
       try {
@@ -576,11 +575,23 @@ function TratamientoApp({ videoInicial }) {
             await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-an', 'output_export.mp4']);
             const out = await ffmpeg.readFile('output_export.mp4');
             const mp4Blob = new Blob([out], { type: 'video/mp4' });
-            setVideoGenerado({ url: URL.createObjectURL(mp4Blob), nombre: baseName + '.mp4' });
+            const enlace = document.createElement('a');
+            enlace.href = URL.createObjectURL(mp4Blob);
+            enlace.download = baseName + '.mp4';
+            document.body.appendChild(enlace);
+            enlace.click();
+            document.body.removeChild(enlace);
+            setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
             setAviso('Vídeo generado y descargado');
             marcarCortesExportados();
           } catch (e) {
-            setVideoGenerado({ url: URL.createObjectURL(blob), nombre: baseName + '.webm' });
+            const enlace = document.createElement('a');
+            enlace.href = URL.createObjectURL(blob);
+            enlace.download = baseName + '.webm';
+            document.body.appendChild(enlace);
+            enlace.click();
+            document.body.removeChild(enlace);
+            setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
             marcarCortesExportados();
           }
           return;
@@ -621,6 +632,7 @@ function TratamientoApp({ videoInicial }) {
           }
         }
         drawFrame();
+        if (duracion > 0) setProgresoExport(Math.min(99, Math.round((orig.currentTime / duracion) * 100)));
         if (!terminado) raf = requestAnimationFrame(loop);
       };
 
@@ -1405,15 +1417,13 @@ function TratamientoApp({ videoInicial }) {
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   </button>
-                  {videoGenerado && (
-                    <a
-                      href={videoGenerado.url}
-                      download={videoGenerado.nombre}
-                      title={`Descargar ${videoGenerado.nombre}`}
-                      style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: '#22c55e', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', textDecoration: 'none', cursor: 'pointer' }}
-                    >
-                      Bajar vídeo
-                    </a>
+                  {exportando && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '140px' }}>
+                      <div style={{ flex: 1, height: '8px', background: 'var(--bg-secondary, #1e293b)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${progresoExport}%`, height: '100%', background: '#22c55e', borderRadius: '4px' }} />
+                      </div>
+                      <span style={{ color: '#22c55e', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'var(--font-mono, monospace)' }}>{progresoExport}%</span>
+                    </div>
                   )}
                 </div>
 
