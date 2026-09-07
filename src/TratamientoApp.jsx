@@ -1150,13 +1150,12 @@ function TratamientoApp({ videoInicial }) {
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
       setCapturaSeleccionada(nuevaEntrada);
       const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
-      if (tCap != null) {
-        let mejor = null, mejorD = Infinity;
-        cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
-        if (mejor != null && mejorD <= 10) {
-          const k = String(mejor);
-          setFotoPorCorte(prev => ({ ...prev, [k]: nuevoId }));
-        }
+      let mejor = null, mejorD = Infinity;
+      cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
+      if (mejor != null && mejorD <= 10) {
+        const k = String(mejor);
+        const foto = { capturaId: nuevoId, dataUrl: nueva, figuras: [...figuras] };
+        setFotoPorCorte(prev => ({ ...prev, [k]: foto }));
       }
     } catch (e) {
       console.error('Error al guardar la captura', e);
@@ -1748,13 +1747,33 @@ function TratamientoApp({ videoInicial }) {
                       ×
                     </button>
                     {(() => {
-                      const capId = fotoPorCorte[String(ct)];
-                      const cap = capId != null ? capturas.find(c => c.id === capId) : null;
-                      const srcFoto = cap ? (cap.imagenEditada || cap.dataUrl) : null;
+                      const f = fotoPorCorte[String(ct)];
+                      const capId = (f && typeof f === 'object') ? f.capturaId : f;
+                      const viva = capId != null ? capturas.find(c => c.id === capId) : null;
+                      const srcFoto = viva
+                        ? (viva.imagenEditada || viva.dataUrl)
+                        : (f && typeof f === 'object' ? f.dataUrl : null);
                       if (!srcFoto) return null;
                       return (
                         <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
-                          onClick={(e) => { e.stopPropagation(); setCapturaSeleccionada(cap); setFiguras(cap.figuras || []); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (viva) {
+                              setCapturaSeleccionada(viva);
+                              setFiguras(viva.figuras || []);
+                            } else if (f && typeof f === 'object') {
+                              const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.dataUrl, videoUrl: null, duracion: 4, figuras: Array.isArray(f.figuras) ? [...f.figuras] : [], tiempo: ct, insertarEn: null };
+                              setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
+                              setCapturaSeleccionada(restaurada);
+                              setFiguras(restaurada.figuras);
+                            } else {
+                              return;
+                            }
+                            setFiguraSeleccionada(null);
+                            setCapturaGuardada(null);
+                            setImgDim(null);
+                            setHoja('Edición');
+                          }}
                           style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
                       );
                     })()}
