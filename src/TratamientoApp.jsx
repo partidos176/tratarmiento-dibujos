@@ -629,8 +629,6 @@ function TratamientoApp({ videoInicial }) {
             orig.play().catch(() => {});
           }
         }
-        const pct = duracion > 0 ? Math.min(99, Math.round((orig.currentTime / duracion) * 100)) : 0;
-        setAviso('Exportando... ' + pct + '%');
         drawFrame();
         if (!terminado) raf = requestAnimationFrame(loop);
       };
