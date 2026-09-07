@@ -205,6 +205,7 @@ function TratamientoApp({ videoInicial }) {
   const videoRef = useRef(null);
   const videoRefCortes = useRef(null);
   const corteCargadoRef = useRef(null);
+  const clipOrigenRef = useRef(null);
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
@@ -260,6 +261,7 @@ function TratamientoApp({ videoInicial }) {
     setVideoUrl(f ? URL.createObjectURL(f) : '');
     setProgreso(0);
     corteCargadoRef.current = null;
+    clipOrigenRef.current = null;
   };
 
   const formatoTiempo = (s) => {
@@ -1035,7 +1037,7 @@ function TratamientoApp({ videoInicial }) {
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       setCapturas(prev => [...prev, { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: null }]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
-      const tCap = capturaSeleccionada.tiempo;
+      const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
       if (tCap != null) {
         let mejor = null, mejorD = Infinity;
         cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
@@ -1614,6 +1616,7 @@ function TratamientoApp({ videoInicial }) {
                         setVideoUrl(url);
                         setProgreso(0);
                         corteCargadoRef.current = Math.max(0, ct);
+                        clipOrigenRef.current = Math.max(0, ct);
                         setHoja('Presentación');
                       } catch (err) {
                         console.error('Error generando el clip:', err);
