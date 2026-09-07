@@ -1272,19 +1272,7 @@ function TratamientoApp({ videoInicial }) {
                 {archivo ? archivo.name : '-'}
               </span>
             </label>
-            {archivo && (
-              <button
-                onClick={() => {
-                  if (videoUrl) URL.revokeObjectURL(videoUrl);
-                  setArchivo(null);
-                  setVideoUrl('');
-                  setProgreso(0);
-                }}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-              >
-                ELIMINAR
-              </button>
-            )}
+
           </div>
           {videoUrl && (
             <>
@@ -1357,27 +1345,7 @@ function TratamientoApp({ videoInicial }) {
                   </svg>
                 </button>
                 </div>
-                {clipActivo && clipActivo.videoUrl && (
-                  <video
-                    ref={(el) => {
-                      clipRef.current = el;
-                      if (el) el.play().catch(() => {});
-                    }}
-                    src={clipActivo.videoUrl}
-                    muted
-                    autoPlay
-                    playsInline
-                    onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                    onEnded={() => {
-                      const v = videoRef.current;
-                      if (v) v.play().catch(() => {});
-                      setClipActivo(null);
-                      setReproduciendo(true);
-                    }}
-                    title={`Clip 2s en ${formatoTiempo(clipActivo.insertarEn ?? 0)}`}
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '2px solid #16a34a', zIndex: 2, cursor: 'pointer' }}
-                  />
-                )}
+
               </div>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
                   <button
