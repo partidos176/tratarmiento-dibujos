@@ -2108,7 +2108,7 @@ function TratamientoApp({ videoInicial }) {
                       }}
                       onPointerUp={() => { dragRef.current = null; }}
                       onPointerCancel={() => { dragRef.current = null; }}
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
                     >
                       <defs>
                         {figuras.filter(f => f.rayado).map(f => (
