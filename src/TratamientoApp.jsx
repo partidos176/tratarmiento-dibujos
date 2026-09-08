@@ -135,13 +135,15 @@ function TratamientoApp({ videoInicial }) {
           return { ...resto, videoUrl };
         })
       );
+      const exentas = new Set([data?.edicion?.captura?.id, data?.capturaSeleccionadaId].filter(id => id != null));
+      const esFantasma = (c) => c && (c.figuras == null || (Array.isArray(c.figuras) && c.figuras.length === 0)) && !c.videoUrl && c.insertarEn == null && !exentas.has(c.id);
       setCapturas(prev => {
         const copia = [...prev];
         limpias.forEach(limpia => {
           const ix = copia.findIndex(c => c.id === limpia.id);
           if (ix >= 0) copia[ix] = limpia; else copia.push(limpia);
         });
-        return copia;
+        return copia.filter(c => !esFantasma(c));
       });
     }
   };
