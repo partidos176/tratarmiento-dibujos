@@ -392,6 +392,7 @@ function TratamientoApp({ videoInicial }) {
     clipOrigenRef.current = null;
     clipResumeRef.current = null;
     clipMainRef.current = null;
+    if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
     setClipActivo(null);
   };
 
@@ -1330,7 +1331,7 @@ function TratamientoApp({ videoInicial }) {
                     const d = v.duration || 0;
                     setDuracion(d);
                     const t = v.currentTime;
-                    if (clipMainRef.current) { setProgreso(d ? t / d : 0); return; }
+                    if (clipMainRef.current || clipResumeRef.current) { setProgreso(d ? t / d : 0); return; }
                     if (t > prevTiempoRef.current) {
                       const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
                       if (cl) {
@@ -1341,6 +1342,18 @@ function TratamientoApp({ videoInicial }) {
                         setReproduciendo(true);
                         try { v.src = cl.videoUrl; } catch (_) {}
                         v.play().catch(() => {});
+                        if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                        clipTimerRef.current = setTimeout(() => {
+                          const vv = videoRef.current;
+                          if (!vv || !clipMainRef.current) return;
+                          const r = clipMainRef.current;
+                          clipMainRef.current = null;
+                          setClipActivo(null);
+                          prevTiempoRef.current = r.hasta;
+                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                          try { vv.src = r.src; } catch (_) {}
+                          setReproduciendo(true);
+                        }, ((cl.duracion || 4) * 1000) + 800);
                         return;
                       }
                     }
@@ -1349,6 +1362,7 @@ function TratamientoApp({ videoInicial }) {
                   }}
                   onEnded={(e) => {
                     const v = e.currentTarget;
+                    if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                     if (clipMainRef.current || clipActivo) {
                       const r = clipMainRef.current;
                       clipMainRef.current = null;
@@ -1371,6 +1385,7 @@ function TratamientoApp({ videoInicial }) {
                   }}
                   onError={(e) => {
                     const v = e.currentTarget;
+                    if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                     if (clipMainRef.current || clipActivo) {
                       const r = clipMainRef.current;
                       clipMainRef.current = null;
