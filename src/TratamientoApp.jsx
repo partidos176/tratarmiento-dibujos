@@ -673,6 +673,17 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
+  const asignarFotoACorte = (capturaId, dataUrl, figuras, tiempo, soloSiVacio = false, baseDataUrl = null) => {
+    const tCap = (tiempo ?? 0) + (clipOrigenRef.current ?? 0);
+    let mejor = null, mejorD = Infinity;
+    cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
+    if (mejor != null && mejorD <= 10) {
+      const k = String(mejor);
+      const foto = { capturaId, dataUrl, figuras: Array.isArray(figuras) ? [...figuras] : [], ...(baseDataUrl ? { baseDataUrl } : {}) };
+      setFotoPorCorte(prev => (soloSiVacio && prev[k] ? prev : { ...prev, [k]: foto }));
+    }
+  };
+
   const capturarImagen = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -689,6 +700,7 @@ function TratamientoApp({ videoInicial }) {
     setCapturaSeleccionada(nueva);
     setCapturaGuardada(null);
     setImgDim(null);
+    asignarFotoACorte(nueva.id, nueva.dataUrl, [], nueva.tiempo, true);
     setHoja('Edición');
   };
 
@@ -1180,14 +1192,7 @@ function TratamientoApp({ videoInicial }) {
       });
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
-      const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
-      let mejor = null, mejorD = Infinity;
-      cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
-      if (mejor != null && mejorD <= 10) {
-        const k = String(mejor);
-        const foto = { capturaId: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, figuras: figurasCopia };
-        setFotoPorCorte(prev => ({ ...prev, [k]: foto }));
-      }
+      asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
@@ -1472,6 +1477,19 @@ function TratamientoApp({ videoInicial }) {
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
+                  </button>
+                  <button
+                    onClick={() => {
+                      (capturas || []).forEach(c => {
+                        if (!c || c.tiempo == null) return;
+                        asignarFotoACorte(c.id, c.imagenEditada || c.dataUrl, c.figuras, c.tiempo, false, c.baseDataUrl || null);
+                      });
+                      setAviso('Imágenes guardadas en sus líneas de corte');
+                    }}
+                    title="Guardar las imágenes en su línea de corte correspondiente"
+                    style={{ flexShrink: 0, background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                  >
+                    A cortes
                   </button>
                   {exportando && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '140px' }}>
