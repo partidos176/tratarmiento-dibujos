@@ -1144,7 +1144,8 @@ function TratamientoApp({ videoInicial }) {
         console.error('Error al generar el video de la captura', e);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: null };
+      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
+      setCapturas(prev => [...prev, nuevaEntrada]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
       setCapturaSeleccionada(nuevaEntrada);
       const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
