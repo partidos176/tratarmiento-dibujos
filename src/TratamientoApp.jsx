@@ -44,8 +44,6 @@ function TratamientoApp({ videoInicial }) {
   const [videoUrl, setVideoUrl] = useState('');
   const [archivoCortes, setArchivoCortes] = useState(null);
   const [videoUrlCortes, setVideoUrlCortes] = useState('');
-  const [videoGuardadoPP, setVideoGuardadoPP] = useState(null);
-  const [videoGuardadoCortes, setVideoGuardadoCortes] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoja, setHoja] = useState('Cortes');
   const [progreso, setProgreso] = useState(0);
@@ -283,7 +281,7 @@ function TratamientoApp({ videoInicial }) {
     return valor;
   };
   useEffect(() => {
-    if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.startsWith('blob:')) { setVideoGuardadoPP(null); return; }
+    if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.startsWith('blob:')) return;
     if (videoGuardadoRef.current.ppal === videoUrl) return;
     videoGuardadoRef.current.ppal = videoUrl;
     let cancelado = false;
@@ -293,13 +291,12 @@ function TratamientoApp({ videoInicial }) {
         const b = await r.blob();
         if (cancelado || !b || !b.size) return;
         await idbPonerKV(VIDEO_PP_KEY, { blob: b, nombre: (archivo && archivo.name) || 'video' });
-        if (!cancelado) setVideoGuardadoPP(true);
-      } catch (e) { console.error('No se pudo guardar el vídeo en este navegador', e); if (!cancelado) setVideoGuardadoPP(false); }
+      } catch (_) {}
     })();
     return () => { cancelado = true; };
   }, [videoUrl]);
   useEffect(() => {
-    if (!videoUrlCortes || typeof videoUrlCortes !== 'string' || !videoUrlCortes.startsWith('blob:')) { setVideoGuardadoCortes(null); return; }
+    if (!videoUrlCortes || typeof videoUrlCortes !== 'string' || !videoUrlCortes.startsWith('blob:')) return;
     if (videoGuardadoRef.current.cortes === videoUrlCortes) return;
     videoGuardadoRef.current.cortes = videoUrlCortes;
     let cancelado = false;
@@ -309,8 +306,7 @@ function TratamientoApp({ videoInicial }) {
         const b = await r.blob();
         if (cancelado || !b || !b.size) return;
         await idbPonerKV(VIDEO_CORTES_KEY, { blob: b, nombre: (archivoCortes && archivoCortes.name) || 'video' });
-        if (!cancelado) setVideoGuardadoCortes(true);
-      } catch (e) { console.error('No se pudo guardar el vídeo en este navegador', e); if (!cancelado) setVideoGuardadoCortes(false); }
+      } catch (_) {}
     })();
     return () => { cancelado = true; };
   }, [videoUrlCortes]);
@@ -365,7 +361,6 @@ function TratamientoApp({ videoInicial }) {
             videoGuardadoRef.current.ppal = url;
             setArchivo({ name: vp.nombre || 'video' });
             setVideoUrl(url);
-            setVideoGuardadoPP(true);
             setProgreso(0);
           }
         } catch (_) {}
@@ -376,7 +371,6 @@ function TratamientoApp({ videoInicial }) {
             videoGuardadoRef.current.cortes = url;
             setArchivoCortes({ name: vc.nombre || 'video' });
             setVideoUrlCortes(url);
-            setVideoGuardadoCortes(true);
           }
         } catch (_) {}
       } catch (_) {}
@@ -1439,11 +1433,6 @@ function TratamientoApp({ videoInicial }) {
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {archivo ? archivo.name : '-'}
               </span>
-              {archivo && videoGuardadoPP != null && (
-                <span title={videoGuardadoPP ? 'El vídeo se conserva en este navegador' : 'No se pudo conservar el vídeo en este navegador'} style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.65rem', color: videoGuardadoPP ? '#22c55e' : '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {videoGuardadoPP ? 'Guardado' : 'Sin guardar'}
-                </span>
-              )}
             </label>
             {archivo && (
               <button
@@ -1735,11 +1724,6 @@ function TratamientoApp({ videoInicial }) {
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {archivoCortes ? archivoCortes.name : '-'}
               </span>
-              {archivoCortes && videoGuardadoCortes != null && (
-                <span title={videoGuardadoCortes ? 'El vídeo se conserva en este navegador' : 'No se pudo conservar el vídeo en este navegador'} style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.65rem', color: videoGuardadoCortes ? '#22c55e' : '#ef4444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {videoGuardadoCortes ? 'Guardado' : 'Sin guardar'}
-                </span>
-              )}
             </label>
             {archivoCortes && (
               <button
