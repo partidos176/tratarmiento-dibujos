@@ -2620,13 +2620,6 @@ function TratamientoApp({ videoInicial }) {
                           document.body.appendChild(a);
                           a.click();
                           document.body.removeChild(a);
-                          const entrada = { ...capturaGuardada, insertarEn: capturaGuardada.tiempo };
-                          setCapturas(prev => [...prev, entrada]);
-                          setFotoPorCorte(prev => {
-                            const k = String(capturaGuardada.tiempo);
-                            const foto = { capturaId: capturaGuardada.id, dataUrl: capturaGuardada.dataUrl, figuras: [] };
-                            return { ...prev, [k]: foto };
-                          });
                         }}
                         style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                       >
