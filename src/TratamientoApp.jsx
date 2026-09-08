@@ -2105,16 +2105,21 @@ function TratamientoApp({ videoInicial }) {
                 <circle cx="16" cy="12" r="4.5" />
               </svg>
             </button>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={figuraSeleccionada ? Math.round((figuras.find(f => f.id === figuraSeleccionada)?.opacidad ?? 0.5) * 100) : 50}
-              onChange={(e) => { if (figuraSeleccionada) actualizarFigura(figuraSeleccionada, { opacidad: Number(e.target.value) / 100 }); }}
-              disabled={!figuraSeleccionada}
-              title="Opacidad"
-              style={{ width: '120px', cursor: 'pointer' }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={figuraSeleccionada ? Math.round((figuras.find(f => f.id === figuraSeleccionada)?.opacidad ?? 0.5) * 100) : 50}
+                onChange={(e) => { if (figuraSeleccionada) actualizarFigura(figuraSeleccionada, { opacidad: Number(e.target.value) / 100 }); }}
+                disabled={!figuraSeleccionada}
+                title="Opacidad"
+                style={{ width: '120px', cursor: 'pointer' }}
+              />
+              <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#e2e8f0', minWidth: '38px' }}>
+                {figuraSeleccionada ? Math.round((figuras.find(f => f.id === figuraSeleccionada)?.opacidad ?? 0.5) * 100) : 50}%
+              </span>
+            </div>
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
             if (modoFlechaClick) {
