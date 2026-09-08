@@ -335,6 +335,8 @@ function TratamientoApp({ videoInicial }) {
   const draggingRef = useRef(false);
   const clipRef = useRef(null);
   const clipTimerRef = useRef(null);
+  const clipResumeRef = useRef(null);
+  const clipMainRef = useRef(null);
   const prevTiempoRef = useRef(0);
   const marcaMovidaRef = useRef(false);
   const circuloAnimRef = useRef(null);
@@ -388,6 +390,9 @@ function TratamientoApp({ videoInicial }) {
     setProgreso(0);
     corteCargadoRef.current = null;
     clipOrigenRef.current = null;
+    clipResumeRef.current = null;
+    clipMainRef.current = null;
+    setClipActivo(null);
   };
 
   const formatoTiempo = (s) => {
@@ -1308,27 +1313,53 @@ function TratamientoApp({ videoInicial }) {
                   onClick={togglePlay}
                   onPlay={() => setReproduciendo(true)}
                   onPause={() => setReproduciendo(false)}
-                  onLoadedMetadata={(e) => { fijarDuracion(e.currentTarget); }}
+                  onLoadedMetadata={(e) => {
+                    fijarDuracion(e.currentTarget);
+                    const r = clipResumeRef.current;
+                    if (r) {
+                      clipResumeRef.current = null;
+                      try { e.currentTarget.currentTime = r.t; } catch (_) {}
+                      e.currentTarget.play().catch(() => {});
+                    }
+                  }}
                   onTimeUpdate={(e) => {
                     const v = e.currentTarget;
                     const d = v.duration || 0;
                     setDuracion(d);
                     const t = v.currentTime;
-                    if (!clipActivo && t > prevTiempoRef.current) {
+                    if (clipActivo) { setProgreso(d ? t / d : 0); return; }
+                    if (t > prevTiempoRef.current) {
                       const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
                       if (cl) {
                         prevTiempoRef.current = cl.insertarEn + (cl.duracion || 4);
-                        v.pause();
+                        clipMainRef.current = { t: cl.insertarEn, src: videoUrl };
                         setClipActivo(cl);
                         setReproduciendo(true);
+                        try { v.src = cl.videoUrl; } catch (_) {}
+                        v.play().catch(() => {});
                         return;
                       }
                     }
                     prevTiempoRef.current = t;
                     setProgreso(d ? t / d : 0);
                   }}
-                  onEnded={() => {
-                    setClipActivo(null);
+                  onEnded={(e) => {
+                    const v = e.currentTarget;
+                    if (clipActivo) {
+                      const r = clipMainRef.current;
+                      clipMainRef.current = null;
+                      setClipActivo(null);
+                      if (r) {
+                        clipResumeRef.current = r;
+                        try { v.src = r.src; } catch (_) {}
+                        setReproduciendo(true);
+                      } else {
+                        setReproduciendo(false);
+                        setProgreso(1);
+                      }
+                      if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                      return;
+                    }
                     setReproduciendo(false);
                     setProgreso(1);
                     if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
@@ -1369,26 +1400,6 @@ function TratamientoApp({ videoInicial }) {
                 </div>
 
               </div>
-                {clipActivo && clipActivo.videoUrl && (
-                  <video
-                    ref={(el) => {
-                      clipRef.current = el;
-                      if (el) el.play().catch(() => {});
-                    }}
-                    src={clipActivo.videoUrl}
-                    muted
-                    autoPlay
-                    playsInline
-                    onEnded={() => {
-                      const v = videoRef.current;
-                      if (v) v.play().catch(() => {});
-                      setClipActivo(null);
-                      setReproduciendo(true);
-                    }}
-                    title={`Clip en ${formatoTiempo(clipActivo.insertarEn ?? 0)}`}
-                    style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '2px solid #16a34a', cursor: 'pointer' }}
-                  />
-                )}
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
                   <button
                     onClick={togglePlay}
