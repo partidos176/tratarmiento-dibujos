@@ -1970,6 +1970,22 @@ function TratamientoApp({ videoInicial }) {
                     Rayas
                   </button>
                   )}
+                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Rotar
+                      </span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
+                        onChange={(e) => actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) })}
+                        title="Rotación del círculo"
+                        style={{ width: '120px', cursor: 'pointer' }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2099,17 +2115,6 @@ function TratamientoApp({ videoInicial }) {
               title="Opacidad"
               style={{ width: '120px', cursor: 'pointer' }}
             />
-            {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
-              <input
-                type="range"
-                min="0"
-                max="360"
-                value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
-                onChange={(e) => { if (figuraSeleccionada) actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) }); }}
-                title="Rotación del círculo"
-                style={{ width: '120px', cursor: 'pointer' }}
-              />
-            )}
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
             if (modoFlechaClick) {
