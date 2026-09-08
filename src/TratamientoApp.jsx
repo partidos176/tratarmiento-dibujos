@@ -1330,12 +1330,13 @@ function TratamientoApp({ videoInicial }) {
                     const d = v.duration || 0;
                     setDuracion(d);
                     const t = v.currentTime;
-                    if (clipActivo) { setProgreso(d ? t / d : 0); return; }
+                    if (clipMainRef.current) { setProgreso(d ? t / d : 0); return; }
                     if (t > prevTiempoRef.current) {
                       const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
                       if (cl) {
-                        prevTiempoRef.current = cl.insertarEn + (cl.duracion || 4);
-                        clipMainRef.current = { t: cl.insertarEn, src: videoUrl };
+                        const hasta = cl.insertarEn + (cl.duracion || 4);
+                        prevTiempoRef.current = hasta;
+                        clipMainRef.current = { t: cl.insertarEn, hasta, src: videoUrl };
                         setClipActivo(cl);
                         setReproduciendo(true);
                         try { v.src = cl.videoUrl; } catch (_) {}
@@ -1348,12 +1349,13 @@ function TratamientoApp({ videoInicial }) {
                   }}
                   onEnded={(e) => {
                     const v = e.currentTarget;
-                    if (clipActivo) {
+                    if (clipMainRef.current || clipActivo) {
                       const r = clipMainRef.current;
                       clipMainRef.current = null;
                       setClipActivo(null);
                       if (r) {
-                        clipResumeRef.current = r;
+                        prevTiempoRef.current = r.hasta;
+                        clipResumeRef.current = { t: r.t + 0.1, src: r.src };
                         try { v.src = r.src; } catch (_) {}
                         setReproduciendo(true);
                       } else {
@@ -1366,6 +1368,21 @@ function TratamientoApp({ videoInicial }) {
                     setReproduciendo(false);
                     setProgreso(1);
                     if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                  }}
+                  onError={(e) => {
+                    const v = e.currentTarget;
+                    if (clipMainRef.current || clipActivo) {
+                      const r = clipMainRef.current;
+                      clipMainRef.current = null;
+                      setClipActivo(null);
+                      if (r) {
+                        prevTiempoRef.current = r.hasta;
+                        clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                        try { v.src = r.src; } catch (_) {}
+                        v.play().catch(() => {});
+                        setReproduciendo(true);
+                      }
+                    }
                   }}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
