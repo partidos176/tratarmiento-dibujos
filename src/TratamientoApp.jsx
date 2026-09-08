@@ -742,7 +742,6 @@ function TratamientoApp({ videoInicial }) {
     setCapturaSeleccionada(nueva);
     setCapturaGuardada(null);
     setImgDim(null);
-    asignarFotoACorte(nueva.id, nueva.dataUrl, [], nueva.tiempo, true);
     setHoja('Edición');
   };
 
@@ -1798,6 +1797,7 @@ function TratamientoApp({ videoInicial }) {
                               ? (viva.imagenEditada || viva.dataUrl)
                               : (f && typeof f === 'object' ? f.dataUrl : null);
                             if (!srcFoto) return null;
+                            if (!viva && (!f || typeof f !== 'object' || !Array.isArray(f.figuras) || f.figuras.length === 0)) return null;
                             return (
                               <div key={capId ?? fi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                               <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
