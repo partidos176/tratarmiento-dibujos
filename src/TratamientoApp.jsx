@@ -998,61 +998,64 @@ function TratamientoApp({ videoInicial }) {
     return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${common}/>`;
   };
 
-  const generarVideo = (svgFn, w, h, onProgress) => new Promise((resolve, reject) => {
-    try {
-      const totalFrames = 120;
-      const frameDuration = 1000 / 30;
-      const promises = [];
-      for (let i = 0; i <= totalFrames; i++) {
-        const t = Math.min(4000, i * 33);
-        const svgStr = svgFn(t);
-        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        promises.push(new Promise((res) => {
-          const img = new Image();
-          img.onload = () => { URL.revokeObjectURL(url); res(img); };
-          img.onerror = () => { URL.revokeObjectURL(url); res(null); };
-          img.src = url;
-        }));
+  const generarVideo = async (figurasFn, fondoDataUrl, w, h, onProgress) => {
+    const cargarImg = (src) => new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = src;
+    });
+    const fondo = await cargarImg(fondoDataUrl);
+    const totalFrames = 120;
+    const frameDuration = 1000 / 30;
+    const cuadros = [];
+    for (let i = 0; i <= totalFrames; i++) {
+      const t = Math.min(4000, i * 33);
+      const partes = figurasFn(t) || '';
+      let imgCuadro = null;
+      if (partes) {
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${partes}</svg>`;
+        const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
+        try { imgCuadro = await cargarImg(url); }
+        catch (_) { imgCuadro = null; }
+        finally { URL.revokeObjectURL(url); }
       }
-      Promise.all(promises).then((frames) => {
-        if (onProgress) onProgress(20);
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        const stream = canvas.captureStream(30);
-        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
-        const chunks = [];
-        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-        rec.onstop = () => {
-          stream.getTracks().forEach(t => t.stop());
-          if (onProgress) onProgress(100);
-          resolve(URL.createObjectURL(new Blob(chunks, { type: mime })));
-        };
-        rec.onerror = reject;
-        rec.start();
-        let idx = 0;
-        const drawNext = () => {
-          if (idx < frames.length && frames[idx]) {
-            ctx.drawImage(frames[idx], 0, 0, w, h);
-          }
-          idx++;
-          if (onProgress && idx % 10 === 0) onProgress(20 + Math.round((idx / frames.length) * 80));
-          if (idx < frames.length) {
-            setTimeout(drawNext, frameDuration);
-          } else {
-            if (onProgress) onProgress(95);
-            try { rec.stop(); } catch (e) { reject(e); }
-          }
-        };
-        drawNext();
-      }).catch(reject);
-    } catch (e) {
-      reject(e);
+      cuadros.push(imgCuadro);
+      if (onProgress) onProgress(Math.round((i / totalFrames) * 50));
     }
-  });
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const stream = canvas.captureStream(30);
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    await new Promise((resRec, rejRec) => {
+      rec.onstop = () => { try { stream.getTracks().forEach(t => t.stop()); } catch (_) {} resRec(); };
+      rec.onerror = rejRec;
+      rec.start();
+      let idx = 0;
+      const drawNext = () => {
+        try { ctx.drawImage(fondo, 0, 0, w, h); } catch (_) {}
+        if (idx < cuadros.length && cuadros[idx]) {
+          try { ctx.drawImage(cuadros[idx], 0, 0, w, h); } catch (_) {}
+        }
+        idx++;
+        if (onProgress) onProgress(50 + Math.round((idx / (totalFrames + 1)) * 45));
+        if (idx <= totalFrames) {
+          setTimeout(drawNext, frameDuration);
+        } else {
+          if (onProgress) onProgress(95);
+          try { rec.stop(); } catch (e) { rejRec(e); }
+        }
+      };
+      drawNext();
+    });
+    if (onProgress) onProgress(100);
+    return URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+  };
 
   const animarElipses = async () => {
     if (!capturaSeleccionada || !imgDim || figuras.length === 0) return;
@@ -1154,15 +1157,15 @@ function TratamientoApp({ videoInicial }) {
       setProgresoVideo(10);
       let videoUrl = null;
       try {
-        const svgFn = (t) => {
+        const figurasFn = (t) => {
           const p = Math.min(1, Math.max(0, (t - 200) / 3600));
           const e = 1 - Math.pow(1 - p, 3);
-          const figAnim = figuras.map(f => ({ ...f, crecimiento: e }));
-          return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${fondoLimpio}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
+          return figuras.map(f => ({ ...f, crecimiento: e })).map(f => svgFigura(f, imgDim)).join('');
         };
-        videoUrl = await generarVideo(svgFn, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
+        videoUrl = await generarVideo(figurasFn, fondoLimpio, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
+        setAviso('No se pudo generar el vídeo de la animación. Se ha guardado la imagen.');
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
