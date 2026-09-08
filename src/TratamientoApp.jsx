@@ -1329,7 +1329,27 @@ function TratamientoApp({ videoInicial }) {
                 {archivo ? archivo.name : '-'}
               </span>
             </label>
-
+            {archivo && (
+              <button
+                onClick={() => {
+                  if (videoUrl) URL.revokeObjectURL(videoUrl);
+                  if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                  clipMainRef.current = null;
+                  clipResumeRef.current = null;
+                  setClipActivo(null);
+                  prevTiempoRef.current = 0;
+                  corteCargadoRef.current = null;
+                  clipOrigenRef.current = null;
+                  setArchivo(null);
+                  setVideoUrl('');
+                  setProgreso(0);
+                  setReproduciendo(false);
+                }}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                Eliminar
+              </button>
+            )}
           </div>
           {videoUrl && (
             <>
