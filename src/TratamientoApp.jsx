@@ -1345,6 +1345,26 @@ function TratamientoApp({ videoInicial }) {
                 </div>
 
               </div>
+                {clipActivo && clipActivo.videoUrl && (
+                  <video
+                    ref={(el) => {
+                      clipRef.current = el;
+                      if (el) el.play().catch(() => {});
+                    }}
+                    src={clipActivo.videoUrl}
+                    muted
+                    autoPlay
+                    playsInline
+                    onEnded={() => {
+                      const v = videoRef.current;
+                      if (v) v.play().catch(() => {});
+                      setClipActivo(null);
+                      setReproduciendo(true);
+                    }}
+                    title={`Clip en ${formatoTiempo(clipActivo.insertarEn ?? 0)}`}
+                    style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '2px solid #16a34a', cursor: 'pointer' }}
+                  />
+                )}
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
                   <button
                     onClick={togglePlay}
@@ -2600,7 +2620,8 @@ function TratamientoApp({ videoInicial }) {
                           document.body.appendChild(a);
                           a.click();
                           document.body.removeChild(a);
-                          setCapturas(prev => [...prev, capturaGuardada]);
+                          const entrada = { ...capturaGuardada, insertarEn: capturaGuardada.tiempo };
+                          setCapturas(prev => [...prev, entrada]);
                           setFotoPorCorte(prev => {
                             const k = String(capturaGuardada.tiempo);
                             const foto = { capturaId: capturaGuardada.id, dataUrl: capturaGuardada.dataUrl, figuras: [] };
