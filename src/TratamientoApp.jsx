@@ -1499,19 +1499,6 @@ function TratamientoApp({ videoInicial }) {
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   </button>
-                  <button
-                    onClick={() => {
-                      (capturas || []).forEach(c => {
-                        if (!c || c.tiempo == null) return;
-                        asignarFotoACorte(c.id, c.imagenEditada || c.dataUrl, c.figuras, c.tiempo, false, c.baseDataUrl || null);
-                      });
-                      setAviso('Imágenes guardadas en sus líneas de corte');
-                    }}
-                    title="Guardar las imágenes en su línea de corte correspondiente"
-                    style={{ flexShrink: 0, background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-                  >
-                    A cortes
-                  </button>
                   {exportando && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '140px' }}>
                       <div style={{ flex: 1, height: '8px', background: 'var(--bg-secondary, #1e293b)', borderRadius: '4px', overflow: 'hidden' }}>
