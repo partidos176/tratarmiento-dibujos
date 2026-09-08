@@ -127,7 +127,7 @@ function TratamientoApp({ videoInicial }) {
       let capturaConImagen = null;
       if (capturaSeleccionada) {
         capturaConImagen = { ...capturaSeleccionada, videoUrl: null };
-        capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.dataUrl, figuras);
+        capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.baseDataUrl || capturaConImagen.dataUrl, figuras);
       }
       const idsFotos = new Set(Object.values(fotoPorCorte || {}).map(v => (v && typeof v === 'object' ? v.capturaId : v)).filter(v => v != null));
       const fotos = (capturas || [])
@@ -1133,7 +1133,8 @@ function TratamientoApp({ videoInicial }) {
     setExportando(true);
     setProgresoVideo(0);
     try {
-      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figuras.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
+      const fondoLimpio = capturaSeleccionada.baseDataUrl || capturaSeleccionada.dataUrl;
+      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${fondoLimpio}" width="${imgDim.w}" height="${imgDim.h}"/>${figuras.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
       const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const img = new Image();
@@ -1152,7 +1153,7 @@ function TratamientoApp({ videoInicial }) {
           const p = Math.min(1, Math.max(0, (t - 200) / 3600));
           const e = 1 - Math.pow(1 - p, 3);
           const figAnim = figuras.map(f => ({ ...f, crecimiento: e }));
-          return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${capturaSeleccionada.dataUrl}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
+          return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgDim.w}" height="${imgDim.h}" viewBox="0 0 ${imgDim.w} ${imgDim.h}"><image href="${fondoLimpio}" width="${imgDim.w}" height="${imgDim.h}"/>${figAnim.map(f => svgFigura(f, imgDim)).join('')}</svg>`;
         };
         videoUrl = await generarVideo(svgFn, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
       } catch (e) {
@@ -1160,7 +1161,7 @@ function TratamientoApp({ videoInicial }) {
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
+      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
       setCapturas(prev => [...prev, nuevaEntrada]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
@@ -1169,7 +1170,7 @@ function TratamientoApp({ videoInicial }) {
       cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
       if (mejor != null && mejorD <= 10) {
         const k = String(mejor);
-        const foto = { capturaId: nuevoId, dataUrl: nueva, figuras: figurasCopia };
+        const foto = { capturaId: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, figuras: figurasCopia };
         setFotoPorCorte(prev => ({ ...prev, [k]: foto }));
       }
     } catch (e) {
@@ -1676,7 +1677,7 @@ function TratamientoApp({ videoInicial }) {
                               setCapturaSeleccionada(viva);
                               setFiguras(normalizarFiguras(viva.figuras));
                             } else if (f && typeof f === 'object') {
-                              const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
+                              const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.baseDataUrl || f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
                               setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
                               setCapturaSeleccionada(restaurada);
                               setFiguras(restaurada.figuras);
@@ -2034,7 +2035,7 @@ function TratamientoApp({ videoInicial }) {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', ...(fotoCompleta ? { width: '100%', height: '100%' } : {}) }}>
                   <div style={{ position: 'relative', display: 'inline-block', ...(fotoCompleta ? { width: '100%', height: '100%' } : {}) }} onClick={() => setFiguraSeleccionada(null)}>
                   <img
-                    src={capturaSeleccionada.dataUrl}
+                    src={capturaSeleccionada.baseDataUrl || capturaSeleccionada.dataUrl}
                     alt="Captura en edición"
                     onLoad={(e) => setImgDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
                     style={{ display: 'block', pointerEvents: 'none', ...(fotoCompleta ? { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' } : { maxWidth: '100%', maxHeight: '80vh' }), borderRadius: '12px', border: '1px solid #334155' }}
