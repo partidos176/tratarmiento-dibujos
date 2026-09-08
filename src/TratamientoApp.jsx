@@ -1144,8 +1144,7 @@ function TratamientoApp({ videoInicial }) {
         console.error('Error al generar el video de la captura', e);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: videoUrl ? (capturaSeleccionada.tiempo ?? 0) : null };
-      setCapturas(prev => [...prev, nuevaEntrada]);
+      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: null };
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
       setCapturaSeleccionada(nuevaEntrada);
       const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
@@ -2591,6 +2590,28 @@ function TratamientoApp({ videoInicial }) {
                       <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
                         Duración: {formatoTiempo(capturaDuracion)}
                       </span>
+                    )}
+                    {capturaGuardada.videoUrl && (
+                      <button
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = capturaGuardada.videoUrl;
+                          a.download = 'animacion.webm';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          setCapturas(prev => [...prev, capturaGuardada]);
+                          setFotoPorCorte(prev => {
+                            const k = String(capturaGuardada.tiempo);
+                            const foto = { capturaId: capturaGuardada.id, dataUrl: capturaGuardada.dataUrl, figuras: [] };
+                            return { ...prev, [k]: foto };
+                          });
+                        }}
+                        style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar
+                      </button>
                     )}
                   </div>
                 )}
