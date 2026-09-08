@@ -1292,24 +1292,12 @@ function TratamientoApp({ videoInicial }) {
                     const d = v.duration || 0;
                     setDuracion(d);
                     const t = v.currentTime;
-                    if (!clipActivo && t > prevTiempoRef.current) {
-                      const cl = capturas.find(c => c.videoUrl && c.insertarEn != null && prevTiempoRef.current < c.insertarEn && t >= c.insertarEn);
-                      if (cl) {
-                        prevTiempoRef.current = cl.insertarEn + (cl.duracion || 4);
-                        v.pause();
-                        setClipActivo(cl);
-                        setReproduciendo(true);
-                        return;
-                      }
-                    }
                     prevTiempoRef.current = t;
                     setProgreso(d ? t / d : 0);
                   }}
                   onEnded={() => {
-                    setClipActivo(null);
                     setReproduciendo(false);
                     setProgreso(1);
-                    if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                   }}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
@@ -1345,128 +1333,7 @@ function TratamientoApp({ videoInicial }) {
                   </svg>
                 </button>
                 </div>
-
               </div>
-                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
-                  <button
-                    onClick={togglePlay}
-                    style={{ background: reproduciendo ? '#f59e0b' : '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    {reproduciendo ? 'PAUSA' : 'PLAY'}
-                  </button>
-                  <button
-                    onClick={capturarImagen}
-                    style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: '#8b5cf6', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', cursor: 'pointer' }}
-                    title="Capturar imagen"
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1 2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                      <circle cx="12" cy="13" r="4" />
-                    </svg>
-                  </button>
-                  <input
-                    value={nombreVideo}
-                    onChange={(e) => setNombreVideo(e.target.value)}
-                    placeholder="Nombre del vídeo"
-                    title="Nombre del vídeo que se genera"
-                    style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '0.7rem 1rem', color: '#e2e8f0', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', outline: 'none', maxWidth: '200px', minWidth: 0, flex: '1 1 auto' }}
-                  />
-                  <button
-                    onClick={() => {
-                      const name = nombreVideo.trim() || (archivo ? archivo.name.replace(/\.[^.]+$/, '') : 'video');
-                      exportarVideo(name);
-                    }}
-                    title="Descargar vídeo"
-                    style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', cursor: 'pointer' }}
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                  </button>
-                  {exportando && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '140px' }}>
-                      <div style={{ flex: 1, height: '8px', background: 'var(--bg-secondary, #1e293b)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ width: `${progresoExport}%`, height: '100%', background: '#22c55e', borderRadius: '4px' }} />
-                      </div>
-                      <span style={{ color: '#22c55e', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'var(--font-mono, monospace)' }}>{progresoExport}%</span>
-                    </div>
-                  )}
-                </div>
-
-                {capturas.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    {capturas.map((c, i) => (
-                      <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                        <div style={{ position: 'relative' }}>
-                          {(c.videoUrl && c.insertarEn == null) ? (
-                            <video
-                              src={c.videoUrl}
-                              muted
-                              controls
-                              playsInline
-                              preload="metadata"
-                              draggable
-                              onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; }}
-                              onClick={(e) => e.stopPropagation()}
-                              title="Clip 2s (arrástralo a la línea de tiempo)"
-                              style={{ width: '160px', borderRadius: '8px', border: '1px solid #16a34a', background: '#000000', cursor: 'grab' }}
-                            />
-                          ) : (
-                            <img
-                              src={c.imagenEditada || c.dataUrl}
-                              alt={`Captura ${i + 1}`}
-                              onClick={() => {
-                                setFiguras(c.figuras || []);
-                                setFiguraSeleccionada(null);
-                                setCapturaSeleccionada(c);
-                                setCapturaGuardada(null);
-                                setImgDim(null);
-                                setHoja('Edición');
-                              }}
-                              style={{ width: '160px', borderRadius: '8px', border: '1px solid #334155', cursor: 'pointer' }}
-                            />
-                          )}
-                          <button
-                            onClick={() => setCapturas(prev => prev.filter(x => x.id !== c.id))}
-                            title="Eliminar captura"
-                            style={{ position: 'absolute', top: '4px', right: '4px', width: '22px', height: '22px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.9rem', lineHeight: '22px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                        {c.videoUrl && (
-                          <button
-                            onClick={() => {
-                              setCapturas(prev => prev.map(x => x.id === c.id ? { ...x, insertarEn: c.tiempo } : x));
-                            }}
-                            title={c.insertarEn != null ? 'Ya insertado en su punto' : 'Insertar video en el punto de su captura original'}
-                            style={{ background: c.insertarEn != null ? '#16a34a' : '#0f172a', border: `1px solid #16a34a`, borderRadius: '8px', padding: '0.4rem 0.6rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: c.insertarEn != null ? '#ffffff' : '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer' }}
-                          >
-                            {c.insertarEn != null ? 'Insertado' : 'Insertar'}
-                          </button>
-                        )}
-                        {(() => {
-                          const cortesAsignados = cortes.filter(ct => {
-                            const f = fotoPorCorte[String(ct)];
-                            if (!f) return false;
-                            const capId = (f && typeof f === 'object') ? f.capturaId : f;
-                            return capId === c.id;
-                          });
-                          return cortesAsignados.length > 0 ? (
-                            <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.65rem', color: '#38bdf8', textAlign: 'center' }}>
-                              {cortesAsignados.map(ct => formatoTiempo(ct)).join(', ')}
-                            </span>
-                          ) : null;
-                        })()}
-                        <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>
-                          {c.nombre ? `${c.nombre} · ` : ''}{formatoTiempo(c.tiempo)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
             </>
           )}
         </div>
