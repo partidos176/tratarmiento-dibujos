@@ -98,8 +98,27 @@ function TratamientoApp({ videoInicial }) {
         return { ...f, id, crecimiento: (typeof c === 'number' && Number.isFinite(c)) ? c : 1 };
       });
   };
+  const videoBlobADataUrl = (url) => new Promise((res) => {
+    if (!url || typeof url !== 'string' || !url.startsWith('blob:')) { res(null); return; }
+    fetch(url).then(r => r.blob()).then(b => {
+      if (!b || b.size === 0) { res(null); return; }
+      const fr = new FileReader();
+      fr.onload = () => res(typeof fr.result === 'string' ? fr.result : null);
+      fr.onerror = () => res(null);
+      fr.readAsDataURL(b);
+    }).catch(() => res(null));
+  });
+  const dataUrlAVideoBlobUrl = async (dataUrl) => {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:video')) return null;
+    try {
+      const r = await fetch(dataUrl);
+      const b = await r.blob();
+      if (!b || b.size === 0) return null;
+      return URL.createObjectURL(b);
+    } catch (_) { return null; }
+  };
 
-  const aplicarCortes = (data) => {
+  const aplicarCortes = async (data) => {
     if (!data || !Array.isArray(data.cortes)) throw new Error('Archivo no válido');
     const lista = data.cortes.filter((c) => Number.isFinite(Number(c))).map((c) => Number(c)).sort((a, b) => a - b);
     const objStr = (o) => (o && typeof o === 'object' ? { ...o } : {});
@@ -109,11 +128,16 @@ function TratamientoApp({ videoInicial }) {
     setCortesEditados(objStr(data.cortesEditados));
     setFotoPorCorte(objStr(data.fotoPorCorte));
     if (Array.isArray(data.fotos)) {
+      const limpias = await Promise.all(
+        data.fotos.filter(f => f && f.id != null && f.dataUrl).map(async (f) => {
+          const videoUrl = await dataUrlAVideoBlobUrl(f.videoDataUrl);
+          const { videoDataUrl: _, ...resto } = f;
+          return { ...resto, videoUrl };
+        })
+      );
       setCapturas(prev => {
         const copia = [...prev];
-        data.fotos.forEach(f => {
-          if (!f || f.id == null || !f.dataUrl) return;
-          const limpia = { ...f, videoUrl: null };
+        limpias.forEach(limpia => {
           const ix = copia.findIndex(c => c.id === limpia.id);
           if (ix >= 0) copia[ix] = limpia; else copia.push(limpia);
         });
@@ -130,10 +154,15 @@ function TratamientoApp({ videoInicial }) {
         capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.baseDataUrl || capturaConImagen.dataUrl, figuras);
       }
       const idsFotos = new Set(Object.values(fotoPorCorte || {}).flatMap(v => (Array.isArray(v) ? v : [v])).map(v => (v && typeof v === 'object' ? v.capturaId : v)).filter(v => v != null));
-      const fotos = (capturas || [])
-        .filter(c => c && idsFotos.has(c.id) && c.dataUrl)
-        .map(c => ({ ...c, videoUrl: null }));
-      if (capturaConImagen && !fotos.some(f => f.id === capturaConImagen.id)) fotos.push(capturaConImagen);
+      const fotos = await Promise.all(
+        (capturas || [])
+          .filter(c => c && idsFotos.has(c.id) && c.dataUrl)
+          .map(async (c) => ({ ...c, videoUrl: null, videoDataUrl: await videoBlobADataUrl(c.videoUrl) }))
+      );
+      if (capturaConImagen) {
+        capturaConImagen.videoDataUrl = await videoBlobADataUrl(capturaSeleccionada.videoUrl);
+        if (!fotos.some(f => f.id === capturaConImagen.id)) fotos.push(capturaConImagen);
+      }
       const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 3, guardado: new Date().toISOString(), ...datosCortes(), fotos, edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
       const baseVideo = (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'cortes';
       const nombreArchivo = `${baseVideo}.json`;
@@ -154,14 +183,16 @@ function TratamientoApp({ videoInicial }) {
   const importarCortes = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const data = JSON.parse(reader.result);
-        aplicarCortes(data);
+        await aplicarCortes(data);
         if (data.edicion) {
           const cap = data.edicion.captura;
           if (cap && cap.dataUrl) {
-            const limpia = { ...cap, videoUrl: null };
+            const videoUrl = await dataUrlAVideoBlobUrl(cap.videoDataUrl);
+            const { videoDataUrl: _, ...restoCap } = cap;
+            const limpia = { ...restoCap, videoUrl };
             setCapturas(prev => prev.some(c => c.id === limpia.id) ? prev.map(c => c.id === limpia.id ? limpia : c) : [...prev, limpia]);
             setCapturaSeleccionada(limpia);
             setFiguras(normalizarFiguras(Array.isArray(data.edicion.figuras) ? data.edicion.figuras : limpia.figuras));
@@ -259,7 +290,7 @@ function TratamientoApp({ videoInicial }) {
         const s = await idbLeer();
         if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
           setCapturas(s.capturas);
-          try { aplicarCortes(s); } catch (_) {}
+          try { await aplicarCortes(s); } catch (_) {}
           if (Array.isArray(s.figuras)) setFiguras(normalizarFiguras(s.figuras));
           const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
           setCapturaSeleccionada(sel);
