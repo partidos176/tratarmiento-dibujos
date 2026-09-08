@@ -1162,7 +1162,13 @@ function TratamientoApp({ videoInicial }) {
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
       const nuevaEntrada = { id: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
-      setCapturas(prev => [...prev, nuevaEntrada]);
+      setCapturas(prev => {
+        const resto = (prev || []).filter(c => !(c && c.tiempo === capturaSeleccionada.tiempo));
+        (prev || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).forEach(c => {
+          if (c.videoUrl && typeof c.videoUrl === 'string' && c.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(c.videoUrl); } catch (_) {} }
+        });
+        return [...resto, nuevaEntrada];
+      });
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
