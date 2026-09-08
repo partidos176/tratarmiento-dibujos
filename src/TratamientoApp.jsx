@@ -663,7 +663,6 @@ function TratamientoApp({ videoInicial }) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
     const nueva = { id: Date.now(), dataUrl: canvas.toDataURL('image/png'), tiempo: v.currentTime };
-    setCapturas(prev => [...prev, nueva]);
     setFiguras([]);
     setFiguraSeleccionada(null);
     setCapturaSeleccionada(nueva);
