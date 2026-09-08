@@ -129,7 +129,7 @@ function TratamientoApp({ videoInicial }) {
         capturaConImagen = { ...capturaSeleccionada, videoUrl: null };
         capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.baseDataUrl || capturaConImagen.dataUrl, figuras);
       }
-      const idsFotos = new Set(Object.values(fotoPorCorte || {}).map(v => (v && typeof v === 'object' ? v.capturaId : v)).filter(v => v != null));
+      const idsFotos = new Set(Object.values(fotoPorCorte || {}).flatMap(v => (Array.isArray(v) ? v : [v])).map(v => (v && typeof v === 'object' ? v.capturaId : v)).filter(v => v != null));
       const fotos = (capturas || [])
         .filter(c => c && idsFotos.has(c.id) && c.dataUrl)
         .map(c => ({ ...c, videoUrl: null }));
@@ -673,6 +673,13 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
+  const idDeFoto = (x) => (x && typeof x === 'object' ? x.capturaId : x);
+  const listaFotosCorte = (ct) => {
+    const f = fotoPorCorte[String(ct)];
+    if (!f) return [];
+    const arr = Array.isArray(f) ? f : [f];
+    return arr.filter(x => x != null);
+  };
   const asignarFotoACorte = (capturaId, dataUrl, figuras, tiempo, soloSiVacio = false, baseDataUrl = null) => {
     const tCap = (tiempo ?? 0) + (clipOrigenRef.current ?? 0);
     let mejor = null, mejorD = Infinity;
@@ -680,7 +687,11 @@ function TratamientoApp({ videoInicial }) {
     if (mejor != null && mejorD <= 10) {
       const k = String(mejor);
       const foto = { capturaId, dataUrl, figuras: Array.isArray(figuras) ? [...figuras] : [], ...(baseDataUrl ? { baseDataUrl } : {}) };
-      setFotoPorCorte(prev => (soloSiVacio && prev[k] ? prev : { ...prev, [k]: foto }));
+      setFotoPorCorte(prev => {
+        const actual = Array.isArray(prev[k]) ? prev[k] : (prev[k] ? [prev[k]] : []);
+        if (soloSiVacio && actual.length > 0) return prev;
+        return { ...prev, [k]: [...actual.filter(x => idDeFoto(x) !== capturaId), foto] };
+      });
     }
   };
 
@@ -1183,13 +1194,23 @@ function TratamientoApp({ videoInicial }) {
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
       const nuevaEntrada = { id: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
-      setCapturas(prev => {
-        const resto = (prev || []).filter(c => !(c && c.tiempo === capturaSeleccionada.tiempo));
-        (prev || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).forEach(c => {
-          if (c.videoUrl && typeof c.videoUrl === 'string' && c.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(c.videoUrl); } catch (_) {} }
-        });
-        return [...resto, nuevaEntrada];
+      const idsExpulsadas = new Set((capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).map(c => c.id));
+      (capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).forEach(c => {
+        if (c.videoUrl && typeof c.videoUrl === 'string' && c.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(c.videoUrl); } catch (_) {} }
       });
+      setCapturas(prev => [...(prev || []).filter(c => !(c && c.tiempo === capturaSeleccionada.tiempo)), nuevaEntrada]);
+      if (idsExpulsadas.size > 0) {
+        setFotoPorCorte(prevF => {
+          const copia = { ...prevF };
+          Object.keys(copia).forEach(k => {
+            const v = copia[k];
+            const arr = (Array.isArray(v) ? v : (v ? [v] : [])).filter(x => !idsExpulsadas.has(idDeFoto(x)));
+            if (arr.length === 0) delete copia[k];
+            else copia[k] = arr;
+          });
+          return copia;
+        });
+      }
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
@@ -1554,12 +1575,7 @@ function TratamientoApp({ videoInicial }) {
                           </button>
                         )}
                         {(() => {
-                          const cortesAsignados = cortes.filter(ct => {
-                            const f = fotoPorCorte[String(ct)];
-                            if (!f) return false;
-                            const capId = (f && typeof f === 'object') ? f.capturaId : f;
-                            return capId === c.id;
-                          });
+                          const cortesAsignados = cortes.filter(ct => listaFotosCorte(ct).some(x => idDeFoto(x) === c.id));
                           return cortesAsignados.length > 0 ? (
                             <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.65rem', color: '#38bdf8', textAlign: 'center' }}>
                               {cortesAsignados.map(ct => formatoTiempo(ct)).join(', ')}
@@ -1732,34 +1748,41 @@ function TratamientoApp({ videoInicial }) {
                       ×
                     </button>
                     {(() => {
-                      const f = fotoPorCorte[String(ct)];
-                      const capId = (f && typeof f === 'object') ? f.capturaId : f;
-                      const viva = capId != null ? capturas.find(c => c.id === capId) : null;
-                      const srcFoto = viva
-                        ? (viva.imagenEditada || viva.dataUrl)
-                        : (f && typeof f === 'object' ? f.dataUrl : null);
-                      if (!srcFoto) return null;
+                      const lista = listaFotosCorte(ct);
+                      if (lista.length === 0) return null;
                       return (
-                        <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (viva) {
-                              setCapturaSeleccionada(viva);
-                              setFiguras(normalizarFiguras(viva.figuras));
-                            } else if (f && typeof f === 'object') {
-                              const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.baseDataUrl || f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
-                              setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
-                              setCapturaSeleccionada(restaurada);
-                              setFiguras(restaurada.figuras);
-                            } else {
-                              return;
-                            }
-                            setFiguraSeleccionada(null);
-                            setCapturaGuardada(null);
-                            setImgDim(null);
-                            setHoja('Edición');
-                          }}
-                          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                        <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                          {lista.map((f, fi) => {
+                            const capId = idDeFoto(f);
+                            const viva = capId != null ? capturas.find(c => c.id === capId) : null;
+                            const srcFoto = viva
+                              ? (viva.imagenEditada || viva.dataUrl)
+                              : (f && typeof f === 'object' ? f.dataUrl : null);
+                            if (!srcFoto) return null;
+                            return (
+                              <img key={capId ?? fi} src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (viva) {
+                                    setCapturaSeleccionada(viva);
+                                    setFiguras(normalizarFiguras(viva.figuras));
+                                  } else if (f && typeof f === 'object') {
+                                    const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.baseDataUrl || f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
+                                    setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
+                                    setCapturaSeleccionada(restaurada);
+                                    setFiguras(restaurada.figuras);
+                                  } else {
+                                    return;
+                                  }
+                                  setFiguraSeleccionada(null);
+                                  setCapturaGuardada(null);
+                                  setImgDim(null);
+                                  setHoja('Edición');
+                                }}
+                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                            );
+                          })}
+                        </div>
                       );
                     })()}
                 </div>
