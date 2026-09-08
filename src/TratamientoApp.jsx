@@ -84,6 +84,21 @@ function TratamientoApp({ videoInicial }) {
     fotoPorCorte: { ...fotoPorCorte }
   });
 
+  const normalizarFiguras = (lista) => {
+    const arr = Array.isArray(lista) ? lista : [];
+    const vistos = new Set();
+    const base = Date.now();
+    return arr
+      .filter(f => f && typeof f === 'object' && typeof f.tipo === 'string')
+      .map((f, i) => {
+        let id = f.id;
+        if (id == null || vistos.has(id)) id = base + i * 997 + Math.floor(Math.random() * 997);
+        vistos.add(id);
+        const c = f.crecimiento;
+        return { ...f, id, crecimiento: (typeof c === 'number' && Number.isFinite(c)) ? c : 1 };
+      });
+  };
+
   const aplicarCortes = (data) => {
     if (!data || !Array.isArray(data.cortes)) throw new Error('Archivo no válido');
     const lista = data.cortes.filter((c) => Number.isFinite(Number(c))).map((c) => Number(c)).sort((a, b) => a - b);
@@ -114,7 +129,7 @@ function TratamientoApp({ videoInicial }) {
         capturaConImagen = { ...capturaSeleccionada, videoUrl: null };
         capturaConImagen.imagenEditada = await componerImagenEditada(capturaConImagen.dataUrl, figuras);
       }
-      const idsFotos = new Set(Object.values(fotoPorCorte || {}));
+      const idsFotos = new Set(Object.values(fotoPorCorte || {}).map(v => (v && typeof v === 'object' ? v.capturaId : v)).filter(v => v != null));
       const fotos = (capturas || [])
         .filter(c => c && idsFotos.has(c.id) && c.dataUrl)
         .map(c => ({ ...c, videoUrl: null }));
@@ -149,9 +164,9 @@ function TratamientoApp({ videoInicial }) {
             const limpia = { ...cap, videoUrl: null };
             setCapturas(prev => prev.some(c => c.id === limpia.id) ? prev.map(c => c.id === limpia.id ? limpia : c) : [...prev, limpia]);
             setCapturaSeleccionada(limpia);
-            setFiguras(Array.isArray(data.edicion.figuras) ? data.edicion.figuras : (limpia.figuras || []));
+            setFiguras(normalizarFiguras(Array.isArray(data.edicion.figuras) ? data.edicion.figuras : limpia.figuras));
           } else if (Array.isArray(data.edicion.figuras)) {
-            setFiguras(data.edicion.figuras);
+            setFiguras(normalizarFiguras(data.edicion.figuras));
           }
           setFiguraSeleccionada(null);
           setImgDim(null);
@@ -245,7 +260,7 @@ function TratamientoApp({ videoInicial }) {
         if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
           setCapturas(s.capturas);
           try { aplicarCortes(s); } catch (_) {}
-          if (Array.isArray(s.figuras)) setFiguras(s.figuras);
+          if (Array.isArray(s.figuras)) setFiguras(normalizarFiguras(s.figuras));
           const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
           setCapturaSeleccionada(sel);
           setCapturaGuardada(null);
@@ -1144,16 +1159,17 @@ function TratamientoApp({ videoInicial }) {
         console.error('Error al generar el video de la captura', e);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
+      const figurasCopia = normalizarFiguras(figuras);
+      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
       setCapturas(prev => [...prev, nuevaEntrada]);
-      setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl });
+      setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       const tCap = (capturaSeleccionada.tiempo ?? 0) + (clipOrigenRef.current ?? 0);
       let mejor = null, mejorD = Infinity;
       cortes.forEach(ct => { const d = Math.abs(ct - tCap); if (d < mejorD) { mejorD = d; mejor = ct; } });
       if (mejor != null && mejorD <= 10) {
         const k = String(mejor);
-        const foto = { capturaId: nuevoId, dataUrl: nueva, figuras: [...figuras] };
+        const foto = { capturaId: nuevoId, dataUrl: nueva, figuras: figurasCopia };
         setFotoPorCorte(prev => ({ ...prev, [k]: foto }));
       }
     } catch (e) {
@@ -1437,7 +1453,7 @@ function TratamientoApp({ videoInicial }) {
                               src={c.imagenEditada || c.dataUrl}
                               alt={`Captura ${i + 1}`}
                               onClick={() => {
-                                setFiguras(c.figuras || []);
+                                setFiguras(normalizarFiguras(c.figuras));
                                 setFiguraSeleccionada(null);
                                 setCapturaSeleccionada(c);
                                 setCapturaGuardada(null);
@@ -1658,9 +1674,9 @@ function TratamientoApp({ videoInicial }) {
                             e.stopPropagation();
                             if (viva) {
                               setCapturaSeleccionada(viva);
-                              setFiguras(viva.figuras || []);
+                              setFiguras(normalizarFiguras(viva.figuras));
                             } else if (f && typeof f === 'object') {
-                              const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.dataUrl, videoUrl: null, duracion: 4, figuras: Array.isArray(f.figuras) ? [...f.figuras] : [], tiempo: ct, insertarEn: null };
+                              const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
                               setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
                               setCapturaSeleccionada(restaurada);
                               setFiguras(restaurada.figuras);
@@ -2296,7 +2312,7 @@ function TratamientoApp({ videoInicial }) {
                         const tamTxt = (f.fontSize || 0.06) * imgDim.h;
                         const anchoTxt = Math.max(60, (f.texto || 'Texto').length * tamTxt * 0.6);
                         return (
-                          <g key={f.id}>
+                          <g key={f.id} onClick={(e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); }}>
                             {shape}
                             {sel && (f.tipo === 'linea' || f.tipo === 'flecha' ? (
                               <>
