@@ -796,7 +796,7 @@ function TratamientoApp({ videoInicial }) {
 
   const anadirCirculo = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0, rot: 0 }]);
     setFiguraSeleccionada(id);
   };
 
@@ -1050,7 +1050,8 @@ function TratamientoApp({ videoInicial }) {
     const rx = (f.ancho * d.w / 2) * e;
     const ry = (f.alto * d.h / 2) * e;
     if (rx <= 0.001 || ry <= 0.001) return '';
-    return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${common}/>`;
+    const rot = f.rot ? ` transform="rotate(${f.rot} ${cx} ${cy})"` : '';
+    return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rot} ${common}/>`;
   };
 
   const generarVideo = async (figurasFn, fondoDataUrl, w, h, onProgress) => {
@@ -2098,6 +2099,17 @@ function TratamientoApp({ videoInicial }) {
               title="Opacidad"
               style={{ width: '120px', cursor: 'pointer' }}
             />
+            {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
+                onChange={(e) => { if (figuraSeleccionada) actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) }); }}
+                title="Rotación del círculo"
+                style={{ width: '120px', cursor: 'pointer' }}
+              />
+            )}
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
             if (modoFlechaClick) {
@@ -2155,7 +2167,7 @@ function TratamientoApp({ videoInicial }) {
               const p = puntoImagen(e);
               if (p) {
                 const id = Date.now();
-                setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.04, alto: 0.025, color: '#38bdf8', opacidad: 0, crecimiento: 1, sinRelleno: true }]);
+                setFiguras(prev => [...prev, { id, tipo: 'circulo', x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)), ancho: 0.04, alto: 0.025, color: '#38bdf8', opacidad: 0, crecimiento: 1, sinRelleno: true, rot: 0 }]);
                 setFiguraSeleccionada(id);
                 elipsesSessionRef.current.push({ x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) });
               }
@@ -2309,7 +2321,7 @@ function TratamientoApp({ videoInicial }) {
                               return <path {...shapeProps} d={dTri} />;
                             })()
                            : f.tipo === 'circulo'
-                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} />
+                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} />
                            : f.tipo === 'c'
                              ? (() => {
                                  const eC = f.crecimiento ?? 1;
