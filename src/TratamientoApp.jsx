@@ -257,6 +257,59 @@ function TratamientoApp({ videoInicial }) {
     try { db.close(); } catch (_) {}
     return valor;
   };
+  const VIDEO_PP_KEY = 'video-presentacion';
+  const VIDEO_CORTES_KEY = 'video-cortes';
+  const videoGuardadoRef = useRef({ ppal: null, cortes: null });
+  const idbPonerKV = async (clave, valor) => {
+    const db = await idbAbrir();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(valor, clave);
+      tx.oncomplete = () => { try { db.close(); } catch (_) {} resolve(); };
+      tx.onerror = () => reject(tx.error);
+    });
+  };
+  const idbLeerKV = async (clave) => {
+    const db = await idbAbrir();
+    const valor = await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const rq = tx.objectStore('kv').get(clave);
+      rq.onsuccess = () => resolve(rq.result);
+      rq.onerror = () => reject(rq.error);
+    });
+    try { db.close(); } catch (_) {}
+    return valor;
+  };
+  useEffect(() => {
+    if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.startsWith('blob:')) return;
+    if (videoGuardadoRef.current.ppal === videoUrl) return;
+    videoGuardadoRef.current.ppal = videoUrl;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(videoUrl);
+        const b = await r.blob();
+        if (cancelado || !b || !b.size) return;
+        await idbPonerKV(VIDEO_PP_KEY, { blob: b, nombre: (archivo && archivo.name) || 'video' });
+      } catch (_) {}
+    })();
+    return () => { cancelado = true; };
+  }, [videoUrl]);
+  useEffect(() => {
+    if (!videoUrlCortes || typeof videoUrlCortes !== 'string' || !videoUrlCortes.startsWith('blob:')) return;
+    if (videoGuardadoRef.current.cortes === videoUrlCortes) return;
+    videoGuardadoRef.current.cortes = videoUrlCortes;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(videoUrlCortes);
+        const b = await r.blob();
+        if (cancelado || !b || !b.size) return;
+        await idbPonerKV(VIDEO_CORTES_KEY, { blob: b, nombre: (archivoCortes && archivoCortes.name) || 'video' });
+      } catch (_) {}
+    })();
+    return () => { cancelado = true; };
+  }, [videoUrlCortes]);
   const construirFotoSesion = () => ({
     v: 1,
     guardado: Date.now(),
@@ -301,6 +354,25 @@ function TratamientoApp({ videoInicial }) {
           setFiguraSeleccionada(null);
           setAviso('Sesión anterior recuperada');
         }
+        try {
+          const vp = await idbLeerKV(VIDEO_PP_KEY);
+          if (vp && vp.blob && vp.blob.size) {
+            const url = URL.createObjectURL(vp.blob);
+            videoGuardadoRef.current.ppal = url;
+            setArchivo({ name: vp.nombre || 'video' });
+            setVideoUrl(url);
+            setProgreso(0);
+          }
+        } catch (_) {}
+        try {
+          const vc = await idbLeerKV(VIDEO_CORTES_KEY);
+          if (vc && vc.blob && vc.blob.size) {
+            const url = URL.createObjectURL(vc.blob);
+            videoGuardadoRef.current.cortes = url;
+            setArchivoCortes({ name: vc.nombre || 'video' });
+            setVideoUrlCortes(url);
+          }
+        } catch (_) {}
       } catch (_) {}
       sesionListaRef.current = true;
     })();
