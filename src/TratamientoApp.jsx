@@ -1971,7 +1971,7 @@ function TratamientoApp({ videoInicial }) {
                   </button>
                   )}
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem', marginTop: '0.8rem' }}>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Rotar
                       </span>
