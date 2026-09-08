@@ -1767,7 +1767,8 @@ function TratamientoApp({ videoInicial }) {
                               : (f && typeof f === 'object' ? f.dataUrl : null);
                             if (!srcFoto) return null;
                             return (
-                              <img key={capId ?? fi} src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
+                              <div key={capId ?? fi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                              <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (viva) {
@@ -1787,6 +1788,12 @@ function TratamientoApp({ videoInicial }) {
                                   setHoja('Edición');
                                 }}
                                 style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                              {viva && viva.videoUrl && (
+                                <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#22c55e' }}>
+                                  {formatoTiempo(viva.insertarEn ?? viva.tiempo ?? ct)}
+                                </span>
+                              )}
+                              </div>
                             );
                           })}
                         </div>
