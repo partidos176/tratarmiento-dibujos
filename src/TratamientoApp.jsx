@@ -77,6 +77,7 @@ function TratamientoApp({ videoInicial }) {
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
   const [filaArrastrando, setFilaArrastrando] = useState(null);
+  const [filaSeleccionada, setFilaSeleccionada] = useState(null);
 
   const datosCortes = () => ({
     cortes: [...cortes].sort((a, b) => a - b),
@@ -487,6 +488,7 @@ function TratamientoApp({ videoInicial }) {
   }, [videoInicial]);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
+  const imagenInputRef = useRef(null);
 
   const hojas = ['Cortes', 'Presentación', 'Edición', 'Montaje'];
 
@@ -3096,6 +3098,36 @@ function TratamientoApp({ videoInicial }) {
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.5rem', padding: '2rem' }}>
+          <div style={{ width: '100%', maxWidth: '900px', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+            <input
+              ref={imagenInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const dataUrl = reader.result;
+                  setFilasMontaje(prev => {
+                    const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '' };
+                    if (filaSeleccionada != null) {
+                      const copy = [...prev];
+                      copy.splice(filaSeleccionada, 0, nueva);
+                      return copy;
+                    }
+                    return [...prev, nueva];
+                  });
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+              }}
+            />
+            <button onClick={() => imagenInputRef.current?.click()} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Imagen</button>
+            <button style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Transiciones</button>
+            <button style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}>Descargar</button>
+          </div>
           <div style={{ width: '100%', maxWidth: '900px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
@@ -3111,6 +3143,7 @@ function TratamientoApp({ videoInicial }) {
                   <tr
                     key={fila.id}
                     draggable
+                    onClick={() => setFilaSeleccionada(filaSeleccionada === i ? null : i)}
                     onDragStart={() => setFilaArrastrando(i)}
                     onDragOver={(e) => { e.preventDefault(); }}
                     onDrop={() => {
@@ -3124,11 +3157,17 @@ function TratamientoApp({ videoInicial }) {
                       setFilaArrastrando(null);
                     }}
                     onDragEnd={() => setFilaArrastrando(null)}
-                    style={{ background: filaArrastrando === i ? 'rgba(14,165,233,0.3)' : (i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'rgba(15,23,42,0.5)'), cursor: 'grab', opacity: filaArrastrando === i ? 0.5 : 1 }}
+                    style={{ background: filaSeleccionada === i ? 'rgba(56,189,248,0.25)' : filaArrastrando === i ? 'rgba(14,165,233,0.3)' : (i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'rgba(15,23,42,0.5)'), cursor: 'grab', opacity: filaArrastrando === i ? 0.5 : 1 }}
                   >
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>{i + 1}</td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      {fila.videoUrl ? (
+                      {fila.tipo === 'imagen' && fila.imagenUrl ? (
+                        <img
+                          src={fila.imagenUrl}
+                          alt={`Imagen ${i + 1}`}
+                          style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155' }}
+                        />
+                      ) : fila.videoUrl ? (
                         <video
                           src={fila.videoUrl}
                           muted
@@ -3190,14 +3229,6 @@ function TratamientoApp({ videoInicial }) {
                 )}
               </tbody>
             </table>
-            <button
-              onClick={() => {
-                setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: videoUrl || null, concepto: '' }]);
-              }}
-              style={{ marginTop: '1rem', background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
-            >
-              + Agregar
-            </button>
           </div>
         </div>
       )}
