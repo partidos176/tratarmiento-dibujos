@@ -486,7 +486,7 @@ function TratamientoApp({ videoInicial }) {
   const svgRef = useRef(null);
   const dragRef = useRef(null);
 
-  const hojas = ['Cortes', 'Presentación', 'Edición'];
+  const hojas = ['Cortes', 'Presentación', 'Edición', 'Montaje'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -1981,7 +1981,7 @@ function TratamientoApp({ videoInicial }) {
             </div>
           )}
         </div>
-      ) : (
+      ) : hoja === 'Edición' ? (
         <div ref={editorRef} style={{ flex: 1, position: 'relative', display: 'flex' }}>
           {capturaSeleccionada && (
             <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
@@ -2961,7 +2961,36 @@ function TratamientoApp({ videoInicial }) {
             )}
           </div>
         </div>
-)}
+      ) : (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '2rem' }}>
+          <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.5rem', color: '#e2e8f0' }}>Montaje</h2>
+          <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: '0.9rem', color: '#94a3b8', textAlign: 'center', maxWidth: '500px' }}>
+            Aquí podrás montar y combinar los clips de animación con el vídeo original para crear la secuencia final.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', marginTop: '1rem' }}>
+            {capturas.filter(c => c.videoUrl).length > 0 ? (
+              capturas.filter(c => c.videoUrl).map((c, i) => (
+                <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+                  <video
+                    src={c.videoUrl}
+                    muted
+                    controls
+                    playsInline
+                    style={{ width: '200px', borderRadius: '8px', border: '1px solid #334155', background: '#000000' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8' }}>
+                    {formatoTiempo(c.insertarEn ?? c.tiempo ?? 0)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: '0.85rem', color: '#64748b' }}>
+                No hay clips de animación disponibles. Crea animaciones en la pestaña Edición.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       {aviso && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.4rem 1.8rem', maxWidth: '340px', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
