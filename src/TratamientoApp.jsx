@@ -76,6 +76,7 @@ function TratamientoApp({ videoInicial }) {
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
+  const [filaArrastrando, setFilaArrastrando] = useState(null);
 
   const datosCortes = () => ({
     cortes: [...cortes].sort((a, b) => a - b),
@@ -3102,11 +3103,29 @@ function TratamientoApp({ videoInicial }) {
                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '50px' }}>#</th>
                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '300px' }}>Video</th>
                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Concepto</th>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '80px' }}>Mover</th>
                 </tr>
               </thead>
               <tbody>
                 {filasMontaje.length > 0 ? filasMontaje.map((fila, i) => (
-                  <tr key={fila.id} style={{ background: i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'rgba(15,23,42,0.5)' }}>
+                  <tr
+                    key={fila.id}
+                    draggable
+                    onDragStart={() => setFilaArrastrando(i)}
+                    onDragOver={(e) => { e.preventDefault(); }}
+                    onDrop={() => {
+                      if (filaArrastrando === null || filaArrastrando === i) return;
+                      setFilasMontaje(prev => {
+                        const copy = [...prev];
+                        const [moved] = copy.splice(filaArrastrando, 1);
+                        copy.splice(i, 0, moved);
+                        return copy;
+                      });
+                      setFilaArrastrando(null);
+                    }}
+                    onDragEnd={() => setFilaArrastrando(null)}
+                    style={{ background: filaArrastrando === i ? 'rgba(14,165,233,0.3)' : (i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'rgba(15,23,42,0.5)'), cursor: 'grab', opacity: filaArrastrando === i ? 0.5 : 1 }}
+                  >
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>{i + 1}</td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
                       {fila.videoUrl ? (
@@ -3131,10 +3150,40 @@ function TratamientoApp({ videoInicial }) {
                         style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.5rem 0.75rem', color: '#e2e8f0', fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
                       />
                     </td>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                        <button
+                          onClick={() => {
+                            if (i === 0) return;
+                            setFilasMontaje(prev => {
+                              const copy = [...prev];
+                              [copy[i - 1], copy[i]] = [copy[i], copy[i - 1]];
+                              return copy;
+                            });
+                          }}
+                          disabled={i === 0}
+                          style={{ background: 'transparent', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? '#475569' : '#94a3b8', fontSize: '1rem', padding: '0.2rem' }}
+                          title="Subir"
+                        >▲</button>
+                        <button
+                          onClick={() => {
+                            if (i === filasMontaje.length - 1) return;
+                            setFilasMontaje(prev => {
+                              const copy = [...prev];
+                              [copy[i], copy[i + 1]] = [copy[i + 1], copy[i]];
+                              return copy;
+                            });
+                          }}
+                          disabled={i === filasMontaje.length - 1}
+                          style={{ background: 'transparent', border: 'none', cursor: i === filasMontaje.length - 1 ? 'default' : 'pointer', color: i === filasMontaje.length - 1 ? '#475569' : '#94a3b8', fontSize: '1rem', padding: '0.2rem' }}
+                          title="Bajar"
+                        >▼</button>
+                      </div>
+                    </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={3} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                    <td colSpan={4} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
                       No hay filas. Haz clic en "Agregar" para añadir una.
                     </td>
                   </tr>
