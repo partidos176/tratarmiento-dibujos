@@ -442,6 +442,9 @@ function TratamientoApp({ videoInicial }) {
   const clipTimerRef = useRef(null);
   const clipResumeRef = useRef(null);
   const clipMainRef = useRef(null);
+  const clipOverlayRef = useRef(null);
+  const clipOverlayFadeRef = useRef(false);
+  const [clipOverlayUrl, setClipOverlayUrl] = useState(null);
   const prevTiempoRef = useRef(0);
   const marcaMovidaRef = useRef(false);
   const circuloAnimRef = useRef(null);
@@ -1491,20 +1494,42 @@ function TratamientoApp({ videoInicial }) {
                         clipMainRef.current = { t: cl.insertarEn, hasta, src: videoUrl };
                         setClipActivo(cl);
                         setReproduciendo(true);
-                        try { v.src = cl.videoUrl; } catch (_) {}
-                        v.play().catch(() => {});
+                        
+                        // Crossfade: fade out main, fade in overlay
+                        v.style.opacity = '0';
+                        setClipOverlayUrl(cl.videoUrl);
+                        clipOverlayFadeRef.current = true;
+                        
+                        setTimeout(() => {
+                          const overlay = clipOverlayRef.current;
+                          if (overlay) {
+                            overlay.style.opacity = '1';
+                            overlay.play().catch(() => {});
+                          }
+                        }, 50);
+                        
                         if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                         clipTimerRef.current = setTimeout(() => {
                           const vv = videoRef.current;
+                          const overlay = clipOverlayRef.current;
                           if (!vv || !clipMainRef.current) return;
                           const r = clipMainRef.current;
-                          clipMainRef.current = null;
-                          setClipActivo(null);
-                          prevTiempoRef.current = r.hasta;
-                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
-                          try { vv.src = r.src; } catch (_) {}
-                          setReproduciendo(true);
-                        }, ((cl.duracion || 4) * 1000) + 800);
+                          
+                          // Crossfade: fade out overlay, fade in main
+                          if (overlay) overlay.style.opacity = '0';
+                          clipOverlayFadeRef.current = false;
+                          
+                          setTimeout(() => {
+                            clipMainRef.current = null;
+                            setClipActivo(null);
+                            setClipOverlayUrl(null);
+                            prevTiempoRef.current = r.hasta;
+                            clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                            vv.style.opacity = '1';
+                            try { vv.src = r.src; } catch (_) {}
+                            setReproduciendo(true);
+                          }, 300);
+                        }, ((cl.duracion || 4) * 1000));
                         return;
                       }
                     }
@@ -1516,18 +1541,28 @@ function TratamientoApp({ videoInicial }) {
                     if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                     if (clipMainRef.current || clipActivo) {
                       const r = clipMainRef.current;
-                      clipMainRef.current = null;
-                      setClipActivo(null);
-                      if (r) {
-                        prevTiempoRef.current = r.hasta;
-                        clipResumeRef.current = { t: r.t + 0.1, src: r.src };
-                        try { v.src = r.src; } catch (_) {}
-                        setReproduciendo(true);
-                      } else {
-                        setReproduciendo(false);
-                        setProgreso(1);
-                      }
-                      if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                      const overlay = clipOverlayRef.current;
+                      
+                      // Crossfade: fade out overlay, fade in main
+                      if (overlay) overlay.style.opacity = '0';
+                      clipOverlayFadeRef.current = false;
+                      
+                      setTimeout(() => {
+                        clipMainRef.current = null;
+                        setClipActivo(null);
+                        setClipOverlayUrl(null);
+                        if (r) {
+                          prevTiempoRef.current = r.hasta;
+                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                          v.style.opacity = '1';
+                          try { v.src = r.src; } catch (_) {}
+                          setReproduciendo(true);
+                        } else {
+                          v.style.opacity = '1';
+                          setReproduciendo(false);
+                          setProgreso(1);
+                        }
+                      }, 300);
                       return;
                     }
                     setReproduciendo(false);
@@ -1539,19 +1574,40 @@ function TratamientoApp({ videoInicial }) {
                     if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                     if (clipMainRef.current || clipActivo) {
                       const r = clipMainRef.current;
-                      clipMainRef.current = null;
-                      setClipActivo(null);
-                      if (r) {
-                        prevTiempoRef.current = r.hasta;
-                        clipResumeRef.current = { t: r.t + 0.1, src: r.src };
-                        try { v.src = r.src; } catch (_) {}
-                        v.play().catch(() => {});
-                        setReproduciendo(true);
-                      }
+                      const overlay = clipOverlayRef.current;
+                      
+                      // Crossfade: fade out overlay, fade in main
+                      if (overlay) overlay.style.opacity = '0';
+                      clipOverlayFadeRef.current = false;
+                      
+                      setTimeout(() => {
+                        clipMainRef.current = null;
+                        setClipActivo(null);
+                        setClipOverlayUrl(null);
+                        if (r) {
+                          prevTiempoRef.current = r.hasta;
+                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                          v.style.opacity = '1';
+                          try { v.src = r.src; } catch (_) {}
+                          v.play().catch(() => {});
+                          setReproduciendo(true);
+                        }
+                      }, 300);
                     }
                   }}
-                  style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+                  style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155', transition: 'opacity 0.3s ease' }}
                 />
+                {clipOverlayUrl && (
+                  <video
+                    ref={clipOverlayRef}
+                    muted
+                    playsInline
+                    src={clipOverlayUrl}
+                    onPlay={() => setReproduciendo(true)}
+                    onPause={() => setReproduciendo(false)}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', opacity: clipOverlayFadeRef.current ? 1 : 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }}
+                  />
+                )}
                 <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
                 {exportando && (
                   <button
