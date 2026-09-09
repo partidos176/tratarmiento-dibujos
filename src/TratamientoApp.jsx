@@ -1515,54 +1515,22 @@ function TratamientoApp({ videoInicial }) {
                           if (!vv || !clipMainRef.current) return;
                           const r = clipMainRef.current;
                           
-                          // Precargar video principal en la posicion correcta
+                          // Guardar posicion de retorno para que onLoadedMetadata haga seek
+                          prevTiempoRef.current = r.hasta;
+                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                          clipMainRef.current = null;
+                          setClipActivo(null);
+                          
+                          // Crossfade visual
+                          if (overlay) overlay.style.opacity = '0';
+                          clipOverlayFadeRef.current = false;
+                          vv.style.opacity = '1';
+                          
+                          // Cambiar src para que onLoadedMetadata detecte clipResumeRef y haga seek
                           try { vv.src = r.src; } catch (_) {}
-                          vv.currentTime = r.t + 0.1;
-                          vv.load();
-                          
-                          // Esperar a que este listo antes de hacer crossfade
-                          const onReady = () => {
-                            vv.removeEventListener('canplay', onReady);
-                            vv.removeEventListener('loadeddata', onReady);
-                            
-                            // Crossfade: fade out overlay, fade in main
-                            if (overlay) overlay.style.opacity = '0';
-                            clipOverlayFadeRef.current = false;
-                            
-                            setTimeout(() => {
-                              clipMainRef.current = null;
-                              setClipActivo(null);
-                              setClipOverlayUrl(null);
-                              prevTiempoRef.current = r.hasta;
-                              clipResumeRef.current = null;
-                              vv.style.opacity = '1';
-                              vv.play().catch(() => {});
-                              setReproduciendo(true);
-                            }, 250);
-                          };
-                          vv.addEventListener('canplay', onReady);
-                          vv.addEventListener('loadeddata', onReady);
-                          
-                          // Timeout de seguridad
-                          setTimeout(() => {
-                            vv.removeEventListener('canplay', onReady);
-                            vv.removeEventListener('loadeddata', onReady);
-                            if (clipMainRef.current) {
-                              if (overlay) overlay.style.opacity = '0';
-                              clipOverlayFadeRef.current = false;
-                              setTimeout(() => {
-                                clipMainRef.current = null;
-                                setClipActivo(null);
-                                setClipOverlayUrl(null);
-                                prevTiempoRef.current = r.hasta;
-                                clipResumeRef.current = null;
-                                vv.style.opacity = '1';
-                                vv.play().catch(() => {});
-                                setReproduciendo(true);
-                              }, 250);
-                            }
-                          }, 2000);
-                        }, ((cl.duracion || 4) * 1000) - 500);
+                          setClipOverlayUrl(null);
+                          setReproduciendo(true);
+                        }, ((cl.duracion || 4) * 1000));
                         return;
                       }
                     }
@@ -1577,62 +1545,26 @@ function TratamientoApp({ videoInicial }) {
                       const overlay = clipOverlayRef.current;
                       
                       if (r) {
-                        // Precargar video principal en la posicion correcta
+                        prevTiempoRef.current = r.hasta;
+                        clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                        clipMainRef.current = null;
+                        setClipActivo(null);
+                        
+                        if (overlay) overlay.style.opacity = '0';
+                        clipOverlayFadeRef.current = false;
+                        v.style.opacity = '1';
+                        
                         try { v.src = r.src; } catch (_) {}
-                        v.currentTime = r.t + 0.1;
-                        v.load();
-                        
-                        const onReady = () => {
-                          v.removeEventListener('canplay', onReady);
-                          v.removeEventListener('loadeddata', onReady);
-                          
-                          // Crossfade: fade out overlay, fade in main
-                          if (overlay) overlay.style.opacity = '0';
-                          clipOverlayFadeRef.current = false;
-                          
-                          setTimeout(() => {
-                            clipMainRef.current = null;
-                            setClipActivo(null);
-                            setClipOverlayUrl(null);
-                            prevTiempoRef.current = r.hasta;
-                            clipResumeRef.current = null;
-                            v.style.opacity = '1';
-                            v.play().catch(() => {});
-                            setReproduciendo(true);
-                          }, 250);
-                        };
-                        v.addEventListener('canplay', onReady);
-                        v.addEventListener('loadeddata', onReady);
-                        
-                        setTimeout(() => {
-                          v.removeEventListener('canplay', onReady);
-                          v.removeEventListener('loadeddata', onReady);
-                          if (clipMainRef.current) {
-                            if (overlay) overlay.style.opacity = '0';
-                            clipOverlayFadeRef.current = false;
-                            setTimeout(() => {
-                              clipMainRef.current = null;
-                              setClipActivo(null);
-                              setClipOverlayUrl(null);
-                              prevTiempoRef.current = r.hasta;
-                              clipResumeRef.current = null;
-                              v.style.opacity = '1';
-                              v.play().catch(() => {});
-                              setReproduciendo(true);
-                            }, 250);
-                          }
-                        }, 2000);
+                        setClipOverlayUrl(null);
+                        setReproduciendo(true);
                       } else {
                         if (overlay) overlay.style.opacity = '0';
                         clipOverlayFadeRef.current = false;
-                        setTimeout(() => {
-                          clipMainRef.current = null;
-                          setClipActivo(null);
-                          setClipOverlayUrl(null);
-                          v.style.opacity = '1';
-                          setReproduciendo(false);
-                          setProgreso(1);
-                        }, 250);
+                        v.style.opacity = '1';
+                        setClipActivo(null);
+                        setClipOverlayUrl(null);
+                        setReproduciendo(false);
+                        setProgreso(1);
                       }
                       return;
                     }
@@ -1648,56 +1580,25 @@ function TratamientoApp({ videoInicial }) {
                       const overlay = clipOverlayRef.current;
                       
                       if (r) {
-                        // Precargar video principal
-                        try { v.src = r.src; } catch (_) {}
-                        v.currentTime = r.t + 0.1;
-                        v.load();
+                        prevTiempoRef.current = r.hasta;
+                        clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                        clipMainRef.current = null;
+                        setClipActivo(null);
                         
-                        const onReady = () => {
-                          v.removeEventListener('canplay', onReady);
-                          v.removeEventListener('loadeddata', onReady);
-                          if (overlay) overlay.style.opacity = '0';
-                          clipOverlayFadeRef.current = false;
-                          setTimeout(() => {
-                            clipMainRef.current = null;
-                            setClipActivo(null);
-                            setClipOverlayUrl(null);
-                            prevTiempoRef.current = r.hasta;
-                            clipResumeRef.current = null;
-                            v.style.opacity = '1';
-                            v.play().catch(() => {});
-                            setReproduciendo(true);
-                          }, 250);
-                        };
-                        v.addEventListener('canplay', onReady);
-                        v.addEventListener('loadeddata', onReady);
-                        setTimeout(() => {
-                          v.removeEventListener('canplay', onReady);
-                          v.removeEventListener('loadeddata', onReady);
-                          if (clipMainRef.current) {
-                            if (overlay) overlay.style.opacity = '0';
-                            clipOverlayFadeRef.current = false;
-                            setTimeout(() => {
-                              clipMainRef.current = null;
-                              setClipActivo(null);
-                              setClipOverlayUrl(null);
-                              prevTiempoRef.current = r.hasta;
-                              clipResumeRef.current = null;
-                              v.style.opacity = '1';
-                              v.play().catch(() => {});
-                              setReproduciendo(true);
-                            }, 250);
-                          }
-                        }, 2000);
+                        if (overlay) overlay.style.opacity = '0';
+                        clipOverlayFadeRef.current = false;
+                        v.style.opacity = '1';
+                        
+                        try { v.src = r.src; } catch (_) {}
+                        v.play().catch(() => {});
+                        setClipOverlayUrl(null);
+                        setReproduciendo(true);
                       } else {
                         if (overlay) overlay.style.opacity = '0';
                         clipOverlayFadeRef.current = false;
-                        setTimeout(() => {
-                          clipMainRef.current = null;
-                          setClipActivo(null);
-                          setClipOverlayUrl(null);
-                          v.style.opacity = '1';
-                        }, 250);
+                        v.style.opacity = '1';
+                        setClipActivo(null);
+                        setClipOverlayUrl(null);
                       }
                     }
                   }}
@@ -1717,50 +1618,22 @@ function TratamientoApp({ videoInicial }) {
                       const r = clipMainRef.current;
                       if (!r || !vv) return;
                       
-                      // Cancelar timer de precarga si esta activo
                       if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                       
-                      // Precargar video principal
-                      try { vv.src = r.src; } catch (_) {}
-                      vv.currentTime = r.t + 0.1;
-                      vv.load();
+                      // Guardar posicion de retorno en clipResumeRef para que onLoadedMetadata haga seek
+                      prevTiempoRef.current = r.hasta;
+                      clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                      clipMainRef.current = null;
+                      setClipActivo(null);
                       
-                      const onReady = () => {
-                        vv.removeEventListener('canplay', onReady);
-                        vv.removeEventListener('loadeddata', onReady);
-                        if (overlay) overlay.style.opacity = '0';
-                        clipOverlayFadeRef.current = false;
-                        setTimeout(() => {
-                          clipMainRef.current = null;
-                          setClipActivo(null);
-                          setClipOverlayUrl(null);
-                          prevTiempoRef.current = r.hasta;
-                          clipResumeRef.current = null;
-                          vv.style.opacity = '1';
-                          vv.play().catch(() => {});
-                          setReproduciendo(true);
-                        }, 250);
-                      };
-                      vv.addEventListener('canplay', onReady);
-                      vv.addEventListener('loadeddata', onReady);
-                      setTimeout(() => {
-                        vv.removeEventListener('canplay', onReady);
-                        vv.removeEventListener('loadeddata', onReady);
-                        if (clipMainRef.current) {
-                          if (overlay) overlay.style.opacity = '0';
-                          clipOverlayFadeRef.current = false;
-                          setTimeout(() => {
-                            clipMainRef.current = null;
-                            setClipActivo(null);
-                            setClipOverlayUrl(null);
-                            prevTiempoRef.current = r.hasta;
-                            clipResumeRef.current = null;
-                            vv.style.opacity = '1';
-                            vv.play().catch(() => {});
-                            setReproduciendo(true);
-                          }, 250);
-                        }
-                      }, 2000);
+                      // Crossfade visual
+                      if (overlay) overlay.style.opacity = '0';
+                      clipOverlayFadeRef.current = false;
+                      vv.style.opacity = '1';
+                      
+                      // Cambiar src para que onLoadedMetadata detecte clipResumeRef y haga seek
+                      try { vv.src = r.src; } catch (_) {}
+                      setReproduciendo(true);
                     }}
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', opacity: clipOverlayFadeRef.current ? 1 : 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }}
                   />
