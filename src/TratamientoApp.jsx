@@ -75,6 +75,7 @@ function TratamientoApp({ videoInicial }) {
   const [fotoPorCorte, setFotoPorCorte] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
+  const [filasMontaje, setFilasMontaje] = useState([]);
 
   const datosCortes = () => ({
     cortes: [...cortes].sort((a, b) => a - b),
@@ -2969,8 +2970,63 @@ function TratamientoApp({ videoInicial }) {
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-          <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.5rem', color: '#e2e8f0' }}>Montaje</h2>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.5rem', padding: '2rem' }}>
+          <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.5rem', color: '#e2e8f0', margin: 0 }}>Montaje</h2>
+          <div style={{ width: '100%', maxWidth: '900px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
+              <thead>
+                <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '50px' }}>#</th>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '300px' }}>Video</th>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Concepto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filasMontaje.length > 0 ? filasMontaje.map((fila, i) => (
+                  <tr key={fila.id} style={{ background: i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'rgba(15,23,42,0.5)' }}>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>{i + 1}</td>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                      {fila.videoUrl ? (
+                        <video
+                          src={fila.videoUrl}
+                          muted
+                          controls
+                          playsInline
+                          style={{ width: '250px', borderRadius: '6px', background: '#000000' }}
+                        />
+                      ) : (
+                        <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Sin video</span>
+                      )}
+                    </td>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem' }}>
+                      <input
+                        value={fila.concepto}
+                        onChange={(e) => {
+                          setFilasMontaje(prev => prev.map((f, idx) => idx === i ? { ...f, concepto: e.target.value } : f));
+                        }}
+                        placeholder="Escribe el concepto..."
+                        style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.5rem 0.75rem', color: '#e2e8f0', fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
+                      />
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={3} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                      No hay filas. Haz clic en "Agregar" para añadir una.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <button
+              onClick={() => {
+                setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: videoUrl || null, concepto: '' }]);
+              }}
+              style={{ marginTop: '1rem', background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              + Agregar
+            </button>
+          </div>
         </div>
       )}
       {aviso && (
