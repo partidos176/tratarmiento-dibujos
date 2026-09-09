@@ -78,6 +78,8 @@ function TratamientoApp({ videoInicial }) {
   const [filasMontaje, setFilasMontaje] = useState([]);
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
+  const [descargandoMontaje, setDescargandoMontaje] = useState(false);
+  const [progresoDescarga, setProgresoDescarga] = useState(0);
 
   const datosCortes = () => ({
     cortes: [...cortes].sort((a, b) => a - b),
@@ -899,6 +901,152 @@ function TratamientoApp({ videoInicial }) {
       try { if (orig) document.body.removeChild(orig); } catch (err) { /* noop */ }
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (err) { /* noop */ }
       if (typeof clipEls !== 'undefined') clipEls.forEach(({ v }) => { try { document.body.removeChild(v); } catch (err) { /* noop */ } });
+      return null;
+    }
+  };
+
+  const descargarMontaje = async () => {
+    const items = filasMontaje;
+    const videos = items.filter(f => f.tipo !== 'transicion' && f.videoUrl);
+    if (videos.length === 0) return;
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let ctx = null;
+    let rec = null;
+    const videoEls = [];
+    try {
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      ctx = canvas.getContext('2d');
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+
+      for (const v of videos) {
+        const el = document.createElement('video');
+        el.muted = true; el.playsInline = true; el.preload = 'auto'; el.src = v.videoUrl;
+        el.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(el);
+        await new Promise((res) => { el.onloadedmetadata = res; el.onerror = res; });
+        videoEls.push(el);
+      }
+
+      const segs = [];
+      let videoIdx = 0;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].tipo === 'transicion') {
+          const dur = items[i].duracion || 2;
+          segs.push({ tipo: 'transicion', duracion: dur });
+        } else {
+          if (videoIdx < videoEls.length) {
+            segs.push({ tipo: 'video', el: videoEls[videoIdx], duracion: videoEls[videoIdx].duration || 5 });
+            videoIdx++;
+          }
+        }
+      }
+
+      const resultado = await new Promise((resolve) => {
+        let terminado = false;
+        let currentSeg = 0;
+        let segElapsed = 0;
+        let prevEl = null;
+        let nextEl = null;
+        let crossfadeDur = 0;
+        let crossfadeElapsed = 0;
+        const startTime = performance.now();
+        const totalDur = segs.reduce((s, seg) => s + seg.duracion, 0);
+
+        const terminar = (error) => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          videoEls.forEach(el => { try { document.body.removeChild(el); } catch (_) {} });
+          try { document.body.removeChild(canvas); } catch (_) {}
+          setDescargandoMontaje(false);
+          setProgresoDescarga(0);
+          if (error) { resolve(null); return; }
+          rec.onstop = () => {
+            const blob = new Blob(chunks, { type: mime });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'montaje.webm'; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            resolve(url);
+          };
+        };
+
+        const loop = () => {
+          if (terminado) return;
+          if (currentSeg >= segs.length) { terminar(false); return; }
+          const seg = segs[currentSeg];
+          segElapsed += 1 / 30;
+
+          if (seg.tipo === 'transicion') {
+            crossfadeElapsed += 1 / 30;
+            const t = Math.min(crossfadeElapsed / seg.duracion, 1);
+            ctx.globalAlpha = 1;
+            if (prevEl && prevEl.readyState >= 2) {
+              ctx.globalAlpha = 1 - t;
+              try { ctx.drawImage(prevEl, 0, 0, w, h); } catch (_) {}
+            }
+            if (nextEl && nextEl.readyState >= 2) {
+              ctx.globalAlpha = t;
+              try { ctx.drawImage(nextEl, 0, 0, w, h); } catch (_) {}
+            }
+            ctx.globalAlpha = 1;
+            if (crossfadeElapsed >= seg.duracion) {
+              if (prevEl) { try { prevEl.pause(); } catch (_) {} }
+              prevEl = nextEl;
+              if (prevEl) { prevEl.currentTime = 0; prevEl.play().catch(() => {}); }
+              nextEl = null;
+              crossfadeElapsed = 0;
+              currentSeg++;
+            }
+          } else {
+            const el = seg.el;
+            if (segElapsed <= 1 / 30 + 0.001) {
+              el.currentTime = 0;
+              el.play().catch(() => {});
+            }
+            try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+            if (el.ended || segElapsed >= seg.duracion) {
+              el.pause();
+              prevEl = el;
+              currentSeg++;
+              segElapsed = 0;
+              if (currentSeg < segs.length && segs[currentSeg].tipo === 'transicion') {
+                const nextIdx = currentSeg + 1;
+                if (nextIdx < segs.length && segs[nextIdx].tipo === 'video') {
+                  nextEl = segs[nextIdx].el;
+                  nextEl.currentTime = 0;
+                  nextEl.play().catch(() => {});
+                }
+                crossfadeElapsed = 0;
+              }
+            }
+          }
+
+          const elapsed = (performance.now() - startTime) / 1000;
+          setProgresoDescarga(Math.min(99, Math.round((elapsed / totalDur) * 100)));
+          if (!terminado) requestAnimationFrame(loop);
+        };
+
+        rec.start(250);
+        requestAnimationFrame(loop);
+      });
+      return resultado;
+    } catch (e) {
+      console.error('Error al descargar montaje', e);
+      videoEls.forEach(el => { try { document.body.removeChild(el); } catch (_) {} });
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
       return null;
     }
   };
@@ -3125,8 +3273,38 @@ function TratamientoApp({ videoInicial }) {
               }}
             />
             <button onClick={() => imagenInputRef.current?.click()} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Imagen</button>
-            <button style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Transiciones</button>
-            <button style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}>Descargar</button>
+            <button
+              onClick={() => {
+                setFilasMontaje(prev => {
+                  if (prev.length < 2) return prev;
+                  const resultado = [];
+                  for (let i = 0; i < prev.length; i++) {
+                    resultado.push(prev[i]);
+                    const esUltimo = i === prev.length - 1;
+                    if (!esUltimo && prev[i].tipo !== 'transicion' && prev[i + 1].tipo !== 'transicion') {
+                      resultado.push({ id: Date.now() + i, tipo: 'transicion', videoUrl: null, imagenUrl: null, concepto: 'Crossfade 2s', duracion: 2 });
+                    }
+                  }
+                  return resultado;
+                });
+              }}
+              style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}
+            >Transiciones</button>
+            <button
+              onClick={() => descargarMontaje()}
+              disabled={descargandoMontaje}
+              style={{ background: descargandoMontaje ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: descargandoMontaje ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {descargandoMontaje && <span style={{ fontFamily: 'monospace' }}>{progresoDescarga}%</span>}
+              Descargar
+            </button>
+            {descargandoMontaje && (
+              <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ flex: 1, height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${progresoDescarga}%`, height: '100%', background: '#22c55e', borderRadius: '3px', transition: 'width 0.3s' }} />
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ width: '100%', maxWidth: '900px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
@@ -3161,7 +3339,13 @@ function TratamientoApp({ videoInicial }) {
                   >
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>{i + 1}</td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      {fila.tipo === 'imagen' && fila.imagenUrl ? (
+                      {fila.tipo === 'transicion' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '250px', margin: '0 auto' }}>
+                          <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #38bdf8, transparent)' }} />
+                          <span style={{ color: '#38bdf8', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>Crossfade · 2s</span>
+                          <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #38bdf8, transparent)' }} />
+                        </div>
+                      ) : fila.tipo === 'imagen' && fila.imagenUrl ? (
                         <img
                           src={fila.imagenUrl}
                           alt={`Imagen ${i + 1}`}
