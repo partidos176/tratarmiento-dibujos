@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { guardarSesion, cargarSesion } from './persistencia';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -491,6 +492,18 @@ function TratamientoApp({ videoInicial }) {
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const imagenInputRef = useRef(null);
+
+  useEffect(() => {
+    cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
+      if (fm.length > 0) setFilasMontaje(fm);
+      if (caps.length > 0) setCapturas(caps);
+    });
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => guardarSesion(filasMontaje, capturas), 1000);
+    return () => clearTimeout(timer);
+  }, [filasMontaje, capturas]);
 
   const hojas = ['Cortes', 'Presentación', 'Edición', 'Montaje'];
 
