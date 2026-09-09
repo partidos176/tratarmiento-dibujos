@@ -782,6 +782,124 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
+  const generarVideoParaMontaje = async () => {
+    const original = videoRef.current;
+    if (!original || !duracion) return null;
+    setExportando(true);
+    setProgresoExport(0);
+    let orig = null;
+    let clipEls = [];
+    try {
+      cancelarVideoRef.current = false;
+      const w = original.videoWidth || 640;
+      const h = original.videoHeight || 360;
+      const clips = capturas.filter(c => c.videoUrl && c.insertarEn != null).sort((a, b) => a.insertarEn - b.insertarEn);
+      const tempImgDim = { w, h };
+      const capturasConFiguras = capturas.filter(c => c.figuras && c.figuras.length > 0 && c.tiempo != null && !c.videoUrl);
+      const figureImgs = [];
+      for (const cap of capturasConFiguras) {
+        const parts = cap.figuras.map(f => svgFigura(f, tempImgDim)).filter(Boolean);
+        if (parts.length === 0) continue;
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${parts.join('')}</svg>`;
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = await new Promise((resolve) => {
+          const i = new Image();
+          i.onload = () => { URL.revokeObjectURL(url); resolve(i); };
+          i.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+          i.src = url;
+        });
+        if (img) figureImgs.push({ time: cap.tiempo, img, duration: 3 });
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      orig = document.createElement('video');
+      orig.muted = true; orig.playsInline = true; orig.preload = 'auto'; orig.src = videoUrl;
+      await new Promise((res, rej) => { orig.onloadedmetadata = res; orig.onerror = rej; });
+      orig.style.position = 'fixed'; orig.style.opacity = '0.01'; orig.style.pointerEvents = 'none';
+      orig.style.width = '1px'; orig.style.height = '1px'; orig.style.left = '0px'; orig.style.top = '0px';
+      document.body.appendChild(orig);
+      clipEls = clips.map(c => {
+        const v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = c.videoUrl;
+        v.style.position = 'fixed'; v.style.opacity = '0.01'; v.style.pointerEvents = 'none';
+        v.style.width = '1px'; v.style.height = '1px'; v.style.left = '0px'; v.style.top = '0px';
+        document.body.appendChild(v);
+        return { c, v };
+      });
+      await Promise.all(clipEls.map(({ v }) => new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; })));
+      let activeClip = null; let clipIdx = 0; let raf = 0; let terminado = false;
+      const drawFrame = () => {
+        try { ctx.drawImage(orig, 0, 0, w, h); } catch (e) { /* noop */ }
+        const t = orig.currentTime;
+        for (const fi of figureImgs) {
+          if (t >= fi.time && t <= fi.time + fi.duration) {
+            try { ctx.drawImage(fi.img, 0, 0, w, h); } catch (e) { /* noop */ }
+          }
+        }
+        if (activeClip && activeClip.readyState >= 2) {
+          try { ctx.drawImage(activeClip, 0, 0, w, h); } catch (e) { /* noop */ }
+        }
+      };
+      const resultado = await new Promise((resolve) => {
+        const terminar = async (error) => {
+          if (terminado) return;
+          terminado = true;
+          cancelAnimationFrame(raf);
+          try { rec.stop(); } catch (e) { /* noop */ }
+          try { document.body.removeChild(orig); } catch (e) { /* noop */ }
+          try { document.body.removeChild(canvas); } catch (e) { /* noop */ }
+          clipEls.forEach(({ v }) => { try { document.body.removeChild(v); } catch (e) { /* noop */ } });
+          setExportando(false);
+          if (error) { resolve(null); return; }
+          await new Promise(res => { rec.onstop = res; });
+          const blob = new Blob(chunks, { type: mime });
+          resolve(URL.createObjectURL(blob));
+        };
+        const loop = () => {
+          if (cancelarVideoRef.current) { terminar(true); return; }
+          if (!activeClip && clipIdx < clipEls.length && orig.currentTime >= clipEls[clipIdx].c.insertarEn) {
+            orig.pause();
+            activeClip = clipEls[clipIdx].v;
+            activeClip.currentTime = 0;
+            activeClip.play().catch(() => {});
+          }
+          if (activeClip) {
+            const cl = clipEls[clipIdx].c;
+            if (activeClip.ended || activeClip.currentTime >= (cl.duracion || 4)) {
+              activeClip.pause(); activeClip = null; clipIdx++;
+              orig.play().catch(() => {});
+            }
+          }
+          drawFrame();
+          if (duracion > 0) setProgresoExport(Math.min(99, Math.round((orig.currentTime / duracion) * 100)));
+          if (!terminado) raf = requestAnimationFrame(loop);
+        };
+        orig.addEventListener('ended', () => terminar(false));
+        orig.addEventListener('error', () => terminar(true));
+        rec.start(250);
+        loop();
+        orig.play().catch(() => {});
+      });
+      return resultado;
+    } catch (e) {
+      console.error('Error al generar video para montaje', e);
+      setExportando(false);
+      try { if (orig) document.body.removeChild(orig); } catch (err) { /* noop */ }
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (err) { /* noop */ }
+      if (typeof clipEls !== 'undefined') clipEls.forEach(({ v }) => { try { document.body.removeChild(v); } catch (err) { /* noop */ } });
+      return null;
+    }
+  };
+
   const idDeFoto = (x) => (x && typeof x === 'object' ? x.capturaId : x);
   const listaFotosCorte = (ct) => {
     const f = fotoPorCorte[String(ct)];
@@ -1696,8 +1814,14 @@ function TratamientoApp({ videoInicial }) {
                     </svg>
                   </button>
                   <button
-                    onClick={() => setHoja('Montaje')}
-                    title="Ir a Montaje"
+                    onClick={async () => {
+                      const videoBlobUrl = await generarVideoParaMontaje();
+                      if (videoBlobUrl) {
+                        setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: videoBlobUrl, concepto: '' }]);
+                      }
+                      setHoja('Montaje');
+                    }}
+                    title="Exportar vídeo a Montaje"
                     style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
                   >
                     Montaje
