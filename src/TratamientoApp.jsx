@@ -1515,21 +1515,54 @@ function TratamientoApp({ videoInicial }) {
                           if (!vv || !clipMainRef.current) return;
                           const r = clipMainRef.current;
                           
-                          // Crossfade: fade out overlay, fade in main
-                          if (overlay) overlay.style.opacity = '0';
-                          clipOverlayFadeRef.current = false;
+                          // Precargar video principal en la posicion correcta
+                          try { vv.src = r.src; } catch (_) {}
+                          vv.currentTime = r.t + 0.1;
+                          vv.load();
                           
+                          // Esperar a que este listo antes de hacer crossfade
+                          const onReady = () => {
+                            vv.removeEventListener('canplay', onReady);
+                            vv.removeEventListener('loadeddata', onReady);
+                            
+                            // Crossfade: fade out overlay, fade in main
+                            if (overlay) overlay.style.opacity = '0';
+                            clipOverlayFadeRef.current = false;
+                            
+                            setTimeout(() => {
+                              clipMainRef.current = null;
+                              setClipActivo(null);
+                              setClipOverlayUrl(null);
+                              prevTiempoRef.current = r.hasta;
+                              clipResumeRef.current = null;
+                              vv.style.opacity = '1';
+                              vv.play().catch(() => {});
+                              setReproduciendo(true);
+                            }, 250);
+                          };
+                          vv.addEventListener('canplay', onReady);
+                          vv.addEventListener('loadeddata', onReady);
+                          
+                          // Timeout de seguridad
                           setTimeout(() => {
-                            clipMainRef.current = null;
-                            setClipActivo(null);
-                            setClipOverlayUrl(null);
-                            prevTiempoRef.current = r.hasta;
-                            clipResumeRef.current = { t: r.t + 0.1, src: r.src };
-                            vv.style.opacity = '1';
-                            try { vv.src = r.src; } catch (_) {}
-                            setReproduciendo(true);
-                          }, 300);
-                        }, ((cl.duracion || 4) * 1000));
+                            vv.removeEventListener('canplay', onReady);
+                            vv.removeEventListener('loadeddata', onReady);
+                            if (clipMainRef.current) {
+                              if (overlay) overlay.style.opacity = '0';
+                              clipOverlayFadeRef.current = false;
+                              setTimeout(() => {
+                                clipMainRef.current = null;
+                                setClipActivo(null);
+                                setClipOverlayUrl(null);
+                                prevTiempoRef.current = r.hasta;
+                                clipResumeRef.current = null;
+                                vv.style.opacity = '1';
+                                vv.play().catch(() => {});
+                                setReproduciendo(true);
+                              }, 250);
+                            }
+                          }, 2000);
+                        }, ((cl.duracion || 4) * 1000) - 500);
                         return;
                       }
                     }
@@ -1543,26 +1576,64 @@ function TratamientoApp({ videoInicial }) {
                       const r = clipMainRef.current;
                       const overlay = clipOverlayRef.current;
                       
-                      // Crossfade: fade out overlay, fade in main
-                      if (overlay) overlay.style.opacity = '0';
-                      clipOverlayFadeRef.current = false;
-                      
-                      setTimeout(() => {
-                        clipMainRef.current = null;
-                        setClipActivo(null);
-                        setClipOverlayUrl(null);
-                        if (r) {
-                          prevTiempoRef.current = r.hasta;
-                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
-                          v.style.opacity = '1';
-                          try { v.src = r.src; } catch (_) {}
-                          setReproduciendo(true);
-                        } else {
+                      if (r) {
+                        // Precargar video principal en la posicion correcta
+                        try { v.src = r.src; } catch (_) {}
+                        v.currentTime = r.t + 0.1;
+                        v.load();
+                        
+                        const onReady = () => {
+                          v.removeEventListener('canplay', onReady);
+                          v.removeEventListener('loadeddata', onReady);
+                          
+                          // Crossfade: fade out overlay, fade in main
+                          if (overlay) overlay.style.opacity = '0';
+                          clipOverlayFadeRef.current = false;
+                          
+                          setTimeout(() => {
+                            clipMainRef.current = null;
+                            setClipActivo(null);
+                            setClipOverlayUrl(null);
+                            prevTiempoRef.current = r.hasta;
+                            clipResumeRef.current = null;
+                            v.style.opacity = '1';
+                            v.play().catch(() => {});
+                            setReproduciendo(true);
+                          }, 250);
+                        };
+                        v.addEventListener('canplay', onReady);
+                        v.addEventListener('loadeddata', onReady);
+                        
+                        setTimeout(() => {
+                          v.removeEventListener('canplay', onReady);
+                          v.removeEventListener('loadeddata', onReady);
+                          if (clipMainRef.current) {
+                            if (overlay) overlay.style.opacity = '0';
+                            clipOverlayFadeRef.current = false;
+                            setTimeout(() => {
+                              clipMainRef.current = null;
+                              setClipActivo(null);
+                              setClipOverlayUrl(null);
+                              prevTiempoRef.current = r.hasta;
+                              clipResumeRef.current = null;
+                              v.style.opacity = '1';
+                              v.play().catch(() => {});
+                              setReproduciendo(true);
+                            }, 250);
+                          }
+                        }, 2000);
+                      } else {
+                        if (overlay) overlay.style.opacity = '0';
+                        clipOverlayFadeRef.current = false;
+                        setTimeout(() => {
+                          clipMainRef.current = null;
+                          setClipActivo(null);
+                          setClipOverlayUrl(null);
                           v.style.opacity = '1';
                           setReproduciendo(false);
                           setProgreso(1);
-                        }
-                      }, 300);
+                        }, 250);
+                      }
                       return;
                     }
                     setReproduciendo(false);
@@ -1576,23 +1647,58 @@ function TratamientoApp({ videoInicial }) {
                       const r = clipMainRef.current;
                       const overlay = clipOverlayRef.current;
                       
-                      // Crossfade: fade out overlay, fade in main
-                      if (overlay) overlay.style.opacity = '0';
-                      clipOverlayFadeRef.current = false;
-                      
-                      setTimeout(() => {
-                        clipMainRef.current = null;
-                        setClipActivo(null);
-                        setClipOverlayUrl(null);
-                        if (r) {
-                          prevTiempoRef.current = r.hasta;
-                          clipResumeRef.current = { t: r.t + 0.1, src: r.src };
+                      if (r) {
+                        // Precargar video principal
+                        try { v.src = r.src; } catch (_) {}
+                        v.currentTime = r.t + 0.1;
+                        v.load();
+                        
+                        const onReady = () => {
+                          v.removeEventListener('canplay', onReady);
+                          v.removeEventListener('loadeddata', onReady);
+                          if (overlay) overlay.style.opacity = '0';
+                          clipOverlayFadeRef.current = false;
+                          setTimeout(() => {
+                            clipMainRef.current = null;
+                            setClipActivo(null);
+                            setClipOverlayUrl(null);
+                            prevTiempoRef.current = r.hasta;
+                            clipResumeRef.current = null;
+                            v.style.opacity = '1';
+                            v.play().catch(() => {});
+                            setReproduciendo(true);
+                          }, 250);
+                        };
+                        v.addEventListener('canplay', onReady);
+                        v.addEventListener('loadeddata', onReady);
+                        setTimeout(() => {
+                          v.removeEventListener('canplay', onReady);
+                          v.removeEventListener('loadeddata', onReady);
+                          if (clipMainRef.current) {
+                            if (overlay) overlay.style.opacity = '0';
+                            clipOverlayFadeRef.current = false;
+                            setTimeout(() => {
+                              clipMainRef.current = null;
+                              setClipActivo(null);
+                              setClipOverlayUrl(null);
+                              prevTiempoRef.current = r.hasta;
+                              clipResumeRef.current = null;
+                              v.style.opacity = '1';
+                              v.play().catch(() => {});
+                              setReproduciendo(true);
+                            }, 250);
+                          }
+                        }, 2000);
+                      } else {
+                        if (overlay) overlay.style.opacity = '0';
+                        clipOverlayFadeRef.current = false;
+                        setTimeout(() => {
+                          clipMainRef.current = null;
+                          setClipActivo(null);
+                          setClipOverlayUrl(null);
                           v.style.opacity = '1';
-                          try { v.src = r.src; } catch (_) {}
-                          v.play().catch(() => {});
-                          setReproduciendo(true);
-                        }
-                      }, 300);
+                        }, 250);
+                      }
                     }
                   }}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', border: '1px solid #334155', transition: 'opacity 0.3s ease' }}
