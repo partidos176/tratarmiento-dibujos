@@ -3375,22 +3375,31 @@ function TratamientoApp({ videoInicial }) {
                           <span style={{ color: '#38bdf8', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>Crossfade · 2s</span>
                           <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #38bdf8, transparent)' }} />
                         </div>
-                      ) : fila.tipo === 'imagen' && fila.imagenUrl ? (
-                        <img
-                          src={fila.imagenUrl}
-                          alt={`Imagen ${i + 1}`}
-                          style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155' }}
-                        />
-                      ) : fila.videoUrl ? (
-                        <video
-                          src={fila.videoUrl}
-                          muted
-                          controls
-                          playsInline
-                          style={{ width: '250px', borderRadius: '6px', background: '#000000' }}
-                        />
                       ) : (
-                        <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Sin video</span>
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          {fila.tipo === 'imagen' && fila.imagenUrl ? (
+                            <img
+                              src={fila.imagenUrl}
+                              alt={`Imagen ${i + 1}`}
+                              style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155' }}
+                            />
+                          ) : fila.videoUrl ? (
+                            <video
+                              src={fila.videoUrl}
+                              muted
+                              controls
+                              playsInline
+                              style={{ width: '250px', borderRadius: '6px', background: '#000000' }}
+                            />
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Sin video</span>
+                          )}
+                          {fila.concepto && (
+                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '4px 6px', background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', textAlign: 'center', borderRadius: '6px 6px 0 0', pointerEvents: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {fila.concepto}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem' }}>
