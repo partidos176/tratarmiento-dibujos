@@ -998,13 +998,19 @@ function TratamientoApp({ videoInicial }) {
             crossfadeElapsed += 1 / 30;
             const t = Math.min(crossfadeElapsed / seg.duracion, 1);
             ctx.globalAlpha = 1;
-            if (prevEl && prevEl.readyState >= 2) {
-              ctx.globalAlpha = 1 - t;
-              try { ctx.drawImage(prevEl, 0, 0, w, h); } catch (_) {}
+            if (prevEl) {
+              const ok = prevEl.tagName === 'IMG' ? prevEl.complete : prevEl.readyState >= 2;
+              if (ok) {
+                ctx.globalAlpha = 1 - t;
+                try { ctx.drawImage(prevEl, 0, 0, w, h); } catch (_) {}
+              }
             }
-            if (nextEl && nextEl.readyState >= 2) {
-              ctx.globalAlpha = t;
-              try { ctx.drawImage(nextEl, 0, 0, w, h); } catch (_) {}
+            if (nextEl) {
+              const ok = nextEl.tagName === 'IMG' ? nextEl.complete : nextEl.readyState >= 2;
+              if (ok) {
+                ctx.globalAlpha = t;
+                try { ctx.drawImage(nextEl, 0, 0, w, h); } catch (_) {}
+              }
             }
             ctx.globalAlpha = 1;
             if (crossfadeElapsed >= seg.duracion) {
