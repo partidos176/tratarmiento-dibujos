@@ -1711,6 +1711,57 @@ function TratamientoApp({ videoInicial }) {
                     src={clipOverlayUrl}
                     onPlay={() => setReproduciendo(true)}
                     onPause={() => setReproduciendo(false)}
+                    onEnded={() => {
+                      const vv = videoRef.current;
+                      const overlay = clipOverlayRef.current;
+                      const r = clipMainRef.current;
+                      if (!r || !vv) return;
+                      
+                      // Cancelar timer de precarga si esta activo
+                      if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                      
+                      // Precargar video principal
+                      try { vv.src = r.src; } catch (_) {}
+                      vv.currentTime = r.t + 0.1;
+                      vv.load();
+                      
+                      const onReady = () => {
+                        vv.removeEventListener('canplay', onReady);
+                        vv.removeEventListener('loadeddata', onReady);
+                        if (overlay) overlay.style.opacity = '0';
+                        clipOverlayFadeRef.current = false;
+                        setTimeout(() => {
+                          clipMainRef.current = null;
+                          setClipActivo(null);
+                          setClipOverlayUrl(null);
+                          prevTiempoRef.current = r.hasta;
+                          clipResumeRef.current = null;
+                          vv.style.opacity = '1';
+                          vv.play().catch(() => {});
+                          setReproduciendo(true);
+                        }, 250);
+                      };
+                      vv.addEventListener('canplay', onReady);
+                      vv.addEventListener('loadeddata', onReady);
+                      setTimeout(() => {
+                        vv.removeEventListener('canplay', onReady);
+                        vv.removeEventListener('loadeddata', onReady);
+                        if (clipMainRef.current) {
+                          if (overlay) overlay.style.opacity = '0';
+                          clipOverlayFadeRef.current = false;
+                          setTimeout(() => {
+                            clipMainRef.current = null;
+                            setClipActivo(null);
+                            setClipOverlayUrl(null);
+                            prevTiempoRef.current = r.hasta;
+                            clipResumeRef.current = null;
+                            vv.style.opacity = '1';
+                            vv.play().catch(() => {});
+                            setReproduciendo(true);
+                          }, 250);
+                        }
+                      }, 2000);
+                    }}
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '12px', background: '#000000', opacity: clipOverlayFadeRef.current ? 1 : 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }}
                   />
                 )}
