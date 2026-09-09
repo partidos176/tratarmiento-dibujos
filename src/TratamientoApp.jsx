@@ -2971,7 +2971,6 @@ function TratamientoApp({ videoInicial }) {
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.5rem', padding: '2rem' }}>
-          <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.5rem', color: '#e2e8f0', margin: 0 }}>Montaje</h2>
           <div style={{ width: '100%', maxWidth: '900px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
