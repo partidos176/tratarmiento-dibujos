@@ -2962,11 +2962,8 @@ function TratamientoApp({ videoInicial }) {
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '2rem' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
           <h2 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.5rem', color: '#e2e8f0' }}>Montaje</h2>
-          <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: '0.85rem', color: '#64748b', textAlign: 'center', maxWidth: '400px' }}>
-            Próximamente
-          </p>
         </div>
       )}
       {aviso && (
