@@ -907,14 +907,14 @@ function TratamientoApp({ videoInicial }) {
 
   const descargarMontaje = async () => {
     const items = filasMontaje;
-    const videos = items.filter(f => f.tipo !== 'transicion' && f.videoUrl);
-    if (videos.length === 0) return;
+    const mediaItems = items.filter(f => f.tipo !== 'transicion');
+    if (mediaItems.length === 0) return;
     setDescargandoMontaje(true);
     setProgresoDescarga(0);
     let canvas = null;
     let ctx = null;
     let rec = null;
-    const videoEls = [];
+    const mediaEls = [];
     try {
       const w = 1280;
       const h = 720;
@@ -928,25 +928,33 @@ function TratamientoApp({ videoInicial }) {
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
 
-      for (const v of videos) {
-        const el = document.createElement('video');
-        el.muted = true; el.playsInline = true; el.preload = 'auto'; el.src = v.videoUrl;
-        el.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
-        document.body.appendChild(el);
-        await new Promise((res) => { el.onloadedmetadata = res; el.onerror = res; });
-        videoEls.push(el);
+      for (const item of mediaItems) {
+        if (item.tipo === 'imagen' && item.imagenUrl) {
+          const img = document.createElement('img');
+          img.crossOrigin = 'anonymous';
+          img.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+          document.body.appendChild(img);
+          await new Promise((res) => { img.onload = res; img.onerror = res; img.src = item.imagenUrl; });
+          mediaEls.push({ el: img, tipo: 'imagen', duracion: 4 });
+        } else if (item.videoUrl) {
+          const vid = document.createElement('video');
+          vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = item.videoUrl;
+          vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+          document.body.appendChild(vid);
+          await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+          mediaEls.push({ el: vid, tipo: 'video', duracion: vid.duration || 5 });
+        }
       }
 
       const segs = [];
-      let videoIdx = 0;
+      let mediaIdx = 0;
       for (let i = 0; i < items.length; i++) {
         if (items[i].tipo === 'transicion') {
-          const dur = items[i].duracion || 2;
-          segs.push({ tipo: 'transicion', duracion: dur });
+          segs.push({ tipo: 'transicion', duracion: items[i].duracion || 2 });
         } else {
-          if (videoIdx < videoEls.length) {
-            segs.push({ tipo: 'video', el: videoEls[videoIdx], duracion: videoEls[videoIdx].duration || 5 });
-            videoIdx++;
+          if (mediaIdx < mediaEls.length) {
+            segs.push({ tipo: mediaEls[mediaIdx].tipo, el: mediaEls[mediaIdx].el, duracion: mediaEls[mediaIdx].duracion });
+            mediaIdx++;
           }
         }
       }
@@ -957,7 +965,6 @@ function TratamientoApp({ videoInicial }) {
         let segElapsed = 0;
         let prevEl = null;
         let nextEl = null;
-        let crossfadeDur = 0;
         let crossfadeElapsed = 0;
         const startTime = performance.now();
         const totalDur = segs.reduce((s, seg) => s + seg.duracion, 0);
@@ -966,7 +973,7 @@ function TratamientoApp({ videoInicial }) {
           if (terminado) return;
           terminado = true;
           try { rec.stop(); } catch (_) {}
-          videoEls.forEach(el => { try { document.body.removeChild(el); } catch (_) {} });
+          mediaEls.forEach(m => { try { document.body.removeChild(m.el); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
           setDescargandoMontaje(false);
           setProgresoDescarga(0);
@@ -1001,31 +1008,35 @@ function TratamientoApp({ videoInicial }) {
             }
             ctx.globalAlpha = 1;
             if (crossfadeElapsed >= seg.duracion) {
-              if (prevEl) { try { prevEl.pause(); } catch (_) {} }
+              if (prevEl) { try { prevEl.pause && prevEl.pause(); } catch (_) {} }
               prevEl = nextEl;
-              if (prevEl) { prevEl.currentTime = 0; prevEl.play().catch(() => {}); }
+              if (prevEl) {
+                if (prevEl.tagName === 'IMG') { /* images don't need play */ }
+                else { prevEl.currentTime = 0; prevEl.play().catch(() => {}); }
+              }
               nextEl = null;
               crossfadeElapsed = 0;
               currentSeg++;
             }
           } else {
             const el = seg.el;
-            if (segElapsed <= 1 / 30 + 0.001) {
+            const esImagen = seg.tipo === 'imagen';
+            if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
               el.currentTime = 0;
               el.play().catch(() => {});
             }
             try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
-            if (el.ended || segElapsed >= seg.duracion) {
-              el.pause();
+            const ended = esImagen ? segElapsed >= seg.duracion : (el.ended || segElapsed >= seg.duracion);
+            if (ended) {
+              if (!esImagen) try { el.pause(); } catch (_) {}
               prevEl = el;
               currentSeg++;
               segElapsed = 0;
               if (currentSeg < segs.length && segs[currentSeg].tipo === 'transicion') {
                 const nextIdx = currentSeg + 1;
-                if (nextIdx < segs.length && segs[nextIdx].tipo === 'video') {
+                if (nextIdx < segs.length && segs[nextIdx].tipo !== 'transicion') {
                   nextEl = segs[nextIdx].el;
-                  nextEl.currentTime = 0;
-                  nextEl.play().catch(() => {});
+                  if (nextEl.tagName !== 'IMG') { nextEl.currentTime = 0; nextEl.play().catch(() => {}); }
                 }
                 crossfadeElapsed = 0;
               }
@@ -1043,7 +1054,7 @@ function TratamientoApp({ videoInicial }) {
       return resultado;
     } catch (e) {
       console.error('Error al descargar montaje', e);
-      videoEls.forEach(el => { try { document.body.removeChild(el); } catch (_) {} });
+      mediaEls.forEach(m => { try { document.body.removeChild(m.el); } catch (_) {} });
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
