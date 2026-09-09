@@ -966,7 +966,7 @@ function TratamientoApp({ videoInicial }) {
         let prevEl = null;
         let nextEl = null;
         let crossfadeElapsed = 0;
-        const startTime = performance.now();
+        const totalSegs = segs.length;
         const totalDur = segs.reduce((s, seg) => s + seg.duracion, 0);
 
         const terminar = (error) => {
@@ -1049,8 +1049,8 @@ function TratamientoApp({ videoInicial }) {
             }
           }
 
-          const elapsed = (performance.now() - startTime) / 1000;
-          setProgresoDescarga(Math.min(99, Math.round((elapsed / totalDur) * 100)));
+          const progress = totalSegs > 0 ? Math.min(99, Math.round(((currentSeg + segElapsed / (segs[currentSeg]?.duracion || 1)) / totalSegs) * 100)) : 0;
+          setProgresoDescarga(progress);
           if (!terminado) requestAnimationFrame(loop);
         };
 
