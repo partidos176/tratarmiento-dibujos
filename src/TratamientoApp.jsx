@@ -81,6 +81,8 @@ function TratamientoApp({ videoInicial }) {
 const [previewMontaje, setPreviewMontaje] = useState(null);
 const previewVideoRef = useRef(null);
 const [previewT, setPreviewT] = useState(null);
+const [previewDur, setPreviewDur] = useState(0);
+const [previewPlaying, setPreviewPlaying] = useState(false);
 const [lineasSelMontaje, setLineasSelMontaje] = useState({});
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
@@ -3360,20 +3362,33 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)' }}>{formatoTiempo(previewMontaje.inicio)} — {formatoTiempo(previewMontaje.fin)}</div>
                 <button onClick={() => setPreviewMontaje(null)} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
-              <div style={{ position: 'relative' }}>
               <video
                 ref={previewVideoRef}
                 src={previewMontaje.src}
-                controls
                 autoPlay
                 playsInline
                 style={{ width: '100%', borderRadius: '8px', background: '#000000', display: 'block' }}
-                onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); setPreviewT(Math.max(0, previewMontaje.inicio)); e.currentTarget.play().catch(() => {}); }}
+                onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); setPreviewT(Math.max(0, previewMontaje.inicio)); setPreviewDur(e.currentTarget.duration || 0); e.currentTarget.play().catch(() => {}); }}
                 onTimeUpdate={(e) => { setPreviewT(e.currentTarget.currentTime); if (e.currentTarget.currentTime >= previewMontaje.fin) e.currentTarget.pause(); }}
+                onPlay={() => setPreviewPlaying(true)}
+                onPause={() => setPreviewPlaying(false)}
               />
-              <div style={{ position: 'absolute', top: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 800, fontSize: '0.85rem', padding: '0.2rem 0.5rem', borderRadius: '6px', pointerEvents: 'none' }}>
-                {formatoTiempo(previewT ?? previewMontaje.inicio)} / {formatoTiempo(previewMontaje.fin)}
-              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.5rem' }}>
+                <button
+                  onClick={() => { const v = previewVideoRef.current; if (!v) return; if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } }}
+                  title="Reproducir / pausar"
+                  style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.85rem', width: '32px', height: '28px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                >{previewPlaying ? '⏸' : '▶'}</button>
+                <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 800, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{formatoTiempo(previewT ?? previewMontaje.inicio)} / {formatoTiempo(previewDur || previewMontaje.fin)}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(1, previewDur || previewMontaje.fin)}
+                  step={0.1}
+                  value={Math.min(previewT ?? previewMontaje.inicio, Math.max(1, previewDur || previewMontaje.fin))}
+                  onChange={(e) => { const v = previewVideoRef.current; if (!v) return; v.currentTime = Number(e.target.value); setPreviewT(Number(e.target.value)); }}
+                  style={{ flex: 1, accentColor: '#22c55e', cursor: 'pointer' }}
+                />
               </div>
             </div>
           )}
