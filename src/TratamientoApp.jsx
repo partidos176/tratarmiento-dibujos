@@ -3304,7 +3304,12 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
                 {fila.inicio != null && fila.fin != null && (
                   <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: {formatoTiempo(fila.inicio)} — {formatoTiempo(fila.fin)}</span>
                 )}
-                <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fila.concepto || `Línea ${i + 1}`}</span>
+                <input
+                  value={fila.concepto || ''}
+                  onChange={(e) => { setFilasMontaje(prev => prev.map((f) => f.id === fila.id ? { ...f, concepto: e.target.value } : f)); }}
+                  placeholder="Escribe nombre o concepto..."
+                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', outline: 'none', minWidth: '120px' }}
+                />
                 {fila.tipo === 'imagen' && fila.imagenUrl ? (
                   <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
                 ) : fila.videoUrl ? (
