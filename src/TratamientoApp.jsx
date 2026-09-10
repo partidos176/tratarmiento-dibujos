@@ -3293,6 +3293,18 @@ function TratamientoApp({ videoInicial }) {
               {descargandoMontaje && <span style={{ fontFamily: 'monospace' }}>{progresoDescarga}%</span>}
               Descargar
             </button>
+            <button
+              onClick={() => {
+                if (!filasMontaje.length) return;
+                if (!window.confirm(`¿Eliminar las ${filasMontaje.length} filas de Montaje?`)) return;
+                filasMontaje.forEach((f) => { if (f.videoUrl && f.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(f.videoUrl); } catch (_) {} } });
+                setFilasMontaje([]);
+                setFilaSeleccionada(null);
+              }}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Limpiar
+            </button>
             {descargandoMontaje && (
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div style={{ flex: 1, height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
