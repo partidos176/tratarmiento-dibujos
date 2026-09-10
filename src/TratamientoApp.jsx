@@ -3304,7 +3304,7 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
                 {fila.inicio != null && fila.fin != null && (
                   <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: {formatoTiempo(fila.inicio)} — {formatoTiempo(fila.fin)}</span>
                 )}
-                <span style={{ flex: 1, minWidth: '100px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fila.concepto || `Línea ${i + 1}`}</span>
+                <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fila.concepto || `Línea ${i + 1}`}</span>
                 {fila.tipo === 'imagen' && fila.imagenUrl ? (
                   <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
                 ) : fila.videoUrl ? (
