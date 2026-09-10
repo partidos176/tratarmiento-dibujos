@@ -78,6 +78,7 @@ function TratamientoApp({ videoInicial }) {
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
+const [previewMontaje, setPreviewMontaje] = useState(null);
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
@@ -3311,6 +3312,17 @@ function TratamientoApp({ videoInicial }) {
                 {fila.duracion != null && (
                   <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>{fila.duracion}s</span>
                 )}
+                {fila.inicio != null && fila.fin != null && (
+                  <button
+                    onClick={() => {
+                      const src = videoUrlCortes || videoUrl;
+                      if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
+                      setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
+                    }}
+                    title="Ver fragmento entre inicio y fin"
+                    style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                  >▶</button>
+                )}
                 <button
                   onClick={() => {
                     if (fila.videoUrl && fila.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(fila.videoUrl); } catch (_) {} }
@@ -3322,6 +3334,23 @@ function TratamientoApp({ videoInicial }) {
               </div>
             ))}
           </div>
+          {previewMontaje && (
+            <div onClick={() => setPreviewMontaje(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', maxWidth: '720px', width: '90%', position: 'relative' }}>
+                <button onClick={() => setPreviewMontaje(null)} title="Cerrar" style={{ position: 'absolute', top: '0.4rem', right: '0.4rem', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1, zIndex: 1 }}>×</button>
+                <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', marginBottom: '0.6rem', fontFamily: 'var(--font-mono, monospace)' }}>{formatoTiempo(previewMontaje.inicio)} — {formatoTiempo(previewMontaje.fin)}</div>
+                <video
+                  src={previewMontaje.src}
+                  controls
+                  autoPlay
+                  playsInline
+                  style={{ width: '100%', borderRadius: '8px', background: '#000000' }}
+                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); e.currentTarget.play().catch(() => {}); }}
+                  onTimeUpdate={(e) => { if (e.currentTarget.currentTime >= previewMontaje.fin) e.currentTarget.pause(); }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
       {aviso && (
