@@ -72,6 +72,7 @@ function TratamientoApp({ videoInicial }) {
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
+  const [finPeriodoSel, setFinPeriodoSel] = useState(null);
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
@@ -2171,11 +2172,11 @@ function TratamientoApp({ videoInicial }) {
               {(() => {
                 const ord = [...cortes].sort((a, b) => b - a);
                 return ord.map((ct, i) => (
-                <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
+                <div key={`corte-${i}`} onClick={() => { setFinPeriodoSel(null); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
                   <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
                   <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                    P{ord.length - i}: {formatoTiempo(ct)} — <span onClick={(e) => { e.stopPropagation(); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + (duracionCortes[String(ct)] ?? 15)); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: '#ffffff' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
+                    P{ord.length - i}: {formatoTiempo(ct)} — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setFinPeriodoSel(fin); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: finPeriodoSel === ct + (duracionCortes[String(ct)] ?? 15) ? '#ef4444' : '#ffffff' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
                   </span>
                   <input
                     value={nombreCortes[String(ct)] ?? ''}
