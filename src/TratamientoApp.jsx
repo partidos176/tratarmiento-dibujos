@@ -1629,6 +1629,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
+      return { id: nuevoId, videoUrl, tiempo: capturaSeleccionada.tiempo };
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
@@ -2287,7 +2288,22 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 </svg>
               </button>
               <button
-                onClick={guardarCaptura}
+                onClick={async () => {
+                  const r = await guardarCaptura();
+                  if (!r || !r.videoUrl) return;
+                  const selId = Object.keys(lineasSelMontaje).find(k => lineasSelMontaje[k]);
+                  if (selId && filasMontaje.some(f => String(f.id) === String(selId))) {
+                    setFilasMontaje(prev => prev.map(f => {
+                      if (String(f.id) !== String(selId)) return f;
+                      if (f.videoUrl && f.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(f.videoUrl); } catch (_) {} }
+                      return { ...f, videoUrl: r.videoUrl };
+                    }));
+                  } else {
+                    const t = Math.max(0, r.tiempo ?? 0);
+                    setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: r.videoUrl, concepto: '', inicio: t, fin: t + 4, duracion: 4 }]);
+                  }
+                  setHoja('Montaje');
+                }}
                 disabled={exportando}
                 style={{ background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
               >
@@ -3319,6 +3335,11 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 {fila.inicio != null && fila.fin != null && (
                   <button
                     onClick={() => {
+                      if (fila.videoUrl) {
+                        setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
+                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {} } });
+                        return;
+                      }
                       const src = videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
                       setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
