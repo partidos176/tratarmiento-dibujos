@@ -3295,7 +3295,7 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
             )}
           </div>
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <div style={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {filasMontaje.length === 0 ? (
               <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
             ) : filasMontaje.map((fila, i) => (
@@ -3341,7 +3341,7 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
             ))}
           </div>
           {previewMontaje && (
-            <div style={{ flex: '0 0 460px', background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', position: 'sticky', top: '1rem' }}>
+            <div style={{ flex: '1 1 auto', background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', position: 'sticky', top: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
                 <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)' }}>{formatoTiempo(previewMontaje.inicio)} — {formatoTiempo(previewMontaje.fin)}</div>
                 <button onClick={() => setPreviewMontaje(null)} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
