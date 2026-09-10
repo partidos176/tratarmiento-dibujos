@@ -3379,7 +3379,6 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                   title="Reproducir / pausar"
                   style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.85rem', width: '32px', height: '28px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
                 >{previewPlaying ? '⏸' : '▶'}</button>
-                <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 800, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{formatoTiempo(previewT ?? previewMontaje.inicio)} / {formatoTiempo(previewDur || previewMontaje.fin)}</span>
                 <input
                   type="range"
                   min={0}
