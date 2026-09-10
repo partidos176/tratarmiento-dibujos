@@ -80,6 +80,7 @@ function TratamientoApp({ videoInicial }) {
   const [filasMontaje, setFilasMontaje] = useState([]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
 const previewVideoRef = useRef(null);
+const deseaPlayPreviewRef = useRef(false);
 const [previewT, setPreviewT] = useState(null);
 const [previewDur, setPreviewDur] = useState(0);
 const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -499,6 +500,13 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const imagenInputRef = useRef(null);
+
+  useEffect(() => {
+    if (hoja !== 'Montaje') {
+      deseaPlayPreviewRef.current = false;
+      if (previewVideoRef.current) { try { previewVideoRef.current.pause(); } catch (_) {} }
+    }
+  }, [hoja]);
 
   useEffect(() => {
     cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
@@ -2291,6 +2299,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 onClick={async () => {
                   const r = await guardarCaptura();
                   if (!r || !r.videoUrl) return;
+                  deseaPlayPreviewRef.current = true;
                   setPreviewMontaje({ src: r.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
                   setHoja('Montaje');
                 }}
@@ -3306,7 +3315,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
                 {fila.inicio != null && fila.fin != null && (
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } deseaPlayPreviewRef.current = true; setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } deseaPlayPreviewRef.current = true; setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
                 )}
                 <input
                   value={fila.concepto || ''}
@@ -3326,13 +3335,15 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                   <button
                     onClick={() => {
                       if (fila.videoUrl) {
+                        deseaPlayPreviewRef.current = true;
                         setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {} } });
                         return;
                       }
                       const src = videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
-                      setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
+                      deseaPlayPreviewRef.current = true;
+                      deseaPlayPreviewRef.current = true; setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
                     }}
                     title="Ver fragmento entre inicio y fin"
                     style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
@@ -3373,14 +3384,13 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: '0.6rem' }}>
                 <button onClick={() => setPreviewMontaje(null)} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
-               <video
-                 ref={previewVideoRef}
-                 src={previewMontaje.src}
-                 controls
-                 autoPlay
-                 playsInline
+              <video
+                ref={previewVideoRef}
+                src={previewMontaje.src}
+                controls
+                playsInline
                  style={{ width: '100%', borderRadius: '8px', background: '#000000', display: 'block' }}
-                 onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); setPreviewT(Math.max(0, previewMontaje.inicio)); setPreviewDur(e.currentTarget.duration || 0); e.currentTarget.play().catch(() => {}); }}
+                 onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); setPreviewT(Math.max(0, previewMontaje.inicio)); setPreviewDur(e.currentTarget.duration || 0); if (deseaPlayPreviewRef.current) { deseaPlayPreviewRef.current = false; e.currentTarget.play().catch(() => {}); } }}
                  onTimeUpdate={(e) => { setPreviewT(e.currentTarget.currentTime); if (e.currentTarget.currentTime >= previewMontaje.fin) e.currentTarget.pause(); }}
                  onPlay={() => setPreviewPlaying(true)}
                  onPause={() => setPreviewPlaying(false)}
