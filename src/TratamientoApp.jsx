@@ -3332,6 +3332,24 @@ const previewVideoRef = useRef(null);
                 )}
                 <button
                   onClick={() => {
+                    const v = previewVideoRef.current;
+                    if (!v || !v.videoWidth) { setAviso('Abre primero el fragmento con el botón play'); return; }
+                    const c = document.createElement('canvas');
+                    c.width = v.videoWidth;
+                    c.height = v.videoHeight;
+                    c.getContext('2d').drawImage(v, 0, 0);
+                    const a = document.createElement('a');
+                    a.href = c.toDataURL('image/jpeg', 0.92);
+                    a.download = `${(fila.concepto || 'linea').replace(/[^\w\-áéíóúñ]+/gi, '_')}_${Math.round(v.currentTime)}s.jpg`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}
+                  title="Capturar foto del instante actual"
+                  style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                >📷</button>
+                <button
+                  onClick={() => {
                     if (fila.videoUrl && fila.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(fila.videoUrl); } catch (_) {} }
                     setFilasMontaje(prev => prev.filter((f) => f.id !== fila.id));
                   }}
