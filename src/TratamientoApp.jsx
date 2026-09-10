@@ -2188,33 +2188,13 @@ function TratamientoApp({ videoInicial }) {
                     <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = Math.max(1, dur - 1); setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = Math.max(0, ct - 1); if (nuevo === ct || cortes.includes(nuevo)) return; const nk = String(nuevo); const nd = (ct + dur) - nuevo; setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Retroceder el inicio del corte 1s (fin fijo)" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
                     <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
                     <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = dur + 1; setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = ct + 1; const nd = (ct + dur) - nuevo; if (nd < 1 || cortes.includes(nuevo)) return; const nk = String(nuevo); setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Avanzar el inicio del corte 1s (fin fijo)" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
-                    <button onClick={async (e) => {
+                    <button onClick={(e) => {
                       e.stopPropagation();
-                      const src = videoUrlCortes || videoUrl;
-                      if (!src) { setAviso('Carga primero un vídeo para generar el clip'); return; }
                       const dur = duracionCortes[String(ct)] ?? 15;
                       const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - i}`;
-                      setGenerandoClip(ct);
-                      setProgresoClips(prev => ({ ...prev, [String(ct)]: 0 }));
-                      const t0Clip = Date.now();
-                      const intervaloClip = setInterval(() => {
-                        const pct = Math.min(99, Math.round(((Date.now() - t0Clip) / 1000 / Math.max(1, dur)) * 100));
-                        setProgresoClips(prev => ({ ...prev, [String(ct)]: pct }));
-                      }, 250);
-                      try {
-                        const blob = await generarClipCorte(src, Math.max(0, ct), dur);
-                        const url = URL.createObjectURL(blob);
-                        setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: url, concepto: nombre, inicio: Math.max(0, ct), fin: Math.max(0, ct) + dur, duracion: dur }]);
-                        setHoja('Montaje');
-                      } catch (err) {
-                        console.error('Error generando el clip:', err);
-                        setAviso('No se pudo generar el clip: ' + ((err && err.message) || err));
-                      } finally {
-                        clearInterval(intervaloClip);
-                        setProgresoClips(prev => { const copia = { ...prev }; delete copia[String(ct)]; return copia; });
-                        setGenerandoClip(null);
-                      }
-                    }} title="Generar el clip y añadirlo a Montaje" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Montaje'}</button>
+                      setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: null, concepto: nombre, inicio: Math.max(0, ct), fin: Math.max(0, ct) + dur, duracion: dur }]);
+                      setHoja('Montaje');
+                    }} title="Enviar la línea a Montaje (sin clip)" style={{ background: '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Montaje</button>
                   </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
