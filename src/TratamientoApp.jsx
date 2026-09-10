@@ -2291,16 +2291,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 onClick={async () => {
                   const r = await guardarCaptura();
                   if (!r || !r.videoUrl) return;
-                  const t = r.tiempo ?? 0;
-                  let dest = filasMontaje.find(f => f.inicio != null && f.fin != null && t >= f.inicio && t <= f.fin);
-                  if (!dest) {
-                    const selId = Object.keys(lineasSelMontaje).find(k => lineasSelMontaje[k]);
-                    dest = selId ? filasMontaje.find(f => String(f.id) === String(selId)) : null;
-                  }
-                  if (!dest) { setAviso('Ninguna línea de Montaje coincide con ese tiempo'); return; }
-                  const destId = dest.id;
-                  if (dest.videoUrl && dest.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(dest.videoUrl); } catch (_) {} }
-                  setFilasMontaje(prev => prev.map(f => String(f.id) === String(destId) ? { ...f, videoUrl: r.videoUrl } : f));
+                  setPreviewMontaje({ src: r.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
                   setHoja('Montaje');
                 }}
                 disabled={exportando}
