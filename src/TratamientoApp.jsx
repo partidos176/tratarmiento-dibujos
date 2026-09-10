@@ -3297,19 +3297,20 @@ function TratamientoApp({ videoInicial }) {
             {filasMontaje.length === 0 ? (
               <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
             ) : filasMontaje.map((fila, i) => (
-              <div key={fila.id} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem' }}>
+              <div key={fila.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
                 <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                {fila.inicio != null && fila.fin != null && (
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: {formatoTiempo(fila.inicio)} — {formatoTiempo(fila.fin)}</span>
+                )}
+                <span style={{ flex: 1, minWidth: '100px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fila.concepto || `Línea ${i + 1}`}</span>
                 {fila.tipo === 'imagen' && fila.imagenUrl ? (
-                  <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155' }} />
+                  <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
                 ) : fila.videoUrl ? (
-                  <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000' }} />
+                  <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000', flexShrink: 0 }} />
                 ) : null}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0 }}>
-                  <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fila.concepto || `Línea ${i + 1}`}</span>
-                  {fila.inicio != null && fila.fin != null && (
-                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>{formatoTiempo(fila.inicio)} — {formatoTiempo(fila.fin)}{fila.duracion != null ? ` (${fila.duracion}s)` : ''}</span>
-                  )}
-                </div>
+                {fila.duracion != null && (
+                  <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>{fila.duracion}s</span>
+                )}
                 <button
                   onClick={() => {
                     if (fila.videoUrl && fila.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(fila.videoUrl); } catch (_) {} }
