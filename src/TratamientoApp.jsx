@@ -3334,15 +3334,16 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                     const c = document.createElement('canvas');
                     c.width = v.videoWidth;
                     c.height = v.videoHeight;
-                    c.getContext('2d').drawImage(v, 0, 0);
-                    const a = document.createElement('a');
-                    a.href = c.toDataURL('image/jpeg', 0.92);
-                    a.download = `${(fila.concepto || 'linea').replace(/[^\w\-áéíóúñ]+/gi, '_')}_${Math.round(v.currentTime)}s.jpg`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
+                    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+                    const nueva = { id: Date.now(), dataUrl: c.toDataURL('image/png'), tiempo: v.currentTime };
+                    setFiguras([]);
+                    setFiguraSeleccionada(null);
+                    setCapturaSeleccionada(nueva);
+                    setCapturaGuardada(null);
+                    setImgDim(null);
+                    setHoja('Edición');
                   }}
-                  title="Capturar foto del instante actual"
+                  title="Enviar instantánea a Edición"
                   style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
                 >📷</button>
                 <button
