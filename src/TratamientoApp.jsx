@@ -80,6 +80,7 @@ function TratamientoApp({ videoInicial }) {
   const [filasMontaje, setFilasMontaje] = useState([]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
 const previewVideoRef = useRef(null);
+const [previewT, setPreviewT] = useState(null);
 const [lineasSelMontaje, setLineasSelMontaje] = useState({});
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
@@ -3359,16 +3360,21 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)' }}>{formatoTiempo(previewMontaje.inicio)} — {formatoTiempo(previewMontaje.fin)}</div>
                 <button onClick={() => setPreviewMontaje(null)} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
+              <div style={{ position: 'relative' }}>
               <video
                 ref={previewVideoRef}
                 src={previewMontaje.src}
                 controls
                 autoPlay
                 playsInline
-                style={{ width: '100%', borderRadius: '8px', background: '#000000' }}
-                onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); e.currentTarget.play().catch(() => {}); }}
-                onTimeUpdate={(e) => { if (e.currentTarget.currentTime >= previewMontaje.fin) e.currentTarget.pause(); }}
+                style={{ width: '100%', borderRadius: '8px', background: '#000000', display: 'block' }}
+                onLoadedMetadata={(e) => { e.currentTarget.currentTime = Math.max(0, previewMontaje.inicio); setPreviewT(Math.max(0, previewMontaje.inicio)); e.currentTarget.play().catch(() => {}); }}
+                onTimeUpdate={(e) => { setPreviewT(e.currentTarget.currentTime); if (e.currentTarget.currentTime >= previewMontaje.fin) e.currentTarget.pause(); }}
               />
+              <div style={{ position: 'absolute', top: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 800, fontSize: '0.85rem', padding: '0.2rem 0.5rem', borderRadius: '6px', pointerEvents: 'none' }}>
+                {formatoTiempo(previewT ?? previewMontaje.inicio)} / {formatoTiempo(previewMontaje.fin)}
+              </div>
+              </div>
             </div>
           )}
           </div>
