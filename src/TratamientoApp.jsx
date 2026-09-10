@@ -79,6 +79,7 @@ function TratamientoApp({ videoInicial }) {
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
+const previewVideoRef = useRef(null);
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
@@ -3302,7 +3303,7 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
               <div key={fila.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: 'fit-content' }}>
                 <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                 {fila.inicio != null && fila.fin != null && (
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: {formatoTiempo(fila.inicio)} — {formatoTiempo(fila.fin)}</span>
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
                 )}
                 <input
                   value={fila.concepto || ''}
@@ -3347,6 +3348,7 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
                 <button onClick={() => setPreviewMontaje(null)} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
               <video
+                ref={previewVideoRef}
                 src={previewMontaje.src}
                 controls
                 autoPlay
