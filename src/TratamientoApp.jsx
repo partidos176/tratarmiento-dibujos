@@ -2175,7 +2175,7 @@ function TratamientoApp({ videoInicial }) {
                   <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
                   <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
                   <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                    P{ord.length - i}: {formatoTiempo(ct)} — {formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}
+                    P{ord.length - i}: {formatoTiempo(ct)} — <span onClick={(e) => { e.stopPropagation(); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + (duracionCortes[String(ct)] ?? 15)); }} title="Ir al final del periodo" style={{ cursor: 'pointer', textDecoration: 'underline', color: '#e2e8f0' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
                   </span>
                   <input
                     value={nombreCortes[String(ct)] ?? ''}
