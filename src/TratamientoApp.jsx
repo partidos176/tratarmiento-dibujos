@@ -84,6 +84,8 @@ const deseaPlayPreviewRef = useRef(false);
 const [fasePreview, setFasePreview] = useState('base');
 const prevTPreviewRef = useRef(null);
 const retomarEnRef = useRef(null);
+const animTimerRef = useRef(null);
+const limpiarTimerAnim = () => { if (animTimerRef.current) { clearTimeout(animTimerRef.current); animTimerRef.current = null; } };
 const [previewT, setPreviewT] = useState(null);
 const [previewDur, setPreviewDur] = useState(0);
 const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -530,13 +532,16 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
     deseaPlayPreviewRef.current = false;
     setFasePreview('base');
     prevTPreviewRef.current = null;
-    setPreviewMontaje({ src: base, inicio: meta.inicio, fin: meta.fin, animSrc: cap.videoUrl, animEn: meta.animEn });
+    setPreviewMontaje({ src: base, inicio: meta.inicio, fin: meta.fin, animSrc: cap.videoUrl, animEn: meta.animEn, animDur: meta.animDur || 4 });
     previewRestauradaRef.current = true;
   }, [capturas, videoUrl, videoUrlCortes, previewMontaje]);
+
+  useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current); }, []);
 
   useEffect(() => {
     if (hoja !== 'Montaje') {
       deseaPlayPreviewRef.current = false;
+      limpiarTimerAnim();
       if (previewVideoRef.current) { try { previewVideoRef.current.pause(); } catch (_) {} }
     }
   }, [hoja]);
@@ -1534,7 +1539,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
       drawNext();
     });
     if (onProgress) onProgress(100);
-    return URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+    return { url: URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), duracion: (totalFrames + 1) / 30 };
   };
 
   const animarElipses = async () => {
@@ -1636,13 +1641,16 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
       URL.revokeObjectURL(url);
       setProgresoVideo(10);
       let videoUrl = null;
+      let duracionAnim = 4;
       try {
         const figurasFn = (t) => {
           const p = Math.min(1, Math.max(0, (t - 200) / 3600));
           const e = 1 - Math.pow(1 - p, 3);
           return figuras.map(f => ({ ...f, crecimiento: e })).map(f => svgFigura(f, imgDim)).join('');
         };
-        videoUrl = await generarVideo(figurasFn, fondoLimpio, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
+        const gv = await generarVideo(figurasFn, fondoLimpio, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
+        videoUrl = gv.url;
+        duracionAnim = gv.duracion || 4;
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
         setAviso('No se pudo generar el vídeo de la animación. Se ha guardado la imagen.');
@@ -1670,7 +1678,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
-      return { id: nuevoId, videoUrl, tiempo: capturaSeleccionada.tiempo };
+      return { id: nuevoId, videoUrl, tiempo: capturaSeleccionada.tiempo, duracionAnim };
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
@@ -2337,12 +2345,13 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                   deseaPlayPreviewRef.current = true;
                   setFasePreview('base');
                   prevTPreviewRef.current = null;
+                  limpiarTimerAnim();
                   if (base) {
                     const linea = filasMontaje.find(f => f.inicio != null && f.fin != null && t >= f.inicio && t <= f.fin);
                     const ini = linea ? linea.inicio : t;
                     const fin = linea ? linea.fin : t + 4;
-                    setPreviewMontaje({ src: base, inicio: ini, fin, animSrc: r.videoUrl, animEn: t });
-                    try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: ini, fin, animEn: t, capturaId: r.id })); } catch (_) {}
+                    setPreviewMontaje({ src: base, inicio: ini, fin, animSrc: r.videoUrl, animEn: t, animDur: r.duracionAnim || 4 });
+                    try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: ini, fin, animEn: t, animDur: r.duracionAnim || 4, capturaId: r.id })); } catch (_) {}
                   } else {
                     setPreviewMontaje({ src: r.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
                   }
@@ -3360,7 +3369,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
                 {fila.inicio != null && fila.fin != null && (
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
                 )}
                 <input
                   value={fila.concepto || ''}
@@ -3380,6 +3389,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                   <button
                     onClick={() => {
                       prevTPreviewRef.current = null;
+                      limpiarTimerAnim();
                       if (fila.videoUrl) {
                         deseaPlayPreviewRef.current = true;
                         setFasePreview('base');
@@ -3389,7 +3399,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                       }
                       const src = videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
-                      prevTPreviewRef.current = null; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
+                      prevTPreviewRef.current = null; limpiarTimerAnim(); deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
                     }}
                     title="Ver fragmento entre inicio y fin"
                     style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
@@ -3431,7 +3441,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 {fasePreview === 'anim' && previewMontaje.animSrc && (
                   <span style={{ background: '#8b5cf6', color: '#ffffff', fontWeight: 800, fontSize: '0.7rem', padding: '0.2rem 0.6rem', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Animación</span>
                 )}
-                <button onClick={() => { try { localStorage.removeItem('preview_anim'); } catch (_) {} setPreviewMontaje(null); }} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                <button onClick={() => { try { localStorage.removeItem('preview_anim'); } catch (_) {} limpiarTimerAnim(); setPreviewMontaje(null); }} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
               <video
                 ref={previewVideoRef}
@@ -3440,8 +3450,8 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                 playsInline
                 style={{ width: '100%', borderRadius: '8px', background: '#000000', display: 'block' }}
                 onLoadedMetadata={(e) => { const v = e.currentTarget; const esAnim = fasePreview === 'anim' && previewMontaje.animSrc; const seekTo = retomarEnRef.current ?? (esAnim ? 0 : Math.max(0, previewMontaje.inicio)); retomarEnRef.current = null; try { v.currentTime = seekTo; } catch (_) {} setPreviewT(seekTo); setPreviewDur(v.duration || 0); if (deseaPlayPreviewRef.current) { deseaPlayPreviewRef.current = false; v.play().catch(() => {}); } }}
-                onTimeUpdate={(e) => { const v = e.currentTarget; setPreviewT(v.currentTime); if (fasePreview === 'anim') { prevTPreviewRef.current = (previewMontaje.animEn ?? 0) + 0.1; return; } const prev = prevTPreviewRef.current ?? v.currentTime; prevTPreviewRef.current = v.currentTime; if (previewMontaje.animSrc && prev <= previewMontaje.animEn && v.currentTime >= previewMontaje.animEn) { deseaPlayPreviewRef.current = true; setFasePreview('anim'); return; } if (v.currentTime >= previewMontaje.fin) v.pause(); }}
-                onEnded={() => { if (fasePreview === 'anim' && previewMontaje.animSrc) { retomarEnRef.current = (previewMontaje.animEn ?? 0) + 0.1; deseaPlayPreviewRef.current = true; setFasePreview('base'); } }}
+                onTimeUpdate={(e) => { const v = e.currentTarget; setPreviewT(v.currentTime); if (fasePreview === 'anim') { prevTPreviewRef.current = (previewMontaje.animEn ?? 0) + 0.1; return; } const prev = prevTPreviewRef.current ?? v.currentTime; prevTPreviewRef.current = v.currentTime; if (previewMontaje.animSrc && prev <= previewMontaje.animEn && v.currentTime >= previewMontaje.animEn) { deseaPlayPreviewRef.current = true; setFasePreview('anim'); if (!animTimerRef.current) { const ms = Math.max(1500, ((previewMontaje.animDur || 4) * 1000) + 800); animTimerRef.current = setTimeout(() => { animTimerRef.current = null; retomarEnRef.current = (previewMontaje.animEn ?? 0) + 0.1; deseaPlayPreviewRef.current = true; setFasePreview('base'); }, ms); } return; } if (v.currentTime >= previewMontaje.fin) v.pause(); }}
+                onEnded={() => { if (fasePreview === 'anim' && previewMontaje.animSrc) { limpiarTimerAnim(); retomarEnRef.current = (previewMontaje.animEn ?? 0) + 0.1; deseaPlayPreviewRef.current = true; setFasePreview('base'); } }}
                 onPlay={() => setPreviewPlaying(true)}
                 onPause={() => setPreviewPlaying(false)}
               />
