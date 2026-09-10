@@ -2204,14 +2204,8 @@ function TratamientoApp({ videoInicial }) {
                       try {
                         const blob = await generarClipCorte(src, Math.max(0, ct), dur);
                         const url = URL.createObjectURL(blob);
-                        if (videoUrl && videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(videoUrl); } catch (_) {} }
-                        setArchivo({ name: `${nombre}.webm` });
-                        setNombreVideo(nombre);
-                        setVideoUrl(url);
-                        setProgreso(0);
-                        corteCargadoRef.current = Math.max(0, ct);
-                        clipOrigenRef.current = Math.max(0, ct);
-                        setHoja('Presentación');
+                        setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: url, concepto: nombre }]);
+                        setHoja('Montaje');
                       } catch (err) {
                         console.error('Error generando el clip:', err);
                         setAviso('No se pudo generar el clip: ' + ((err && err.message) || err));
@@ -2220,7 +2214,7 @@ function TratamientoApp({ videoInicial }) {
                         setProgresoClips(prev => { const copia = { ...prev }; delete copia[String(ct)]; return copia; });
                         setGenerandoClip(null);
                       }
-                    }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Presentación'}</button>
+                    }} title="Generar el clip y añadirlo a Montaje" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Montaje'}</button>
                   </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
