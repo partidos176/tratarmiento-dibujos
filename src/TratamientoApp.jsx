@@ -3308,7 +3308,7 @@ const [previewMontaje, setPreviewMontaje] = useState(null);
                   value={fila.concepto || ''}
                   onChange={(e) => { setFilasMontaje(prev => prev.map((f) => f.id === fila.id ? { ...f, concepto: e.target.value } : f)); }}
                   placeholder="Escribe nombre o concepto..."
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', outline: 'none', minWidth: '120px' }}
+                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', outline: 'none', width: '220px' }}
                 />
                 {fila.tipo === 'imagen' && fila.imagenUrl ? (
                   <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
