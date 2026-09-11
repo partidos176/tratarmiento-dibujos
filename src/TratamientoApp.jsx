@@ -3686,7 +3686,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             )}
           </div>
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
-          <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div
                 onClick={() => setLineasSelMontaje(prev => {
