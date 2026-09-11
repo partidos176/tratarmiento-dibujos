@@ -3533,6 +3533,11 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataUrl = reader.result;
+                  const selId = Object.keys(lineasSelMontaje).find(k => lineasSelMontaje[k]);
+                  if (selId && filasMontaje.some(f => String(f.id) === String(selId))) {
+                    setFilasMontaje(prev => prev.map(f => String(f.id) === String(selId) ? { ...f, tipo: 'imagen', imagenUrl: dataUrl } : f));
+                    return;
+                  }
                   setFilasMontaje(prev => {
                     const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '' };
                     if (filaSeleccionada != null) {
@@ -3683,7 +3688,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                   placeholder="Escribe nombre o concepto..."
                   style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', outline: 'none', width: '220px' }}
                 />
-                {fila.tipo === 'imagen' && fila.imagenUrl ? (
+                {fila.imagenUrl ? (
                   <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
                 ) : fila.videoUrl ? (
                   <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000', flexShrink: 0 }} />
