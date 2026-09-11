@@ -2999,7 +2999,7 @@ const bdVideoTargetRef = useRef(null);
               playsInline
               preload="metadata"
               onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
-              style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+              style={{ display: 'none' }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flexShrink: 0 }}>
               <button
