@@ -1898,20 +1898,26 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, duracionAnim, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
-      setCapturas(prev => [...(prev || []), nuevaEntrada]);
-      setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
+      const previa = (capturas || []).find(c => c && c.id === capturaSeleccionada.id);
+      const urlVieja = previa ? previa.videoUrl : null;
+      const idFinal = previa ? previa.id : nuevoId;
+      const nuevaEntrada = { id: idFinal, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, duracionAnim, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
+      if (previa) setCapturas(prev => prev.map(c => c && c.id === previa.id ? nuevaEntrada : c));
+      else setCapturas(prev => [...(prev || []), nuevaEntrada]);
+      if (urlVieja && urlVieja !== videoUrl && urlVieja.startsWith('blob:')) {
+        const sigueEnUso = filasMontaje.some(f => f.videoUrl === urlVieja);
+        if (!sigueEnUso) { try { URL.revokeObjectURL(urlVieja); } catch (_) {} }
+      }
+      setCapturaGuardada({ id: idFinal, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
-      asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
+      asignarFotoACorte(idFinal, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
       setPreviewMontaje(prev => {
         if (!prev || !prev.anims || !prev.anims.length || !videoUrl) return prev;
-        const urlsRevo = new Set((capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo && c.videoUrl).map(c => c.videoUrl));
-        if (!prev.anims.some(a => urlsRevo.has(a.src))) return prev;
-        const nuevas = prev.anims.map(a => urlsRevo.has(a.src) ? { ...a, src: videoUrl, id: nuevoId, dur: duracionAnim } : a);
-        try { const m = JSON.parse(localStorage.getItem('preview_anim') || 'null'); if (m) localStorage.setItem('preview_anim', JSON.stringify({ ...m, anims: nuevas.map(a => ({ capturaId: a.id, en: a.en, dur: a.dur })) })); } catch (_) {}
+        if (!urlVieja || !prev.anims.some(a => a.src === urlVieja)) return prev;
+        const nuevas = prev.anims.map(a => a.src === urlVieja ? { ...a, src: videoUrl, id: idFinal, dur: duracionAnim } : a);
         return { ...prev, anims: nuevas };
       });
-      return { id: nuevoId, videoUrl, tiempo: capturaSeleccionada.tiempo, duracionAnim };
+      return { id: idFinal, videoUrl, tiempo: capturaSeleccionada.tiempo, duracionAnim };
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
@@ -2542,7 +2548,9 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                     const previas = (capturas || [])
                       .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
                       .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4, id: c.id }));
-                    if (!previas.some(a => String(a.id) === String(r.id))) previas.push({ src: r.videoUrl, en: t, dur: r.duracionAnim || 4, id: r.id });
+                    const nuevaAnim = { src: r.videoUrl, en: t, dur: r.duracionAnim || 4, id: r.id };
+                    const ixR = previas.findIndex(a => String(a.id) === String(r.id));
+                    if (ixR >= 0) previas[ixR] = nuevaAnim; else previas.push(nuevaAnim);
                     previas.sort((a, b) => a.en - b.en);
                     setPreviewMontaje({ src: base, inicio: ini, fin, anims: previas, concepto: conceptoLinea });
                     try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: ini, fin, concepto: conceptoLinea, anims: previas.map(a => ({ capturaId: a.id, en: a.en, dur: a.dur })) })); } catch (_) {}
