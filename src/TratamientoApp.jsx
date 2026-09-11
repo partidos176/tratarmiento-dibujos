@@ -1011,6 +1011,9 @@ const bdVideoTargetRef = useRef(null);
         if (!val) return;
         if (val === '__file__') { bdFileRef.current?.click(); return; }
         const vb = videosBD.find(x => x.videoUrl === val);
+        const nombreCorte = vb ? (vb.nombre || 'video') : 'video';
+        setVideoUrlCortes(val);
+        setArchivoCortes({ name: nombreCorte });
         deseaPlayPreviewRef.current = true;
         setFasePreview('base');
         prevTPreviewRef.current = null;
@@ -1597,6 +1600,16 @@ const bdVideoTargetRef = useRef(null);
         }));
         setFilasMontaje(prev => [...prev, ...restauradas]);
         setArchivosBD(prev => [...prev, { id: Date.now(), nombre: file.name, nFilas: restauradas.length }]);
+        const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
+        if (Array.isArray(dc.cortes) && dc.cortes.length) {
+          const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
+          if (lista.length) {
+            setCortes(lista);
+            if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes({ ...dc.duracionCortes });
+            if (dc.nombreCortes && typeof dc.nombreCortes === 'object') setNombreCortes({ ...dc.nombreCortes });
+            if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
+          }
+        }
       } catch (e) {
         console.error('Error al importar montaje', e);
         setAviso('No se pudo importar: ' + ((e && e.message) || e));
