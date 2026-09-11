@@ -3583,7 +3583,6 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
             ) : filasMontaje.map((fila, i) => (
               <div key={fila.id} draggable
-                onClick={(e) => { if (e.target.closest('button,input,video,img')) return; setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
                 onDragStart={() => setLineaArrastre(i)}
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={() => {
