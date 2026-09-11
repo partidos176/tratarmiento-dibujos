@@ -2868,7 +2868,7 @@ const bdVideoTargetRef = useRef(null);
                       </div>
                     </td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.3rem' }}>
                         <select
                           value=""
                           title="Elegir vídeo del archivo"
