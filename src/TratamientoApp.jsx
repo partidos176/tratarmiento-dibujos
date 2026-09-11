@@ -3942,7 +3942,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                     style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
                   >▶</button>
                 )}
-                {fila.tipo !== 'imagen' && (
+                {fila.tipo !== 'imagen' && fila.tipo !== 'transicion' && (
                 <button
                   onClick={() => {
                     const v = previewVideoRef.current;
