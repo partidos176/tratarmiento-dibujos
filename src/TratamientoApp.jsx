@@ -2261,52 +2261,6 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
                     >
                       ×
                     </button>
-                    {(() => {
-                      const lista = listaFotosCorte(ct);
-                      if (lista.length === 0) return null;
-                      return (
-                        <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
-                          {lista.map((f, fi) => {
-                            const capId = idDeFoto(f);
-                            const viva = capId != null ? capturas.find(c => c.id === capId) : null;
-                            const srcFoto = viva
-                              ? (viva.imagenEditada || viva.dataUrl)
-                              : (f && typeof f === 'object' ? f.dataUrl : null);
-                            if (!srcFoto) return null;
-                            if (!viva && (!f || typeof f !== 'object' || !Array.isArray(f.figuras) || f.figuras.length === 0)) return null;
-                            return (
-                              <div key={capId ?? fi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                              <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (viva) {
-                                    setCapturaSeleccionada(viva);
-                                    setFiguras(normalizarFiguras(viva.figuras));
-                                  } else if (f && typeof f === 'object') {
-                                    const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.baseDataUrl || f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
-                                    setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
-                                    setCapturaSeleccionada(restaurada);
-                                    setFiguras(restaurada.figuras);
-                                  } else {
-                                    return;
-                                  }
-                                  setFiguraSeleccionada(null);
-                                  setCapturaGuardada(null);
-                                  setImgDim(null);
-                                  setHoja('Edición');
-                                }}
-                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
-                              {viva && viva.videoUrl && (
-                                <span title="Instante del vídeo animado" style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#22c55e' }}>
-                                  {formatoTiempo(viva.insertarEn ?? viva.tiempo ?? ct)}
-                                </span>
-                              )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
                 </div>
                 ));
               })()}
