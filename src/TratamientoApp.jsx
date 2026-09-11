@@ -91,6 +91,7 @@ const [previewT, setPreviewT] = useState(null);
 const [previewDur, setPreviewDur] = useState(0);
 const [previewPlaying, setPreviewPlaying] = useState(false);
 const [lineasSelMontaje, setLineasSelMontaje] = useState({});
+const [lineaArrastre, setLineaArrastre] = useState(null);
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
@@ -3328,7 +3329,22 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
             {filasMontaje.length === 0 ? (
               <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
             ) : filasMontaje.map((fila, i) => (
-              <div key={fila.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: 'fit-content' }}>
+              <div key={fila.id} draggable
+                onDragStart={() => setLineaArrastre(i)}
+                onDragOver={(e) => { e.preventDefault(); }}
+                onDrop={() => {
+                  if (lineaArrastre === null || lineaArrastre === i) { setLineaArrastre(null); return; }
+                  setFilasMontaje(prev => {
+                    const copy = [...prev];
+                    const [moved] = copy.splice(lineaArrastre, 1);
+                    copy.splice(i, 0, moved);
+                    return copy;
+                  });
+                  setLineaArrastre(null);
+                }}
+                onDragEnd={() => setLineaArrastre(null)}
+                title="Arrastra para mover la fila"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
                 <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                 <div
                   onClick={() => setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] }))}
