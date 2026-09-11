@@ -4188,9 +4188,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
               />
               <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
             </div>
-            {filasMontaje.length === 0 ? (
-              <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
-            ) : filasMontaje.map((fila, i) => (
+            {filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
               <div key={fila.id} draggable
                 onClick={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setFilaSelMontaje(prev => prev === fila.id ? null : fila.id); }}
                 onMouseDown={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setLineaArrastre(i); }}
