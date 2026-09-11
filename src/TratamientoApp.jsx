@@ -3741,7 +3741,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                       {listaEd.map((capEd) => (
                         <div key={capEd.id} style={{ position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                           <div style={{ position: 'relative' }}>
-                          <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
+                          <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición" draggable={false}
                             onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
                             style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', display: 'block' }} />
                           <button
@@ -3780,7 +3780,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                   <span style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{fila.concepto || 'Transición'}</span>
                 )}
                 {fila.imagenUrl ? (
-                  <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
+                  <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} draggable={false} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
                 ) : fila.videoUrl ? (
                   <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000', flexShrink: 0 }} />
                 ) : null}
