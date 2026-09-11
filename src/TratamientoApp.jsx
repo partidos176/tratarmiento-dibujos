@@ -2963,7 +2963,6 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                         {selectorCargar()}
                       </td>
                       <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
-                        <button onClick={() => { setBdVideoTarget({ kind: 'new' }); bdVideoRef.current?.click(); }} title="Añadir vídeo del PC" style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#e2e8f0', cursor: 'pointer' }}>+ Vídeo del PC</button>
                       </td>
                     </tr>
               </tbody>
