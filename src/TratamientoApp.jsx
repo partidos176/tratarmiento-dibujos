@@ -531,6 +531,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const imagenInputRef = useRef(null);
+const bdFileRef = useRef(null);
 
   const previewRestauradaRef = useRef(false);
   const capsListasRef = useRef(false);
@@ -2797,6 +2798,13 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             </label>
           </div>
           <div style={{ width: '100%', maxWidth: '800px' }}>
+            <input
+              ref={bdFileRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
+            />
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
                 <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
@@ -2817,20 +2825,10 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                       <tr key={'bd_' + v.id}>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
-                            <button
-                              onClick={() => {
-                                deseaPlayPreviewRef.current = true;
-                                setFasePreview('base');
-                                prevTPreviewRef.current = null;
-                                limpiarTimerAnim();
-                                animMostradasRef.current.clear(); animActualRef.current = null;
-                                setPreviewMontaje({ src: v.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: v.nombre || '', anims: [] });
-                                setHoja('Montaje');
-                              }}
-                              style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}
-                            >
-                              Cargar
-                            </button>
+                            <div onClick={() => bdFileRef.current?.click()} title="Seleccionar montaje.json" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                              <span style={{ fontSize: '1.4rem' }}>📁</span>
+                              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>Seleccionar archivo</span>
+                            </div>
                             <button
                               onClick={() => {
                                 if (v.videoUrl && v.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(v.videoUrl); } catch (_) {} }
@@ -2850,20 +2848,10 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                     {(capturas || []).filter(c => c && c.videoUrl).map(c => (
                       <tr key={c.id}>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                          <button
-                            onClick={() => {
-                              deseaPlayPreviewRef.current = true;
-                              setFasePreview('base');
-                              prevTPreviewRef.current = null;
-                              limpiarTimerAnim();
-                              animMostradasRef.current.clear(); animActualRef.current = null;
-                              setPreviewMontaje({ src: c.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: '', anims: [] });
-                              setHoja('Montaje');
-                            }}
-                            style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}
-                          >
-                            Cargar
-                          </button>
+                            <div onClick={() => bdFileRef.current?.click()} title="Seleccionar montaje.json" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                              <span style={{ fontSize: '1.4rem' }}>📁</span>
+                              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>Seleccionar archivo</span>
+                            </div>
                         </td>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
                           <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
