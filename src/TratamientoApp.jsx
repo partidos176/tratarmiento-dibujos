@@ -1132,26 +1132,21 @@ const bdVideoTargetRef = useRef(null);
       if (baseSrc) base = await mkVid(baseSrc);
       const segs = [];
       const rangos = [];
-      {
-        let opener = null;
-        let openerNombre = '';
-        for (const linea of validas) {
-          if (linea.imagenUrl) { opener = linea.imagenUrl; openerNombre = linea.concepto || ''; break; }
-          if (linea.inicio != null && linea.fin != null) {
-            const caps = capsEditadasDeLinea(linea);
-            if (caps.length && caps[0] && caps[0].dataUrl) { opener = caps[0].dataUrl; openerNombre = linea.concepto || ''; break; }
-          }
-        }
-        if (opener) {
-          const im = await mkImg(opener);
-          segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre: openerNombre });
-          totalDur += 4;
-        }
-      }
       for (const linea of validas) {
         rangos.push([segs.length, segs.length]);
         if (linea.tipo === 'transicion') continue;
         const nombre = linea.concepto || '';
+        const vistos = new Set();
+        if (linea.imagenUrl) { vistos.add(linea.imagenUrl); const im = await mkImg(linea.imagenUrl); segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre }); totalDur += 4; }
+        if (linea.inicio != null && linea.fin != null) {
+          for (const c of capsEditadasDeLinea(linea)) {
+            if (!c || !c.dataUrl || vistos.has(c.dataUrl)) continue;
+            vistos.add(c.dataUrl);
+            const im = await mkImg(c.dataUrl);
+            segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
+            totalDur += 4;
+          }
+        }
         if (linea.videoUrl) {
           const v = await mkVid(linea.videoUrl);
           let d = 5;
