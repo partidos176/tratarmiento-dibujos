@@ -1618,7 +1618,6 @@ const bdVideoTargetRef = useRef(null);
         }));
         setFilasMontaje(prev => [...prev, ...restauradas]);
         setArchivosBD(prev => [...prev, { id: Date.now(), nombre: file.name, nFilas: restauradas.length }]);
-        setAviso(`Montaje importado: ${restauradas.length} filas`);
       } catch (e) {
         console.error('Error al importar montaje', e);
         setAviso('No se pudo importar: ' + ((e && e.message) || e));
