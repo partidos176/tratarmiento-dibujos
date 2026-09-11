@@ -101,6 +101,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const [progresoDescarga, setProgresoDescarga] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [todasTrans, setTodasTrans] = useState(false);
+  const [modeloTransSel, setModeloTransSel] = useState(null);
   const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5 });
 
   const datosCortes = () => ({
@@ -3864,6 +3865,18 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
               <div onClick={() => setShowTransiciones(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
                 <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '360px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                   <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Transiciones</div>
+                  {[
+                    { id: 'crossfade', nombre: 'Fundido cruzado' },
+                    { id: 'negro', nombre: 'Fundido a negro' },
+                    { id: 'flash', nombre: 'Flash blanco' },
+                  ].map(m => (
+                    <div key={m.id} onClick={() => { setModeloTransSel(m.id); insertarTransicion(m.id, durTrans[m.id], false, false); }} title="Aplicar esta transición" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: modeloTransSel === m.id ? 'rgba(250,204,21,0.85)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem', cursor: 'pointer' }}>
+                      <span style={{ flex: 1, color: modeloTransSel === m.id ? '#0f172a' : '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif' }}>{m.nombre}</span>
+                      <button onClick={(e) => { e.stopPropagation(); setDurTrans(p => ({ ...p, [m.id]: Math.max(0.3, Math.round((p[m.id] - 0.5) * 10) / 10) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                      <span style={{ color: modeloTransSel === m.id ? '#0f172a' : '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{durTrans[m.id]}s</span>
+                      <button onClick={(e) => { e.stopPropagation(); setDurTrans(p => ({ ...p, [m.id]: Math.round((p[m.id] + 0.5) * 10) / 10 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                    </div>
+                  ))}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem' }}>
                     <div
                       onClick={() => {
@@ -3877,19 +3890,6 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                     />
                     <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
                   </div>
-                  {[
-                    { id: 'crossfade', nombre: 'Fundido cruzado' },
-                    { id: 'negro', nombre: 'Fundido a negro' },
-                    { id: 'flash', nombre: 'Flash blanco' },
-                  ].map(m => (
-                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem' }}>
-                      <span style={{ flex: 1, color: '#e2e8f0', fontWeight: 700, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif' }}>{m.nombre}</span>
-                      <button onClick={() => setDurTrans(p => ({ ...p, [m.id]: Math.max(0.3, Math.round((p[m.id] - 0.5) * 10) / 10) }))} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
-                      <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{durTrans[m.id]}s</span>
-                      <button onClick={() => setDurTrans(p => ({ ...p, [m.id]: Math.round((p[m.id] + 0.5) * 10) / 10 }))} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
-                      <button onClick={() => insertarTransicion(m.id, durTrans[m.id])} style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', padding: '0.3rem 0.7rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.7rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Añadir</button>
-                    </div>
-                  ))}
                   <button onClick={() => setShowTransiciones(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cerrar</button>
                 </div>
               </div>
