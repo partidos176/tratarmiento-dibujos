@@ -2925,14 +2925,7 @@ const bdVideoTargetRef = useRef(null);
                             <button onClick={() => { bdVideoTargetRef.current = { kind: 'bd', id: v.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('bd', v.id)}
                           </div>
-                           <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{v.ruta || v.nombre}</div>
-                          <input
-                            value={v.ruta || ''}
-                            onChange={(e) => { setVideosBD(prev => prev.map(x => x.id === v.id ? { ...x, ruta: e.target.value } : x)); }}
-                            placeholder="Escribe la ruta…"
-                            title="Ruta donde está guardado el vídeo"
-                            style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'var(--font-mono, monospace)', outline: 'none', width: '100%', maxWidth: '300px' }}
-                          />
+                           <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{v.nombre}</div>
                         </td>
                       </tr>
                     ))}
