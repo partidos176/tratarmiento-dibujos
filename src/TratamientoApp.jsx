@@ -1877,23 +1877,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
       const nuevaEntrada = { id: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
-      const idsExpulsadas = new Set((capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).map(c => c.id));
-      (capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).forEach(c => {
-        if (c.videoUrl && typeof c.videoUrl === 'string' && c.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(c.videoUrl); } catch (_) {} }
-      });
-      setCapturas(prev => [...(prev || []).filter(c => !(c && c.tiempo === capturaSeleccionada.tiempo)), nuevaEntrada]);
-      if (idsExpulsadas.size > 0) {
-        setFotoPorCorte(prevF => {
-          const copia = { ...prevF };
-          Object.keys(copia).forEach(k => {
-            const v = copia[k];
-            const arr = (Array.isArray(v) ? v : (v ? [v] : [])).filter(x => !idsExpulsadas.has(idDeFoto(x)));
-            if (arr.length === 0) delete copia[k];
-            else copia[k] = arr;
-          });
-          return copia;
-        });
-      }
+      setCapturas(prev => [...(prev || []), nuevaEntrada]);
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
