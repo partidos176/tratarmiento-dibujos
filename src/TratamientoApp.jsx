@@ -536,7 +536,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const imagenInputRef = useRef(null);
 const bdFileRef = useRef(null);
 const bdVideoRef = useRef(null);
-const [bdVideoTarget, setBdVideoTarget] = useState(null);
+const bdVideoTargetRef = useRef(null);
 
   const previewRestauradaRef = useRef(false);
   const capsListasRef = useRef(false);
@@ -1061,7 +1061,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
         const val = e.target.value;
         e.target.value = '';
         if (!val) return;
-        if (val === '__file__') { setBdVideoTarget({ kind, id }); bdVideoRef.current?.click(); return; }
+        if (val === '__file__') { bdVideoTargetRef.current = { kind, id }; bdVideoRef.current?.click(); return; }
         if (kind === 'bd') setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
         else setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
       }}
@@ -2856,16 +2856,17 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
               onChange={(e) => {
                 const f = e.target.files && e.target.files[0];
                 e.target.value = '';
-                if (!f || !bdVideoTarget) return;
+                const tgt = bdVideoTargetRef.current;
+                if (!f || !tgt) return;
                 const url = URL.createObjectURL(f);
-                if (bdVideoTarget.kind === 'new') {
+                if (tgt.kind === 'new') {
                   setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
-                } else if (bdVideoTarget.kind === 'bd') {
-                  setVideosBD(prev => prev.map(x => x.id === bdVideoTarget.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
+                } else if (tgt.kind === 'bd') {
+                  setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
                 } else {
-                  setCapturas(prev => prev.map(c => c && c.id === bdVideoTarget.id ? { ...c, videoUrl: url } : c));
+                  setCapturas(prev => prev.map(c => c && c.id === tgt.id ? { ...c, videoUrl: url } : c));
                 }
-                setBdVideoTarget(null);
+                bdVideoTargetRef.current = null;
               }}
             />
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
@@ -2939,7 +2940,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'bd_' + v.id ? null : 'bd_' + v.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'bd_' + v.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.3rem' }}>
                             <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{v.nombre}</div>
-                            <button onClick={() => { setBdVideoTarget({ kind: 'bd', id: v.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                            <button onClick={() => { bdVideoTargetRef.current = { kind: 'bd', id: v.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('bd', v.id)}
                           </div>
                           <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'bd_' + v.id ? '2px solid #facc15' : 'none' }} />
@@ -2953,7 +2954,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                         </td>
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'cap_' + c.id ? null : 'cap_' + c.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'cap_' + c.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginBottom: '0.3rem' }}>
-                            <button onClick={() => { setBdVideoTarget({ kind: 'cap', id: c.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                            <button onClick={() => { bdVideoTargetRef.current = { kind: 'cap', id: c.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('cap', c.id)}
                           </div>
                           <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'cap_' + c.id ? '2px solid #facc15' : 'none' }} />
