@@ -1046,9 +1046,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
           {videosBD.map(x => <option key={'sbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
         </optgroup>
       )}
-      <optgroup label="Animaciones">
-        {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'san_' + x.id} value={x.videoUrl}>Animación {formatoTiempo(x.tiempo ?? 0)}</option>)}
-      </optgroup>
+      {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'san_' + x.id} value={x.videoUrl}>{formatoTiempo(x.tiempo ?? 0)}</option>)}
     </select>
   );
 
