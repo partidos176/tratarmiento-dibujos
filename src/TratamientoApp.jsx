@@ -1040,7 +1040,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
       style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '130px' }}
     >
       <option value="">Cargar…</option>
-      <option value="__file__">📁 montaje.json…</option>
+      <option value="__file__">📁 *.json…</option>
       {videosBD.length > 0 && (
         <optgroup label="Vídeos PC">
           {videosBD.map(x => <option key={'sbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
