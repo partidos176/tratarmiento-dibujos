@@ -2744,7 +2744,47 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
           <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.2rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Base de datos</span>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '0.85rem', color: '#64748b' }}>Hoja vacía. Dime qué datos quieres ver aquí.</span>
+          <div style={{ width: '100%', maxWidth: '700px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
+              <thead>
+                <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '140px' }}>Cargar</th>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Video</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(capturas || []).filter(c => c && c.videoUrl).length === 0 ? (
+                  <tr>
+                    <td colSpan={2} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                      Sin vídeos. Genera animaciones en Edición.
+                    </td>
+                  </tr>
+                ) : (capturas || []).filter(c => c && c.videoUrl).map(c => (
+                  <tr key={c.id}>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                      <button
+                        onClick={() => {
+                          deseaPlayPreviewRef.current = true;
+                          setFasePreview('base');
+                          prevTPreviewRef.current = null;
+                          limpiarTimerAnim();
+                          animMostradasRef.current.clear(); animActualRef.current = null;
+                          setPreviewMontaje({ src: c.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: '', anims: [] });
+                          setHoja('Montaje');
+                        }}
+                        style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}
+                      >
+                        Cargar
+                      </button>
+                    </td>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                      <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
