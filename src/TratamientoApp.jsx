@@ -2781,24 +2781,6 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
           <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.2rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Base de datos</span>
-          <div>
-            <label style={{ display: 'inline-block', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>
-              + Añadir vídeo del PC
-              <input
-                type="file"
-                accept="video/*"
-                multiple
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  if (!files.length) return;
-                  const nuevos = files.map(f => ({ id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: URL.createObjectURL(f) }));
-                  setVideosBD(prev => [...prev, ...nuevos]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-          </div>
           <div style={{ width: '100%', maxWidth: '800px' }}>
             <input
               ref={bdFileRef}
