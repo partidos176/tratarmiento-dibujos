@@ -977,6 +977,8 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     }
   };
 
+  const capEditadaDeLinea = (fila) => [...(capturas || [])].reverse().find(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
+
   const abrirPreviewLinea = (fila, tIr) => {
     const src = videoUrlCortes || videoUrl;
     if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
@@ -3592,6 +3594,15 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   title="Seleccionar línea"
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
+                {(() => {
+                  const capEd = capEditadaDeLinea(fila);
+                  if (!capEd) return null;
+                  return (
+                    <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
+                      onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                      style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                  );
+                })()}
                 {fila.inicio != null && fila.fin != null && (
                   <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => abrirPreviewLinea(fila, fila.inicio)} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => abrirPreviewLinea(fila, fila.fin)} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
                 )}
