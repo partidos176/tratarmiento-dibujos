@@ -977,6 +977,21 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     }
   };
 
+  const abrirPreviewLinea = (fila, tIr) => {
+    const src = videoUrlCortes || videoUrl;
+    if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
+    const animCap = [...(capturas || [])].reverse().find(c => c && c.videoUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
+    prevTPreviewRef.current = null;
+    limpiarTimerAnim();
+    animYaMostradaRef.current = false;
+    deseaPlayPreviewRef.current = true;
+    setFasePreview('base');
+    if (animCap) setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '', animSrc: animCap.videoUrl, animEn: animCap.tiempo, animDur: 4 });
+    else setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' });
+    const destino = tIr ?? fila.inicio;
+    requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, destino); v.play().catch(() => {}); } catch (_) {} } });
+  };
+
   const descargarClipConAnimacion = async () => {
     const pv = previewMontaje;
     if (!pv || !pv.animSrc) return false;
@@ -3578,7 +3593,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
                 {fila.inicio != null && fila.fin != null && (
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => abrirPreviewLinea(fila, fila.inicio)} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => abrirPreviewLinea(fila, fila.fin)} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
                 )}
                 <input
                   value={fila.concepto || ''}
@@ -3609,7 +3624,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                       }
                       const src = videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
-                      prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' });
+                      abrirPreviewLinea(fila);
                     }}
                     title="Ver fragmento entre inicio y fin"
                     style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
