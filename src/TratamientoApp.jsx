@@ -2841,7 +2841,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
                 <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
-                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '180px' }}>Cargar</th>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'left', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '180px' }}>Cargar</th>
                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Video</th>
                 </tr>
               </thead>
@@ -2859,8 +2859,8 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                   <>
                     {videosBD.map(v => (
                       <tr key={'bd_' + v.id}>
-                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-start', alignItems: 'center' }}>
                             {selectorCargar()}
                             <button
                               onClick={() => {
@@ -2883,7 +2883,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                     ))}
                     {(capturas || []).filter(c => c && c.videoUrl).map(c => (
                       <tr key={c.id}>
-                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
                             {selectorCargar()}
                         </td>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
