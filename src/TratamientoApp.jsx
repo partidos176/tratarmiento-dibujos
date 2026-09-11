@@ -3643,6 +3643,20 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           </div>
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div
+                onClick={() => setLineasSelMontaje(prev => {
+                  const todas = filasMontaje.length > 0 && filasMontaje.every(f => prev[f.id]);
+                  if (todas) return {};
+                  const o = {};
+                  filasMontaje.forEach(f => { o[f.id] = true; });
+                  return o;
+                })}
+                title="Seleccionar todas las líneas"
+                style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: (filasMontaje.length > 0 && filasMontaje.every(f => lineasSelMontaje[f.id])) ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
+            </div>
             {filasMontaje.length === 0 ? (
               <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
             ) : filasMontaje.map((fila, i) => (
