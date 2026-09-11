@@ -1531,6 +1531,35 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     if (cerrar) setShowTransiciones(false);
   };
 
+  const exportarMontaje = async () => {
+    try {
+      const filas = await Promise.all((filasMontaje || []).map(async (f) => {
+        const copia = { ...f };
+        if (f.videoUrl && f.videoUrl.startsWith('blob:')) {
+          copia.videoDataUrl = await videoBlobADataUrl(f.videoUrl);
+          copia.videoUrl = null;
+        }
+        if (f.imagenUrl && f.imagenUrl.startsWith('blob:')) {
+          copia.imagenDataUrl = await videoBlobADataUrl(f.imagenUrl);
+          copia.imagenUrl = null;
+        }
+        return copia;
+      }));
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 1, guardado: new Date().toISOString(), filas }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'montaje.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch (e) {
+      console.error('Error al exportar el montaje', e);
+      window.alert('No se pudo exportar el montaje: ' + (e?.message || e));
+    }
+  };
+
   const descargarMontaje = async () => {
     const items = filasMontaje;
     const mediaItems = items.filter(f => f.tipo !== 'transicion');
@@ -3905,6 +3934,12 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             >
               {descargandoMontaje && <span style={{ fontFamily: 'monospace' }}>{progresoDescarga}%</span>}
               Descargar
+            </button>
+            <button
+              onClick={() => exportarMontaje()}
+              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Exportar
             </button>
             {descargandoMontaje && (
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
