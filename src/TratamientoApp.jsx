@@ -977,7 +977,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     }
   };
 
-  const capEditadaDeLinea = (fila) => [...(capturas || [])].reverse().find(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
+  const capsEditadasDeLinea = (fila) => (capturas || []).filter(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
 
   const abrirPreviewLinea = (fila, tIr) => {
     const src = videoUrlCortes || videoUrl;
@@ -3595,12 +3595,16 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
                 {(() => {
-                  const capEd = capEditadaDeLinea(fila);
-                  if (!capEd) return null;
+                  const listaEd = capsEditadasDeLinea(fila);
+                  if (listaEd.length === 0) return null;
                   return (
-                    <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
-                      onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
-                      style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                    <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                      {listaEd.map((capEd) => (
+                        <img key={capEd.id} src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
+                          onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                          style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                      ))}
+                    </div>
                   );
                 })()}
                 {fila.inicio != null && fila.fin != null && (
