@@ -1298,7 +1298,8 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              if (seg.esAnim && segElapsed <= 1 / 30 + 0.001) {
+              const listo = !seg.esAnim || (seg.el.currentTime > 0.05 && seg.el.readyState >= 2);
+              if (!listo) {
                 ctx.globalAlpha = 1;
                 ctx.fillStyle = '#000000';
                 ctx.fillRect(0, 0, w, h);
