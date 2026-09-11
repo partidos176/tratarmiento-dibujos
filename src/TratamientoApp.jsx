@@ -2868,7 +2868,7 @@ const bdVideoTargetRef = useRef(null);
                       </div>
                     </td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <select
                           value=""
                           title="Elegir vídeo del archivo"
@@ -2894,12 +2894,11 @@ const bdVideoTargetRef = useRef(null);
                         </select>
                         {(() => {
                           const ref = a.videoRef;
-                          const url = ref
-                            ? (ref.kind === 'bd'
-                              ? ((videosBD.find(x => x.id === ref.id) || {}).videoUrl || null)
-                              : (((capturas || []).find(x => x && x.id === ref.id) || {}).videoUrl || null))
-                            : null;
-                          return url ? <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{ref.kind === 'bd' ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || url) : url}</div> : null;
+                          if (!ref) return null;
+                          const nombre = ref.kind === 'bd'
+                            ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || '')
+                            : formatoTiempo((((capturas || []).find(x => x && x.id === ref.id) || {}).tiempo ?? 0));
+                          return nombre ? <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>{nombre}</span> : null;
                         })()}
                       </div>
                     </td>
