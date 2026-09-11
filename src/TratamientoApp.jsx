@@ -537,7 +537,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     setFasePreview('base');
     prevTPreviewRef.current = null;
     animYaMostradaRef.current = false;
-    setPreviewMontaje({ src: base, inicio: meta.inicio, fin: meta.fin, animSrc: cap.videoUrl, animEn: meta.animEn, animDur: meta.animDur || 4 });
+    setPreviewMontaje({ src: base, inicio: meta.inicio, fin: meta.fin, animSrc: cap.videoUrl, animEn: meta.animEn, animDur: meta.animDur || 4, concepto: meta.concepto || '' });
     previewRestauradaRef.current = true;
   }, [capturas, videoUrl, videoUrlCortes, previewMontaje]);
 
@@ -2318,8 +2318,8 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                     const linea = filasMontaje.find(f => f.inicio != null && f.fin != null && t >= f.inicio && t <= f.fin);
                     const ini = linea ? linea.inicio : t;
                     const fin = linea ? linea.fin : t + 4;
-                    setPreviewMontaje({ src: base, inicio: ini, fin, animSrc: r.videoUrl, animEn: t, animDur: r.duracionAnim || 4 });
-                    try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: ini, fin, animEn: t, animDur: r.duracionAnim || 4, capturaId: r.id })); } catch (_) {}
+                    setPreviewMontaje({ src: base, inicio: ini, fin, animSrc: r.videoUrl, animEn: t, animDur: r.duracionAnim || 4, concepto: (linea && linea.concepto) || '' });
+                    try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: ini, fin, animEn: t, animDur: r.duracionAnim || 4, concepto: (linea && linea.concepto) || '', capturaId: r.id })); } catch (_) {}
                   } else {
                     setPreviewMontaje({ src: r.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
                   }
@@ -3355,7 +3355,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
                 {fila.inicio != null && fila.fin != null && (
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => { const src = videoUrlCortes || videoUrl; if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; } prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' }); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); v.play().catch(() => {}); } catch (_) {} } }); }} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
                 )}
                 <input
                   value={fila.concepto || ''}
@@ -3380,13 +3380,13 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                       if (fila.videoUrl) {
                         deseaPlayPreviewRef.current = true;
                         setFasePreview('base');
-                        setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
+                        setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: fila.concepto || '' });
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {} } });
                         return;
                       }
                       const src = videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
-                      prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin });
+                      prevTPreviewRef.current = null; limpiarTimerAnim(); animYaMostradaRef.current = false; deseaPlayPreviewRef.current = true; setFasePreview('base'); setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '' });
                     }}
                     title="Ver fragmento entre inicio y fin"
                     style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
@@ -3430,6 +3430,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                 )}
                 <button onClick={() => { try { localStorage.removeItem('preview_anim'); } catch (_) {} limpiarTimerAnim(); setPreviewMontaje(null); }} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
+              <div style={{ position: 'relative' }}>
               <video
                 ref={previewVideoRef}
                 src={fasePreview === 'anim' && previewMontaje.animSrc ? previewMontaje.animSrc : previewMontaje.src}
@@ -3442,6 +3443,12 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                 onPlay={() => setPreviewPlaying(true)}
                 onPause={() => setPreviewPlaying(false)}
               />
+              {!!previewMontaje.concepto && (
+                <div style={{ position: 'absolute', top: '0.6rem', left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <span style={{ background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontWeight: 800, fontSize: '1rem', fontFamily: 'Inter, sans-serif', padding: '0.25rem 0.9rem', borderRadius: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90%' }}>{previewMontaje.concepto}</span>
+                </div>
+              )}
+              </div>
             </div>
           )}
           </div>
