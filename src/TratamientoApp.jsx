@@ -977,6 +977,104 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     }
   };
 
+  const descargarClipConAnimacion = async () => {
+    const pv = previewMontaje;
+    if (!pv || !pv.animSrc) return false;
+    const ini = Math.max(0, pv.inicio);
+    const fin = Math.max(ini + 0.5, pv.fin);
+    const animEn = pv.animEn ?? ini;
+    const animDur = pv.animDur || 4;
+    if (!(animEn > ini && animEn < fin)) return false;
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let rec = null;
+    const els = [];
+    const totalDur = (animEn - ini) + animDur + (fin - animEn);
+    let elapsedTotal = 0;
+    try {
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const mkVid = async (src) => {
+        const vid = document.createElement('video');
+        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(vid);
+        els.push(vid);
+        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+        return vid;
+      };
+      const base = await mkVid(pv.src);
+      const anim = await mkVid(pv.animSrc);
+      const segs = [
+        { el: base, desde: ini, hasta: animEn },
+        { el: anim, desde: 0, hasta: animDur, esAnim: true },
+        { el: base, desde: animEn, hasta: fin },
+      ].filter(s => s.hasta > s.desde);
+      await new Promise((resolve) => {
+        let terminado = false;
+        let currentSeg = 0;
+        let segElapsed = 0;
+        rec.onstop = () => {
+          const blob = new Blob(chunks, { type: mime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(pv.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          resolve();
+        };
+        const terminar = () => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          els.forEach(v => { try { v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          try { document.body.removeChild(canvas); } catch (_) {}
+        };
+        rec.start(250);
+        const loop = () => {
+          if (terminado) return;
+          if (currentSeg >= segs.length) { terminar(); return; }
+          const seg = segs[currentSeg];
+          segElapsed += 1 / 30;
+          elapsedTotal += 1 / 30;
+          if (segElapsed <= 1 / 30 + 0.001) {
+            try { seg.el.currentTime = Math.max(0, Math.min(seg.desde, (seg.el.duration || seg.desde + 1) - 0.05)); } catch (_) {}
+            seg.el.play().catch(() => {});
+          }
+          try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+          const segDur = seg.hasta - seg.desde;
+          const ended = seg.esAnim ? (segElapsed >= segDur) : (seg.el.currentTime >= seg.hasta || segElapsed >= segDur + 1);
+          if (ended) { try { seg.el.pause(); } catch (_) {} currentSeg++; segElapsed = 0; }
+          setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
+          setTimeout(loop, 1000 / 30);
+        };
+        loop();
+      });
+    } catch (e) {
+      console.error('Error al descargar clip con animación', e);
+      setAviso('No se pudo descargar el clip: ' + ((e && e.message) || e));
+      try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+    } finally {
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+    }
+    return true;
+  };
+
   const descargarMontaje = async () => {
     const items = filasMontaje;
     const mediaItems = items.filter(f => f.tipo !== 'transicion');
@@ -3309,7 +3407,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}
             >Transiciones</button>
             <button
-              onClick={() => descargarMontaje()}
+              onClick={async () => { const ok = await descargarClipConAnimacion(); if (!ok) descargarMontaje(); }}
               disabled={descargandoMontaje}
               style={{ background: descargandoMontaje ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: descargandoMontaje ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
