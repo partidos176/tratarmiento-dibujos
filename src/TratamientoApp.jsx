@@ -1634,8 +1634,16 @@ const bdVideoTargetRef = useRef(null);
           if (f.imagenDataUrl) { copia.imagenUrl = f.imagenDataUrl; delete copia.imagenDataUrl; }
           return copia;
         }));
-        setFilasMontaje(prev => [...prev, ...restauradas]);
-        setArchivosBD(prev => [...prev, { id: Date.now(), nombre: file.name, nFilas: restauradas.length }]);
+        setFilasMontaje(prev => {
+          const ids = new Set(prev.map(f => f && f.id));
+          return [...prev, ...restauradas.filter(f => !ids.has(f.id))];
+        });
+        setArchivosBD(prev => {
+          const reg = { id: Date.now(), nombre: file.name, nFilas: restauradas.length };
+          const ix = prev.findIndex(x => x.nombre === file.name);
+          if (ix >= 0) { const copy = [...prev]; copy[ix] = reg; return copy; }
+          return [...prev, reg];
+        });
         if (Array.isArray(data.animaciones)) {
           for (const a of data.animaciones) {
             if (!a || a.id == null || !a.videoDataUrl) continue;
