@@ -1060,9 +1060,8 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               ctx.font = '800 32px Inter, sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              const tw = ctx.measureText(pv.concepto).width;
               ctx.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx.fillRect((w - tw) / 2 - 20, 24, tw + 40, 52);
+              ctx.fillRect(0, 24, w, 52);
               ctx.fillStyle = '#facc15';
               ctx.fillText(pv.concepto, w / 2, 50);
             } catch (_) {}
@@ -1150,9 +1149,8 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               ctx.font = '800 32px Inter, sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              const tw = ctx.measureText(linea.concepto).width;
               ctx.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx.fillRect((w - tw) / 2 - 20, 24, tw + 40, 52);
+              ctx.fillRect(0, 24, w, 52);
               ctx.fillStyle = '#facc15';
               ctx.fillText(linea.concepto, w / 2, 50);
             } catch (_) {}
