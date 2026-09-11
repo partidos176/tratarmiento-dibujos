@@ -79,6 +79,8 @@ function TratamientoApp({ videoInicial }) {
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
   const [videosBD, setVideosBD] = useState([]);
+  const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
+  useEffect(() => { try { localStorage.setItem('bd_archivos', JSON.stringify(archivosBD)); } catch (_) {} }, [archivosBD]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
 const previewVideoRef = useRef(null);
 const deseaPlayPreviewRef = useRef(false);
@@ -1590,6 +1592,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
           return copia;
         }));
         setFilasMontaje(prev => [...prev, ...restauradas]);
+        setArchivosBD(prev => [...prev, { id: Date.now(), nombre: file.name, nFilas: restauradas.length }]);
         setAviso(`Montaje importado: ${restauradas.length} filas`);
       } catch (e) {
         console.error('Error al importar montaje', e);
@@ -2846,16 +2849,20 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                 </tr>
               </thead>
               <tbody>
-                {videosBD.length === 0 && (capturas || []).filter(c => c && c.videoUrl).length === 0 ? (
-                  <tr>
-                    <td colSpan={2} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'left', color: '#64748b', fontSize: '0.85rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.7rem' }}>
-                        {selectorCargar()}
+                {archivosBD.map(a => (
+                  <tr key={'arc_' + a.id}>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1.1rem' }}>📁</span>
+                        <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>{a.nombre}</span>
+                        <button onClick={() => setArchivosBD(prev => prev.filter(x => x.id !== a.id))} title="Quitar registro" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
                       </div>
                     </td>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}>{a.nFilas} filas</span>
+                    </td>
                   </tr>
-                ) : (
-                  <>
+                ))}
                     {videosBD.map(v => (
                       <tr key={'bd_' + v.id}>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
@@ -2893,8 +2900,12 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                         </td>
                       </tr>
                     ))}
-                  </>
-                )}
+                    <tr>
+                      <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                        {selectorCargar()}
+                      </td>
+                      <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem' }}></td>
+                    </tr>
               </tbody>
             </table>
           </div>
