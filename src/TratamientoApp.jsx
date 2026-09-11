@@ -2885,7 +2885,39 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                       </div>
                     </td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}>{a.nFilas} filas</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem' }}>
+                        <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}>{a.nFilas} filas</span>
+                        <select
+                          value=""
+                          title="Elegir vídeo del archivo"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            e.target.value = '';
+                            if (!val) return;
+                            const [kind, rid] = val.split(':');
+                            const nid = Number(rid);
+                            setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, videoRef: { kind, id: nid } } : x));
+                          }}
+                          style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '150px' }}
+                        >
+                          <option value="">Vídeo…</option>
+                          {videosBD.length > 0 && (
+                            <optgroup label="Vídeos PC">
+                              {videosBD.map(x => <option key={'abd_' + x.id} value={'bd:' + x.id}>{x.nombre || 'video'}</option>)}
+                            </optgroup>
+                          )}
+                          {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'acap_' + x.id} value={'cap:' + x.id}>{formatoTiempo(x.tiempo ?? 0)}</option>)}
+                        </select>
+                        {(() => {
+                          const ref = a.videoRef;
+                          const url = ref
+                            ? (ref.kind === 'bd'
+                              ? ((videosBD.find(x => x.id === ref.id) || {}).videoUrl || null)
+                              : (((capturas || []).find(x => x && x.id === ref.id) || {}).videoUrl || null))
+                            : null;
+                          return url ? <video src={url} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} /> : null;
+                        })()}
+                      </div>
                     </td>
                   </tr>
                 ))}
