@@ -1635,8 +1635,12 @@ const bdVideoTargetRef = useRef(null);
           return copia;
         }));
         setFilasMontaje(prev => {
-          const ids = new Set(prev.map(f => f && f.id));
-          return [...prev, ...restauradas.filter(f => !ids.has(f.id))];
+          const ids = new Set();
+          return restauradas.filter(f => {
+            if (!f || ids.has(f.id)) return false;
+            ids.add(f.id);
+            return true;
+          });
         });
         setArchivosBD(prev => {
           const reg = { id: Date.now(), nombre: file.name, nFilas: restauradas.length };
@@ -3137,7 +3141,10 @@ const bdVideoTargetRef = useRef(null);
                       e.stopPropagation();
                       const dur = duracionCortes[String(ct)] ?? 15;
                       const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - i}`;
-                      setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: null, concepto: nombre, inicio: Math.max(0, ct), fin: Math.max(0, ct) + dur, duracion: dur }]);
+                      const ini = Math.max(0, ct);
+                      const fin = Math.max(0, ct) + dur;
+                      if (filasMontaje.some(f => f.inicio === ini && f.fin === fin)) { setAviso('Esa línea ya está en Montaje'); return; }
+                      setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur }]);
                       setHoja('Montaje');
                     }} title="Enviar la línea a Montaje (sin clip)" style={{ background: '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Montaje</button>
                   </div>
