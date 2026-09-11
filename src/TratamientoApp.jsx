@@ -1298,7 +1298,7 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              const listo = !seg.esAnim || (seg.el.currentTime > 0.05 && seg.el.readyState >= 2);
+              const listo = !seg.esAnim || (seg.el.currentTime > 0 && seg.el.readyState >= 2 && segElapsed > 1 / 30);
               if (!listo) {
                 ctx.globalAlpha = 1;
                 ctx.fillStyle = '#000000';
