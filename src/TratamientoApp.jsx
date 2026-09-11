@@ -1009,32 +1009,17 @@ const bdVideoTargetRef = useRef(null);
 
   const selectorCargar = () => (   <select
       value=""
-      title="Cargar vídeo o archivo"
+      title="Cargar archivo .json"
       onChange={(e) => {
         const val = e.target.value;
         e.target.value = '';
         if (!val) return;
         if (val === '__file__') { bdFileRef.current?.click(); return; }
-        const vb = videosBD.find(x => x.videoUrl === val);
-        cargarVideoEnCortes(val, vb ? (vb.nombre || 'video') : 'video');
-        deseaPlayPreviewRef.current = true;
-        setFasePreview('base');
-        prevTPreviewRef.current = null;
-        limpiarTimerAnim();
-        animMostradasRef.current.clear(); animActualRef.current = null;
-        setPreviewMontaje({ src: val, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: vb ? (vb.nombre || '') : '', anims: [] });
-        setHoja('Montaje');
       }}
       style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '130px' }}
     >
       <option value="">Cargar…</option>
       <option value="__file__">📁 *.json…</option>
-      {videosBD.length > 0 && (
-        <optgroup label="Vídeos PC">
-          {videosBD.map(x => <option key={'sbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
-        </optgroup>
-      )}
-      {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'san_' + x.id} value={x.videoUrl}>{formatoTiempo(x.tiempo ?? 0)}</option>)}
     </select>
   );
 
