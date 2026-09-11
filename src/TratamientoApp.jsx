@@ -4040,7 +4040,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                 />
                 )}
                 {fila.tipo === 'transicion' && (
-                  <span style={{ color: '#38bdf8', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{fila.concepto || 'Transición'}</span>
+                  <span style={{ color: '#000000', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{fila.concepto || 'Transición'}</span>
                 )}
                 {fila.imagenUrl ? (
                   <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} draggable={false} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
