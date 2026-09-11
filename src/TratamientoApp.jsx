@@ -1062,9 +1062,9 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               ctx.textBaseline = 'middle';
               const tw = ctx.measureText(pv.concepto).width;
               ctx.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx.fillRect((w - tw) / 2 - 24, 24, tw + 48, 64);
+              ctx.fillRect((w - tw) / 2 - 24, h / 2 - 32, tw + 48, 64);
               ctx.fillStyle = '#ffffff';
-              ctx.fillText(pv.concepto, w / 2, 56);
+              ctx.fillText(pv.concepto, w / 2, h / 2);
             } catch (_) {}
           }
           const segDur = seg.hasta - seg.desde;
@@ -1152,9 +1152,9 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               ctx.textBaseline = 'middle';
               const tw = ctx.measureText(linea.concepto).width;
               ctx.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx.fillRect((w - tw) / 2 - 24, 24, tw + 48, 64);
+              ctx.fillRect((w - tw) / 2 - 24, h / 2 - 32, tw + 48, 64);
               ctx.fillStyle = '#ffffff';
-              ctx.fillText(linea.concepto, w / 2, 56);
+              ctx.fillText(linea.concepto, w / 2, h / 2);
             } catch (_) {}
           }
           if (base.currentTime >= fin || elapsed >= totalDur + 1) { terminar(); return; }
