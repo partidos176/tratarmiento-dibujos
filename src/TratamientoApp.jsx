@@ -3533,19 +3533,13 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataUrl = reader.result;
-                  const selId = Object.keys(lineasSelMontaje).find(k => lineasSelMontaje[k]);
-                  if (selId && filasMontaje.some(f => String(f.id) === String(selId))) {
-                    setFilasMontaje(prev => prev.map(f => String(f.id) === String(selId) ? { ...f, tipo: 'imagen', imagenUrl: dataUrl } : f));
-                    return;
-                  }
+                  const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '' };
                   setFilasMontaje(prev => {
-                    const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '' };
-                    if (filaSeleccionada != null) {
-                      const copy = [...prev];
-                      copy.splice(filaSeleccionada, 0, nueva);
-                      return copy;
-                    }
-                    return [...prev, nueva];
+                    const ix = prev.findIndex(f => lineasSelMontaje[f.id]);
+                    if (ix < 0) return [...prev, nueva];
+                    const copy = [...prev];
+                    copy.splice(ix, 0, nueva);
+                    return copy;
                   });
                 };
                 reader.readAsDataURL(file);
