@@ -1285,9 +1285,9 @@ const bdVideoTargetRef = useRef(null);
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               ctx.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx.fillRect(0, 24, w, 52);
+              ctx.fillRect(0, 0, w, 52);
               ctx.fillStyle = '#facc15';
-              ctx.fillText(seg.nombre, w / 2, 50);
+              ctx.fillText(seg.nombre, w / 2, 26);
             } catch (_) {}
           }
           const segDur = seg.hasta - seg.desde;
@@ -4348,8 +4348,8 @@ const bdVideoTargetRef = useRef(null);
                 onPause={() => setPreviewPlaying(false)}
               />
               {!!previewMontaje.concepto && (
-                <div style={{ position: 'absolute', top: '0.6rem', left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-                  <span style={{ background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontWeight: 800, fontSize: '1rem', fontFamily: 'Inter, sans-serif', padding: '0.25rem 0.9rem', borderRadius: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90%' }}>{previewMontaje.concepto}</span>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <span style={{ background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontWeight: 800, fontSize: '1rem', fontFamily: 'Inter, sans-serif', padding: '0.25rem 0.9rem', borderRadius: '0 0 8px 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90%' }}>{previewMontaje.concepto}</span>
                 </div>
               )}
               </div>
