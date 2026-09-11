@@ -532,6 +532,8 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const dragRef = useRef(null);
   const imagenInputRef = useRef(null);
 const bdFileRef = useRef(null);
+const bdVideoRef = useRef(null);
+const [bdVideoTarget, setBdVideoTarget] = useState(null);
 
   const previewRestauradaRef = useRef(false);
   const capsListasRef = useRef(false);
@@ -2805,6 +2807,24 @@ const bdFileRef = useRef(null);
               style={{ display: 'none' }}
               onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
             />
+            <input
+              ref={bdVideoRef}
+              type="file"
+              accept="video/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                e.target.value = '';
+                if (!f || !bdVideoTarget) return;
+                const url = URL.createObjectURL(f);
+                if (bdVideoTarget.kind === 'bd') {
+                  setVideosBD(prev => prev.map(x => x.id === bdVideoTarget.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
+                } else {
+                  setCapturas(prev => prev.map(c => c && c.id === bdVideoTarget.id ? { ...c, videoUrl: url } : c));
+                }
+                setBdVideoTarget(null);
+              }}
+            />
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
                 <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
@@ -2840,7 +2860,10 @@ const bdFileRef = useRef(null);
                           </div>
                         </td>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                          <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.3rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px', margin: '0 auto 0.3rem auto' }}>{v.nombre}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.3rem' }}>
+                            <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>{v.nombre}</div>
+                            <button onClick={() => { setBdVideoTarget({ kind: 'bd', id: v.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                          </div>
                           <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
                         </td>
                       </tr>
@@ -2854,6 +2877,9 @@ const bdFileRef = useRef(null);
                             </div>
                         </td>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.3rem' }}>
+                            <button onClick={() => { setBdVideoTarget({ kind: 'cap', id: c.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                          </div>
                           <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
                         </td>
                       </tr>
