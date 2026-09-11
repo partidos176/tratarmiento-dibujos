@@ -1598,6 +1598,18 @@ const bdVideoTargetRef = useRef(null);
     return () => clearTimeout(timer);
   }, [videosBD]);
 
+  useEffect(() => {
+    if (videosBD.length === 0) {
+      setFilasMontaje([]);
+      setCapturas([]);
+      setCortes([]);
+      setDuracionCortes({});
+      setNombreCortes({});
+      setLineasSelMontaje({});
+      setPreviewMontaje(null);
+    }
+  }, [videosBD.length]);
+
   const importarMontaje = (file) => {
     if (!file) return;
     const reader = new FileReader();
