@@ -508,6 +508,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
   const imagenInputRef = useRef(null);
 
   const previewRestauradaRef = useRef(false);
+  const capsListasRef = useRef(false);
   useEffect(() => {
     if (previewMontaje && !previewMontaje.animSrc) { try { localStorage.removeItem('preview_anim'); } catch (_) {} }
   }, [previewMontaje]);
@@ -516,6 +517,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
     let meta = null;
     try { meta = JSON.parse(localStorage.getItem('preview_anim') || 'null'); } catch (_) {}
     if (!meta || meta.capturaId == null) return;
+    if (!capsListasRef.current) return;
     const cap = (capturas || []).find(c => c && String(c.id) === String(meta.capturaId) && c.videoUrl);
     if (!cap) { try { localStorage.removeItem('preview_anim'); } catch (_) {} previewRestauradaRef.current = true; return; }
     const esFallback = previewMontaje && !previewMontaje.animSrc && previewMontaje.src === cap.videoUrl;
@@ -552,6 +554,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
     cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
       if (fm.length > 0) setFilasMontaje(fm);
       if (caps.length > 0) setCapturas(caps);
+      capsListasRef.current = true;
     });
   }, []);
 
@@ -1680,6 +1683,13 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
       setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
       asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
+      setPreviewMontaje(prev => {
+        if (prev && prev.animSrc && videoUrl && (capturas || []).some(c => c && c.tiempo === capturaSeleccionada.tiempo && c.videoUrl === prev.animSrc)) {
+          try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: prev.inicio, fin: prev.fin, animEn: prev.animEn, animDur: prev.animDur || 4, capturaId: nuevoId })); } catch (_) {}
+          return { ...prev, animSrc: videoUrl };
+        }
+        return prev;
+      });
       return { id: nuevoId, videoUrl, tiempo: capturaSeleccionada.tiempo, duracionAnim };
     } catch (e) {
       console.error('Error al guardar la captura', e);
