@@ -2839,7 +2839,6 @@ const bdVideoTargetRef = useRef(null);
         </div>
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.2rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Base de datos</span>
           <div style={{ width: '100%', maxWidth: '800px' }}>
             <input
               ref={bdFileRef}
