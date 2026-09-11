@@ -3038,11 +3038,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
               Cortes ({cortes.length})
             </span>
           </div>
-          {cortes.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
-              Sin cortes. Carga un vídeo y márcalos con el botón Corte junto al reproductor.
-            </p>
-          ) : (
+          {cortes.length === 0 ? null : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '800px' }}>
               {(() => {
                 const ord = [...cortes].sort((a, b) => b - a);
