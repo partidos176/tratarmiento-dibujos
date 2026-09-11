@@ -3330,6 +3330,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               <span style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>Sin líneas. Envíalas desde Cortes con el botón Montaje.</span>
             ) : filasMontaje.map((fila, i) => (
               <div key={fila.id} draggable
+                onClick={(e) => { if (e.target.closest('button,input,video,img')) return; setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
                 onDragStart={() => setLineaArrastre(i)}
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={() => {
@@ -3343,8 +3344,8 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   setLineaArrastre(null);
                 }}
                 onDragEnd={() => setLineaArrastre(null)}
-                title="Arrastra para mover la fila"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
+                title="Arrastra para mover la fila (clic para seleccionar)"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: lineasSelMontaje[fila.id] ? 'rgba(56,189,248,0.25)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
                 <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                 <div
                   onClick={() => setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] }))}
