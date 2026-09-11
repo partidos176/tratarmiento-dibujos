@@ -1234,80 +1234,117 @@ const bdVideoTargetRef = useRef(null);
           try { document.body.removeChild(canvas); } catch (_) {}
         };
         rec.start(250);
-        const loop = () => {
-          if (terminado) return;
-          if (currentSeg >= segsOk.length) { terminar(); return; }
-          const seg = segsOk[currentSeg];
-          const esImagen = seg.tipo === 'imagen';
-          segElapsed += 1 / 30;
-          elapsedTotal += 1 / 30;
-          if (seg.kind) {
-            const durK = Math.max(0.1, seg.hasta - seg.desde);
-            const t = Math.min(segElapsed / durK, 1);
-            if (segElapsed <= 1 / 30 + 0.001) {
-              for (const par of [[seg.elA, seg.aDesde], [seg.elB, seg.bDesde]]) {
-                const elx = par[0];
-                if (elx && elx.tagName !== 'IMG') { try { elx.currentTime = Math.max(0, par[1] || 0); } catch (_) {} elx.play().catch(() => {}); }
-              }
-            }
-            const dib = (elx, al) => {
-              if (!elx) return;
-              const ok = elx.tagName === 'IMG' ? elx.complete : elx.readyState >= 2;
-              if (!ok) return;
-              ctx.globalAlpha = Math.max(0, Math.min(1, al));
-              try { ctx.drawImage(elx, 0, 0, w, h); } catch (_) {}
-            };
-            if (seg.kind === 'negro') {
-              ctx.globalAlpha = 1;
-              ctx.fillStyle = '#000000';
-              ctx.fillRect(0, 0, w, h);
-              if (t < 0.5) dib(seg.elA, 1 - t * 2);
-              else dib(seg.elB, (t - 0.5) * 2);
-            } else if (seg.kind === 'flash') {
-              dib(t < 0.5 ? seg.elA : seg.elB, 1);
-              ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, w, h);
-            } else {
-              ctx.globalAlpha = 1;
-              dib(seg.elA, 1 - t);
-              dib(seg.elB, t);
-            }
-            ctx.globalAlpha = 1;
-            if (segElapsed >= durK) {
-              const vistos = new Set();
-              for (const elx of [seg.elA, seg.elB]) {
-                if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); try { elx.pause(); } catch (_) {} }
-              }
-              currentSeg++; segElapsed = 0;
-            }
-            setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
-            setTimeout(loop, 1000 / 30);
-            return;
-          }
-          if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
-            try { seg.el.currentTime = Math.max(0, Math.min(seg.desde, (seg.el.duration || seg.desde + 1) - 0.05)); } catch (_) {}
-            seg.el.play().catch(() => {});
-          }
-          try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
-          if (seg.nombre) {
-            try {
-              ctx.font = '800 32px Inter, sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx.fillRect(0, 0, w, 52);
-              ctx.fillStyle = '#facc15';
-              ctx.fillText(seg.nombre, w / 2, 26);
-            } catch (_) {}
-          }
-          const segDur = seg.hasta - seg.desde;
-          const ended = seg.esAnim ? (segElapsed >= segDur) : esImagen ? (segElapsed >= segDur) : (seg.el.currentTime >= seg.hasta || segElapsed >= segDur + 1);
-          if (ended) { if (!esImagen) { try { seg.el.pause(); } catch (_) {} } currentSeg++; segElapsed = 0; }
-          setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
-          setTimeout(loop, 1000 / 30);
+        let enTick = false;
+        let segT0Wall = 0;
+        let completado = 0;
+        const ponerEnMarcha = (elx, t0) => {
+          if (!elx || elx.tagName === 'IMG') return;
+          try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
+          try { elx.play().catch(() => {}); } catch (_) {}
+          try { elx.ontimeupdate = () => tick(); } catch (_) {}
         };
-        loop();
+        const detener = (elx) => {
+          if (!elx || elx.tagName === 'IMG') return;
+          try { elx.ontimeupdate = null; } catch (_) {}
+          try { elx.pause(); } catch (_) {}
+        };
+        const posContenido = (seg) => {
+          const segDur = Math.max(0, seg.hasta - seg.desde);
+          if (seg.kind || seg.esAnim || seg.tipo === 'imagen') {
+            return Math.min(Math.max(0, (Date.now() - segT0Wall) / 1000), segDur);
+          }
+          try {
+            const p = seg.el.currentTime - seg.desde;
+            if (Number.isFinite(p)) return Math.min(Math.max(0, p), segDur);
+          } catch (_) {}
+          return Math.min(Math.max(0, (Date.now() - segT0Wall) / 1000), segDur);
+        };
+        const tick = () => {
+          if (terminado || enTick) return;
+          enTick = true;
+          try {
+            if (currentSeg >= segsOk.length) { terminar(); return; }
+            const seg = segsOk[currentSeg];
+            const esImagen = seg.tipo === 'imagen';
+            const segDur = Math.max(0.1, seg.hasta - seg.desde);
+            if (segElapsed === 0) {
+              segT0Wall = Date.now();
+              if (seg.kind) {
+                ponerEnMarcha(seg.elA, seg.aDesde);
+                ponerEnMarcha(seg.elB, seg.bDesde);
+              } else if (!esImagen) {
+                ponerEnMarcha(seg.el, seg.desde);
+              }
+            } else {
+              segElapsed += 1 / 30;
+            }
+            if (seg.kind) {
+              const t = Math.min((Date.now() - segT0Wall) / 1000 / segDur, 1);
+              const dib = (elx, al) => {
+                if (!elx) return;
+                const ok = elx.tagName === 'IMG' ? elx.complete : elx.readyState >= 2;
+                if (!ok) return;
+                ctx.globalAlpha = Math.max(0, Math.min(1, al));
+                try { ctx.drawImage(elx, 0, 0, w, h); } catch (_) {}
+              };
+              if (seg.kind === 'negro') {
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, w, h);
+                if (t < 0.5) dib(seg.elA, 1 - t * 2);
+                else dib(seg.elB, (t - 0.5) * 2);
+              } else if (seg.kind === 'flash') {
+                dib(t < 0.5 ? seg.elA : seg.elB, 1);
+                ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+              } else {
+                ctx.globalAlpha = 1;
+                dib(seg.elA, 1 - t);
+                dib(seg.elB, t);
+              }
+              ctx.globalAlpha = 1;
+              if ((Date.now() - segT0Wall) >= segDur * 1000) {
+                const vistos = new Set();
+                for (const elx of [seg.elA, seg.elB]) {
+                  if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
+                }
+                completado += segDur;
+                currentSeg++; segElapsed = 0;
+              }
+            } else {
+              try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              if (seg.nombre) {
+                try {
+                  ctx.font = '800 32px Inter, sans-serif';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                  ctx.fillRect(0, 0, w, 52);
+                  ctx.fillStyle = '#facc15';
+                  ctx.fillText(seg.nombre, w / 2, 26);
+                } catch (_) {}
+              }
+              let fin = false;
+              if (seg.esAnim || esImagen) {
+                fin = (Date.now() - segT0Wall) >= segDur * 1000;
+              } else {
+                try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
+                if (!fin) fin = (Date.now() - segT0Wall) >= (segDur + 3) * 1000;
+              }
+              if (fin) {
+                if (!esImagen) detener(seg.el);
+                completado += segDur;
+                currentSeg++; segElapsed = 0;
+              }
+            }
+            setProgresoDescarga(Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100)));
+            setTimeout(tick, 1000 / 30);
+          } finally {
+            enTick = false;
+          }
+        };
+        tick();
       });
     } catch (e) {
       console.error('Error al descargar líneas', e);
