@@ -100,6 +100,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
   const [progresoDescarga, setProgresoDescarga] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
+  const [todasTrans, setTodasTrans] = useState(false);
   const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5 });
 
   const datosCortes = () => ({
@@ -1511,19 +1512,22 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     return true;
   };
 
-  const insertarTransicion = (modelo, dur) => {
+  const insertarTransicion = (modelo, dur, soloHuecos, cerrar = true) => {
     const nombres = { crossfade: 'Crossfade', negro: 'Fundido a negro', flash: 'Flash blanco' };
     setFilasMontaje(prev => {
-      const limpias = prev.filter(f => f.tipo !== 'transicion');
+      const limpias = soloHuecos ? [...prev] : prev.filter(f => f.tipo !== 'transicion');
       if (limpias.length < 2) return prev;
+      const esMedia = (x) => x && x.tipo !== 'transicion';
       const resultado = [];
       for (let i = 0; i < limpias.length; i++) {
         resultado.push(limpias[i]);
-        if (i < limpias.length - 1) resultado.push({ id: Date.now() + i, tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
+        if (i < limpias.length - 1 && esMedia(limpias[i]) && esMedia(limpias[i + 1])) {
+          resultado.push({ id: Date.now() + i, tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
+        }
       }
       return resultado;
     });
-    setShowTransiciones(false);
+    if (cerrar) setShowTransiciones(false);
   };
 
   const descargarMontaje = async () => {
@@ -3860,6 +3864,19 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
               <div onClick={() => setShowTransiciones(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
                 <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '360px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                   <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Transiciones</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem' }}>
+                    <div
+                      onClick={() => {
+                        const v = !todasTrans;
+                        setTodasTrans(v);
+                        if (v) insertarTransicion('crossfade', durTrans.crossfade, true, false);
+                        else setFilasMontaje(prev => prev.filter(f => f.tipo !== 'transicion'));
+                      }}
+                      title="Transiciones en todas las líneas"
+                      style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: todasTrans ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
+                  </div>
                   {[
                     { id: 'crossfade', nombre: 'Fundido cruzado' },
                     { id: 'negro', nombre: 'Fundido a negro' },
