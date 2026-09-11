@@ -2827,10 +2827,36 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                       <tr key={'bd_' + v.id}>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
-                            <div onClick={() => bdFileRef.current?.click()} title="Seleccionar montaje.json" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
-                              <span style={{ fontSize: '1.4rem' }}>📁</span>
-                              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>Seleccionar archivo</span>
-                            </div>
+                            <select
+                              value=""
+                              title="Cargar vídeo o archivo"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                e.target.value = '';
+                                if (!val) return;
+                                if (val === '__file__') { bdFileRef.current?.click(); return; }
+                                const vb = videosBD.find(x => x.videoUrl === val);
+                                deseaPlayPreviewRef.current = true;
+                                setFasePreview('base');
+                                prevTPreviewRef.current = null;
+                                limpiarTimerAnim();
+                                animMostradasRef.current.clear(); animActualRef.current = null;
+                                setPreviewMontaje({ src: val, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: vb ? (vb.nombre || '') : '', anims: [] });
+                                setHoja('Montaje');
+                              }}
+                              style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '130px' }}
+                            >
+                              <option value="">Cargar…</option>
+                              <option value="__file__">📁 montaje.json…</option>
+                              {videosBD.length > 0 && (
+                                <optgroup label="Vídeos PC">
+                                  {videosBD.map(x => <option key={'sbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
+                                </optgroup>
+                              )}
+                              <optgroup label="Animaciones">
+                                {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'san_' + x.id} value={x.videoUrl}>Animación {formatoTiempo(x.tiempo ?? 0)}</option>)}
+                              </optgroup>
+                            </select>
                             <button
                               onClick={() => {
                                 if (v.videoUrl && v.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(v.videoUrl); } catch (_) {} }
@@ -2853,10 +2879,36 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                     {(capturas || []).filter(c => c && c.videoUrl).map(c => (
                       <tr key={c.id}>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                            <div onClick={() => bdFileRef.current?.click()} title="Seleccionar montaje.json" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
-                              <span style={{ fontSize: '1.4rem' }}>📁</span>
-                              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>Seleccionar archivo</span>
-                            </div>
+                            <select
+                              value=""
+                              title="Cargar vídeo o archivo"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                e.target.value = '';
+                                if (!val) return;
+                                if (val === '__file__') { bdFileRef.current?.click(); return; }
+                                const vb = videosBD.find(x => x.videoUrl === val);
+                                deseaPlayPreviewRef.current = true;
+                                setFasePreview('base');
+                                prevTPreviewRef.current = null;
+                                limpiarTimerAnim();
+                                animMostradasRef.current.clear(); animActualRef.current = null;
+                                setPreviewMontaje({ src: val, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: vb ? (vb.nombre || '') : '', anims: [] });
+                                setHoja('Montaje');
+                              }}
+                              style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '130px' }}
+                            >
+                              <option value="">Cargar…</option>
+                              <option value="__file__">📁 montaje.json…</option>
+                              {videosBD.length > 0 && (
+                                <optgroup label="Vídeos PC">
+                                  {videosBD.map(x => <option key={'sbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
+                                </optgroup>
+                              )}
+                              <optgroup label="Animaciones">
+                                {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'san_' + x.id} value={x.videoUrl}>Animación {formatoTiempo(x.tiempo ?? 0)}</option>)}
+                              </optgroup>
+                            </select>
                         </td>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.3rem' }}>
