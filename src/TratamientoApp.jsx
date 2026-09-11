@@ -1075,6 +1075,82 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     return true;
   };
 
+  const descargarFragmentoLinea = async (linea) => {
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc) { setAviso('Carga primero un vídeo para descargar el fragmento'); return false; }
+    const ini = Math.max(0, linea.inicio);
+    const fin = Math.max(ini + 0.5, linea.fin);
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let rec = null;
+    let base = null;
+    const totalDur = fin - ini;
+    try {
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      base = document.createElement('video');
+      base.muted = true; base.playsInline = true; base.preload = 'auto'; base.src = baseSrc;
+      base.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+      document.body.appendChild(base);
+      await new Promise((res) => { base.onloadedmetadata = res; base.onerror = res; });
+      await new Promise((resolve) => {
+        let terminado = false;
+        let elapsed = 0;
+        rec.onstop = () => {
+          const blob = new Blob(chunks, { type: mime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          resolve();
+        };
+        const terminar = () => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          try { base.pause(); } catch (_) {}
+          try { document.body.removeChild(base); } catch (_) {}
+          try { document.body.removeChild(canvas); } catch (_) {}
+        };
+        rec.start(250);
+        try { base.currentTime = Math.max(0, Math.min(ini, (base.duration || ini + 1) - 0.05)); } catch (_) {}
+        base.play().catch(() => {});
+        const loop = () => {
+          if (terminado) return;
+          elapsed += 1 / 30;
+          try { ctx.drawImage(base, 0, 0, w, h); } catch (_) {}
+          if (base.currentTime >= fin || elapsed >= totalDur + 1) { terminar(); return; }
+          setProgresoDescarga(Math.min(99, Math.round((elapsed / Math.max(0.1, totalDur)) * 100)));
+          setTimeout(loop, 1000 / 30);
+        };
+        loop();
+      });
+    } catch (e) {
+      console.error('Error al descargar fragmento', e);
+      setAviso('No se pudo descargar el fragmento: ' + ((e && e.message) || e));
+      try { if (base) document.body.removeChild(base); } catch (_) {}
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+    } finally {
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+    }
+    return true;
+  };
+
   const descargarMontaje = async () => {
     const items = filasMontaje;
     const mediaItems = items.filter(f => f.tipo !== 'transicion');
@@ -3407,7 +3483,34 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
               style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}
             >Transiciones</button>
             <button
-              onClick={async () => { const ok = await descargarClipConAnimacion(); if (!ok) descargarMontaje(); }}
+              onClick={async () => {
+                const selId = Object.keys(lineasSelMontaje).find(k => lineasSelMontaje[k]);
+                const linea = selId ? filasMontaje.find(f => String(f.id) === String(selId)) : null;
+                if (!linea || linea.inicio == null || linea.fin == null) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+                const pv = previewMontaje;
+                if (pv && pv.animSrc && pv.inicio === linea.inicio && pv.fin === linea.fin) {
+                  const ok = await descargarClipConAnimacion();
+                  if (ok) return;
+                }
+                if (linea.videoUrl) {
+                  try {
+                    const r = await fetch(linea.videoUrl);
+                    const b = await r.blob();
+                    const url = URL.createObjectURL(b);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    return;
+                  } catch (e) {
+                    console.error('Error al descargar vídeo de la línea', e);
+                  }
+                }
+                await descargarFragmentoLinea(linea);
+              }}
               disabled={descargandoMontaje}
               style={{ background: descargandoMontaje ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: descargandoMontaje ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
