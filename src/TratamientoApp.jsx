@@ -2886,7 +2886,6 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                     </td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem' }}>
-                        <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}>{a.nFilas} filas</span>
                         <select
                           value=""
                           title="Elegir vídeo del archivo"
