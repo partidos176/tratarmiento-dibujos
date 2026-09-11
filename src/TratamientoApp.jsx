@@ -1136,17 +1136,6 @@ const bdVideoTargetRef = useRef(null);
         rangos.push([segs.length, segs.length]);
         if (linea.tipo === 'transicion') continue;
         const nombre = linea.concepto || '';
-        const vistos = new Set();
-        if (linea.imagenUrl) { vistos.add(linea.imagenUrl); const im = await mkImg(linea.imagenUrl); segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre }); totalDur += 4; }
-        if (linea.inicio != null && linea.fin != null) {
-          for (const c of capsEditadasDeLinea(linea)) {
-            if (!c || !c.dataUrl || vistos.has(c.dataUrl)) continue;
-            vistos.add(c.dataUrl);
-            const im = await mkImg(c.dataUrl);
-            segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
-            totalDur += 4;
-          }
-        }
         if (linea.videoUrl) {
           const v = await mkVid(linea.videoUrl);
           let d = 5;
@@ -1357,17 +1346,6 @@ const bdVideoTargetRef = useRef(null);
       };
       const base = await mkVid(pv.src);
       let segs = [];
-      for (const c of capsEditadasDeLinea({ inicio: ini, fin })) {
-        if (!c || !c.dataUrl) continue;
-        const im = document.createElement('img');
-        im.crossOrigin = 'anonymous';
-        im.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
-        document.body.appendChild(im);
-        els.push(im);
-        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = c.dataUrl; });
-        segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4 });
-        totalDur += 4;
-      }
       let cursor = ini;
       for (const a of anims) {
         const dur = a.dur || 4;
