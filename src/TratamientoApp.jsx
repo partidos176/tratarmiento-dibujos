@@ -3839,6 +3839,26 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                 >×</button>
               </div>
             ))}
+          {lineaArrastre !== null && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={() => {
+                lineaArrastrandoRef.current = false;
+                if (lineaArrastre === null) return;
+                const idMovida = filasMontaje[lineaArrastre] ? filasMontaje[lineaArrastre].id : null;
+                setFilasMontaje(prev => {
+                  const copy = [...prev];
+                  const [moved] = copy.splice(lineaArrastre, 1);
+                  copy.push(moved);
+                  return copy;
+                });
+                if (idMovida != null) setLineasSelMontaje(prev => { const c = { ...prev }; delete c[idMovida]; return c; });
+                setLineaArrastre(null);
+              }}
+              title="Soltar aquí para poner al final"
+              style={{ marginTop: '0.6rem', minHeight: '44px', border: '1px dashed #38bdf8', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}
+            >Soltar al final</div>
+          )}
           </div>
           {previewMontaje && (
             <div style={{ flex: '1 1 auto', background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', position: 'sticky', top: '1rem' }}>
