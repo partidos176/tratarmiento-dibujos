@@ -3612,7 +3612,8 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   return (
                     <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
                       {listaEd.map((capEd) => (
-                        <div key={capEd.id} style={{ position: 'relative', flexShrink: 0 }}>
+                        <div key={capEd.id} style={{ position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                          <div style={{ position: 'relative' }}>
                           <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
                             onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
                             style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', display: 'block' }} />
@@ -3628,6 +3629,10 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                             title="Borrar foto"
                             style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', background: '#dc2626', border: 'none', borderRadius: '5px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', lineHeight: '18px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
                           >×</button>
+                          </div>
+                          {capEd.tiempo != null && (
+                            <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#94a3b8' }}>{formatoTiempo(capEd.tiempo)}</span>
+                          )}
                         </div>
                       ))}
                     </div>
