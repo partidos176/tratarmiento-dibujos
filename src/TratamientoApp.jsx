@@ -385,7 +385,6 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           setCapturaGuardada(null);
           setImgDim(null);
           setFiguraSeleccionada(null);
-          setAviso('Sesión anterior recuperada');
         }
         try {
           const vp = await idbLeerKV(VIDEO_PP_KEY);
