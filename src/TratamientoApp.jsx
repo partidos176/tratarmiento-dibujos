@@ -366,11 +366,27 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
       try {
         const s = await idbLeer();
         if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
-          setCapturas(s.capturas);
+          setCapturas(prev => {
+            const prevById = new Map((prev || []).map(c => [c && c.id, c]));
+            return s.capturas.map(c => {
+              const p = prevById.get(c && c.id);
+              if (p && p.videoUrl && !c.videoUrl) return { ...c, videoUrl: p.videoUrl, duracionAnim: p.duracionAnim };
+              return c;
+            });
+          });
           try { await aplicarCortes(s); } catch (_) {}
           if (Array.isArray(s.figuras)) setFiguras(normalizarFiguras(s.figuras));
           const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
-          setCapturaSeleccionada(sel);
+          if (sel) {
+            setCapturaSeleccionada(prevSel => {
+              if (prevSel && prevSel.id === sel.id && prevSel.videoUrl && !sel.videoUrl) {
+                return { ...sel, videoUrl: prevSel.videoUrl, duracionAnim: prevSel.duracionAnim };
+              }
+              return sel;
+            });
+          } else {
+            setCapturaSeleccionada(null);
+          }
           setCapturaGuardada(null);
           setImgDim(null);
           setFiguraSeleccionada(null);
