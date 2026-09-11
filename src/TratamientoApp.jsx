@@ -2872,7 +2872,7 @@ const bdVideoTargetRef = useRef(null);
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
                 <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
-                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '180px' }}>Datos</th>
+                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', width: '180px' }}>DATOS</th>
                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Video</th>
                 </tr>
               </thead>
