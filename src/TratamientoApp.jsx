@@ -1053,6 +1053,29 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
     </select>
   );
 
+  const selectorVideoPin = (kind, id) => (
+    <select
+      value=""
+      title="Elegir vídeo para la celda"
+      onChange={(e) => {
+        const val = e.target.value;
+        e.target.value = '';
+        if (!val) return;
+        if (kind === 'bd') setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
+        else setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
+      }}
+      style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '110px' }}
+    >
+      <option value="">Vídeo…</option>
+      {videosBD.length > 0 && (
+        <optgroup label="Vídeos PC">
+          {videosBD.map(x => <option key={'pbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
+        </optgroup>
+      )}
+      {(capturas || []).filter(x => x && x.videoUrl).map(x => <option key={'pan_' + x.id} value={x.videoUrl}>{formatoTiempo(x.tiempo ?? 0)}</option>)}
+    </select>
+  );
+
   const abrirPreviewLinea = (fila, tIr) => {
     const src = videoUrlCortes || videoUrl;
     if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
@@ -2871,7 +2894,6 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                             {selectorCargar()}
                             <button
                               onClick={() => {
-                                if (v.videoUrl && v.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(v.videoUrl); } catch (_) {} }
                                 setVideosBD(prev => prev.filter(x => x.id !== v.id));
                               }}
                               title="Eliminar vídeo"
@@ -2881,8 +2903,9 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                         </td>
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'bd_' + v.id ? null : 'bd_' + v.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'bd_' + v.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.3rem' }}>
-                            <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>{v.nombre}</div>
+                            <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{v.nombre}</div>
                             <button onClick={() => { setBdVideoTarget({ kind: 'bd', id: v.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                            {selectorVideoPin('bd', v.id)}
                           </div>
                           <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'bd_' + v.id ? '2px solid #facc15' : 'none' }} />
                         </td>
@@ -2894,8 +2917,9 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                             {selectorCargar()}
                         </td>
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'cap_' + c.id ? null : 'cap_' + c.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'cap_' + c.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.3rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginBottom: '0.3rem' }}>
                             <button onClick={() => { setBdVideoTarget({ kind: 'cap', id: c.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                            {selectorVideoPin('cap', c.id)}
                           </div>
                           <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'cap_' + c.id ? '2px solid #facc15' : 'none' }} />
                         </td>
