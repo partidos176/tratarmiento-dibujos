@@ -2857,7 +2857,9 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                 e.target.value = '';
                 if (!f || !bdVideoTarget) return;
                 const url = URL.createObjectURL(f);
-                if (bdVideoTarget.kind === 'bd') {
+                if (bdVideoTarget.kind === 'new') {
+                  setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
+                } else if (bdVideoTarget.kind === 'bd') {
                   setVideosBD(prev => prev.map(x => x.id === bdVideoTarget.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
                 } else {
                   setCapturas(prev => prev.map(c => c && c.id === bdVideoTarget.id ? { ...c, videoUrl: url } : c));
@@ -2929,7 +2931,9 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                       <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
                         {selectorCargar()}
                       </td>
-                      <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem' }}></td>
+                      <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                        <button onClick={() => { setBdVideoTarget({ kind: 'new' }); bdVideoRef.current?.click(); }} title="Añadir vídeo del PC" style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#e2e8f0', cursor: 'pointer' }}>+ Vídeo del PC</button>
+                      </td>
                     </tr>
               </tbody>
             </table>
