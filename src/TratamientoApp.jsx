@@ -2840,7 +2840,7 @@ const bdVideoTargetRef = useRef(null);
                   setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
                 } else                 if (tgt.kind === 'arc') {
                   const nid = Date.now() + Math.floor(Math.random() * 1000000);
-                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url }]);
+                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url, oculto: true }]);
                   setArchivosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoRef: { kind: 'bd', id: nid } } : x));
                 } else if (tgt.kind === 'bd') {
                   setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
@@ -2905,7 +2905,7 @@ const bdVideoTargetRef = useRef(null);
                     </td>
                   </tr>
                 ))}
-                    {videosBD.map(v => (
+                    {videosBD.filter(v => !v.oculto).map(v => (
                       <tr key={'bd_' + v.id}>
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
                           <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-start', alignItems: 'center' }}>
