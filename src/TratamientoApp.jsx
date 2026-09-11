@@ -2899,7 +2899,7 @@ const bdVideoTargetRef = useRef(null);
                               ? ((videosBD.find(x => x.id === ref.id) || {}).videoUrl || null)
                               : (((capturas || []).find(x => x && x.id === ref.id) || {}).videoUrl || null))
                             : null;
-                          return url ? <video src={url} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} /> : null;
+                          return url ? <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{ref.kind === 'bd' ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || url) : url}</div> : null;
                         })()}
                       </div>
                     </td>
@@ -2925,7 +2925,7 @@ const bdVideoTargetRef = useRef(null);
                             <button onClick={() => { bdVideoTargetRef.current = { kind: 'bd', id: v.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('bd', v.id)}
                           </div>
-                          <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'bd_' + v.id ? '2px solid #facc15' : 'none' }} />
+                           <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{v.nombre}</div>
                         </td>
                       </tr>
                     ))}
@@ -2939,7 +2939,7 @@ const bdVideoTargetRef = useRef(null);
                             <button onClick={() => { bdVideoTargetRef.current = { kind: 'cap', id: c.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('cap', c.id)}
                           </div>
-                          <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'cap_' + c.id ? '2px solid #facc15' : 'none' }} />
+                           <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{c.videoUrl}</div>
                         </td>
                       </tr>
                     ))}
