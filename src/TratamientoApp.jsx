@@ -1257,7 +1257,7 @@ const bdVideoTargetRef = useRef(null);
                 ponerEnMarcha(seg.elA, seg.aDesde);
                 ponerEnMarcha(seg.elB, seg.bDesde);
               } else if (!esImagen) {
-                ponerEnMarcha(seg.el, seg.esAnim ? 0.1 : seg.desde);
+                ponerEnMarcha(seg.el, seg.desde);
               }
               segElapsed = 1 / 30;
             } else {
@@ -1298,8 +1298,7 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              const listo = !seg.esAnim || seg.el.readyState >= 2;
-              if (!listo) {
+              if (seg.esAnim && segElapsed < 0.5) {
                 ctx.globalAlpha = 1;
                 ctx.fillStyle = '#000000';
                 ctx.fillRect(0, 0, w, h);
