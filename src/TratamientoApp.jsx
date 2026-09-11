@@ -4239,7 +4239,7 @@ const bdVideoTargetRef = useRef(null);
             </button>
             <button
               onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); }}
-              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
               Limpiar
             </button>
