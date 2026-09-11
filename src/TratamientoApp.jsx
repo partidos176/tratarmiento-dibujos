@@ -1277,7 +1277,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           img.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
           document.body.appendChild(img);
           await new Promise((res) => { img.onload = res; img.onerror = res; img.src = item.imagenUrl; });
-          mediaEls.push({ el: img, tipo: 'imagen', duracion: 4 });
+          mediaEls.push({ el: img, tipo: 'imagen', duracion: item.duracion || 4 });
         } else if (item.videoUrl) {
           const vid = document.createElement('video');
           vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = item.videoUrl;
@@ -3559,7 +3559,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataUrl = reader.result;
-                  const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '' };
+                  const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '', duracion: 4 };
                   setFilasMontaje(prev => {
                     const ix = prev.findIndex(f => lineasSelMontaje[f.id]);
                     if (ix < 0) return [...prev, nueva];
