@@ -1523,7 +1523,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       for (let i = 0; i < limpias.length; i++) {
         resultado.push(limpias[i]);
         if (i < limpias.length - 1 && esMedia(limpias[i]) && esMedia(limpias[i + 1])) {
-          resultado.push({ id: Date.now() + i, tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
+          resultado.push({ id: Date.now() + i, tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: modelo === 'negro' ? nombres[modelo] : `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
         }
       }
       return resultado;
@@ -3896,9 +3896,13 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                   ].map(m => (
                     <div key={m.id} onClick={() => { setModeloTransSel(m.id); insertarTransicion(m.id, durTrans[m.id], false, false); }} title="Aplicar esta transición" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: modeloTransSel === m.id ? 'rgba(250,204,21,0.85)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem', cursor: 'pointer' }}>
                       <span style={{ flex: 1, color: modeloTransSel === m.id ? '#0f172a' : '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif' }}>{m.nombre}</span>
+                      {m.id !== 'negro' && (
+                      <>
                       <button onClick={(e) => { e.stopPropagation(); setDurTrans(p => ({ ...p, [m.id]: Math.max(0.3, Math.round((p[m.id] - 0.5) * 10) / 10) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
                       <span style={{ color: modeloTransSel === m.id ? '#0f172a' : '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{durTrans[m.id]}s</span>
                       <button onClick={(e) => { e.stopPropagation(); setDurTrans(p => ({ ...p, [m.id]: Math.round((p[m.id] + 0.5) * 10) / 10 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                      </>
+                      )}
                     </div>
                   ))}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem' }}>
