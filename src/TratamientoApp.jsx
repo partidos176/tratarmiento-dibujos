@@ -1132,6 +1132,22 @@ const bdVideoTargetRef = useRef(null);
       if (baseSrc) base = await mkVid(baseSrc);
       const segs = [];
       const rangos = [];
+      {
+        let opener = null;
+        let openerNombre = '';
+        for (const linea of validas) {
+          if (linea.imagenUrl) { opener = linea.imagenUrl; openerNombre = linea.concepto || ''; break; }
+          if (linea.inicio != null && linea.fin != null) {
+            const caps = capsEditadasDeLinea(linea);
+            if (caps.length && caps[0] && caps[0].dataUrl) { opener = caps[0].dataUrl; openerNombre = linea.concepto || ''; break; }
+          }
+        }
+        if (opener) {
+          const im = await mkImg(opener);
+          segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre: openerNombre });
+          totalDur += 4;
+        }
+      }
       for (const linea of validas) {
         rangos.push([segs.length, segs.length]);
         if (linea.tipo === 'transicion') continue;
