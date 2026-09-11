@@ -521,7 +521,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     setArchivo(file);
     setVideoUrl(url);
     setProgreso(0);
-    setHoja('Presentación');
+    setHoja('Cortes');
   }, [videoInicial]);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
@@ -596,7 +596,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
-  const hojas = ['Base de datos', 'Cortes', 'Presentación', 'Edición', 'Montaje'];
+  const hojas = ['Base de datos', 'Cortes', 'Edición', 'Montaje'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -2036,7 +2036,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           </button>
         ))}
       </div>
-      {hoja === 'Presentación' ? (
+      {false ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.5rem', padding: '2rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
@@ -2483,7 +2483,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           </div>
           {cortes.length === 0 ? (
             <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
-              Sin cortes. Márcalos en Presentación activando el modo corte y pinchando en la línea de tiempo.
+              Sin cortes. Carga un vídeo y márcalos con el botón Corte junto al reproductor.
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '800px' }}>
