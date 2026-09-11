@@ -1055,6 +1055,18 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
             seg.el.play().catch(() => {});
           }
           try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+          if (pv.concepto) {
+            try {
+              ctx.font = '800 44px Inter, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              const tw = ctx.measureText(pv.concepto).width;
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.fillRect((w - tw) / 2 - 24, 24, tw + 48, 64);
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText(pv.concepto, w / 2, 56);
+            } catch (_) {}
+          }
           const segDur = seg.hasta - seg.desde;
           const ended = seg.esAnim ? (segElapsed >= segDur) : (seg.el.currentTime >= seg.hasta || segElapsed >= segDur + 1);
           if (ended) { try { seg.el.pause(); } catch (_) {} currentSeg++; segElapsed = 0; }
@@ -1133,6 +1145,18 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
           if (terminado) return;
           elapsed += 1 / 30;
           try { ctx.drawImage(base, 0, 0, w, h); } catch (_) {}
+          if (linea.concepto) {
+            try {
+              ctx.font = '800 44px Inter, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              const tw = ctx.measureText(linea.concepto).width;
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.fillRect((w - tw) / 2 - 24, 24, tw + 48, 64);
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText(linea.concepto, w / 2, 56);
+            } catch (_) {}
+          }
           if (base.currentTime >= fin || elapsed >= totalDur + 1) { terminar(); return; }
           setProgresoDescarga(Math.min(99, Math.round((elapsed / Math.max(0.1, totalDur)) * 100)));
           setTimeout(loop, 1000 / 30);
