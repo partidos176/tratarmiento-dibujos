@@ -1298,7 +1298,13 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              if (seg.esAnim && segElapsed <= 1 / 30 + 0.001) {
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, w, h);
+              } else {
+                try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              }
               if (seg.nombre) {
                 try {
                   ctx.font = '800 32px Inter, sans-serif';
