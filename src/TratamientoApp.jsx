@@ -3689,7 +3689,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                   <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000', flexShrink: 0 }} />
                 ) : null}
                 {fila.duracion != null && (
-                  <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>{fila.duracion}s</span>
+                  <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>{fila.duracion}s</span>
                 )}
                 {fila.inicio != null && fila.fin != null && (
                   <button
