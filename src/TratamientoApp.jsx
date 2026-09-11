@@ -1030,6 +1030,162 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, destino); v.play().catch(() => {}); } catch (_) {} } });
   };
 
+  const descargarLineas = async (lineas) => {
+    const validas = (lineas || []).filter(l => l && (l.imagenUrl || (l.inicio != null && l.fin != null) || l.videoUrl));
+    if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let rec = null;
+    const els = [];
+    let totalDur = 0;
+    let elapsedTotal = 0;
+    try {
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const mkVid = async (src) => {
+        const vid = document.createElement('video');
+        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(vid);
+        els.push(vid);
+        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+        return vid;
+      };
+      const mkImg = async (u) => {
+        const im = document.createElement('img');
+        im.crossOrigin = 'anonymous';
+        im.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(im);
+        els.push(im);
+        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = u; });
+        return im;
+      };
+      let base = null;
+      if (baseSrc) base = await mkVid(baseSrc);
+      const segs = [];
+      for (const linea of validas) {
+        const nombre = linea.concepto || '';
+        const vistos = new Set();
+        if (linea.imagenUrl) { vistos.add(linea.imagenUrl); const im = await mkImg(linea.imagenUrl); segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre }); totalDur += 4; }
+        if (linea.inicio != null && linea.fin != null) {
+          for (const c of capsEditadasDeLinea(linea)) {
+            if (!c || !c.dataUrl || vistos.has(c.dataUrl)) continue;
+            vistos.add(c.dataUrl);
+            const im = await mkImg(c.dataUrl);
+            segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
+            totalDur += 4;
+          }
+        }
+        if (linea.videoUrl) {
+          const v = await mkVid(linea.videoUrl);
+          let d = 5;
+          try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
+          segs.push({ el: v, desde: 0, hasta: d, nombre });
+          totalDur += d;
+        } else if (linea.inicio != null && linea.fin != null && base) {
+          const ini = Math.max(0, linea.inicio);
+          const fin = Math.max(ini + 0.5, linea.fin);
+          const anims = (capturas || [])
+            .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+            .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
+            .sort((a, b) => a.en - b.en);
+          let cursor = ini;
+          for (const a of anims) {
+            if (!(a.en > cursor && a.en < fin)) continue;
+            segs.push({ el: base, desde: cursor, hasta: a.en, nombre });
+            totalDur += a.en - cursor;
+            const av = await mkVid(a.src);
+            segs.push({ el: av, desde: 0, hasta: a.dur, esAnim: true, nombre });
+            totalDur += a.dur;
+            cursor = a.en;
+          }
+          segs.push({ el: base, desde: cursor, hasta: fin, nombre });
+          totalDur += fin - cursor;
+        }
+      }
+      const segsOk = segs.filter(s => s.hasta > s.desde);
+      if (!segsOk.length) { setAviso('Nada que descargar'); return; }
+      const nombreArchivo = validas.length === 1
+        ? `${(validas[0].concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`
+        : 'montaje.webm';
+      await new Promise((resolve) => {
+        let terminado = false;
+        let currentSeg = 0;
+        let segElapsed = 0;
+        rec.onstop = () => {
+          const blob = new Blob(chunks, { type: mime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = nombreArchivo;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          resolve();
+        };
+        const terminar = () => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          try { document.body.removeChild(canvas); } catch (_) {}
+        };
+        rec.start(250);
+        const loop = () => {
+          if (terminado) return;
+          if (currentSeg >= segsOk.length) { terminar(); return; }
+          const seg = segsOk[currentSeg];
+          const esImagen = seg.tipo === 'imagen';
+          segElapsed += 1 / 30;
+          elapsedTotal += 1 / 30;
+          if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
+            try { seg.el.currentTime = Math.max(0, Math.min(seg.desde, (seg.el.duration || seg.desde + 1) - 0.05)); } catch (_) {}
+            seg.el.play().catch(() => {});
+          }
+          try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+          if (seg.nombre) {
+            try {
+              ctx.font = '800 32px Inter, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.fillRect(0, 24, w, 52);
+              ctx.fillStyle = '#facc15';
+              ctx.fillText(seg.nombre, w / 2, 50);
+            } catch (_) {}
+          }
+          const segDur = seg.hasta - seg.desde;
+          const ended = seg.esAnim ? (segElapsed >= segDur) : esImagen ? (segElapsed >= segDur) : (seg.el.currentTime >= seg.hasta || segElapsed >= segDur + 1);
+          if (ended) { if (!esImagen) { try { seg.el.pause(); } catch (_) {} } currentSeg++; segElapsed = 0; }
+          setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
+          setTimeout(loop, 1000 / 30);
+        };
+        loop();
+      });
+    } catch (e) {
+      console.error('Error al descargar líneas', e);
+      setAviso('No se pudo descargar: ' + ((e && e.message) || e));
+      try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+    } finally {
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+    }
+  };
+
   const descargarClipConAnimacion = async () => {
     const pv = previewMontaje;
     if (!pv) return false;
@@ -3645,31 +3801,9 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             )}
             <button
               onClick={async () => {
-                const linea = filasMontaje.find(f => lineasSelMontaje[f.id] && (f.imagenUrl || (f.inicio != null && f.fin != null)));
-                if (!linea) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
-                const pv = previewMontaje;
-                if (pv && pv.anims && pv.anims.length && pv.inicio === linea.inicio && pv.fin === linea.fin) {
-                  const ok = await descargarClipConAnimacion();
-                  if (ok) return;
-                }
-                if (linea.videoUrl) {
-                  try {
-                    const r = await fetch(linea.videoUrl);
-                    const b = await r.blob();
-                    const url = URL.createObjectURL(b);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 5000);
-                    return;
-                  } catch (e) {
-                    console.error('Error al descargar vídeo de la línea', e);
-                  }
-                }
-                await descargarFragmentoLinea(linea);
+                const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null)));
+                if (!marcadas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+                await descargarLineas(marcadas);
               }}
               disabled={descargandoMontaje}
               style={{ background: descargandoMontaje ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: descargandoMontaje ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
