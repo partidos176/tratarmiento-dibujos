@@ -327,21 +327,6 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     })();
     return () => { cancelado = true; };
   }, [videoUrl]);
-  useEffect(() => {
-    if (!videoUrlCortes || typeof videoUrlCortes !== 'string' || !videoUrlCortes.startsWith('blob:')) return;
-    if (videoGuardadoRef.current.cortes === videoUrlCortes) return;
-    videoGuardadoRef.current.cortes = videoUrlCortes;
-    let cancelado = false;
-    (async () => {
-      try {
-        const r = await fetch(videoUrlCortes);
-        const b = await r.blob();
-        if (cancelado || !b || !b.size) return;
-        await idbPonerKV(VIDEO_CORTES_KEY, { blob: b, nombre: (archivoCortes && archivoCortes.name) || 'video' });
-      } catch (_) {}
-    })();
-    return () => { cancelado = true; };
-  }, [videoUrlCortes]);
   const construirFotoSesion = () => ({
     v: 1,
     guardado: Date.now(),
@@ -413,13 +398,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           }
         } catch (_) {}
         try {
-          const vc = await idbLeerKV(VIDEO_CORTES_KEY);
-          if (vc && vc.blob && vc.blob.size) {
-            const url = URL.createObjectURL(vc.blob);
-            videoGuardadoRef.current.cortes = url;
-            setArchivoCortes({ name: vc.nombre || 'video' });
-            setVideoUrlCortes(url);
-          }
+          await idbPonerKV(VIDEO_CORTES_KEY, null);
         } catch (_) {}
       } catch (_) {}
       sesionListaRef.current = true;
