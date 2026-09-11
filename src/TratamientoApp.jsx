@@ -594,7 +594,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
-  const hojas = ['Cortes', 'Presentación', 'Edición', 'Montaje'];
+  const hojas = ['Base de datos', 'Cortes', 'Presentación', 'Edición', 'Montaje'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -2385,6 +2385,11 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                 )}
             </>
           )}
+        </div>
+      ) : hoja === 'Base de datos' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.2rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Base de datos</span>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '0.85rem', color: '#64748b' }}>Hoja vacía. Dime qué datos quieres ver aquí.</span>
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
