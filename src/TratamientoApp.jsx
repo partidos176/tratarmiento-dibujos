@@ -3551,7 +3551,7 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: lineasSelMontaje[fila.id] ? 'rgba(56,189,248,0.25)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
                 <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
                 <div
-                  onClick={() => setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] }))}
+                  onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
                   title="Seleccionar línea"
                   style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
                 />
