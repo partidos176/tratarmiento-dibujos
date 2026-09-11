@@ -4174,13 +4174,6 @@ const bdVideoTargetRef = useRef(null);
             >
               Exportar
             </button>
-            {descargandoMontaje && (
-              <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ flex: 1, height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${progresoDescarga}%`, height: '100%', background: '#22c55e', borderRadius: '3px', transition: 'width 0.3s' }} />
-                </div>
-              </div>
-            )}
           </div>
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
