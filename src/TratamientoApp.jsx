@@ -1031,7 +1031,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   };
 
   const descargarLineas = async (lineas) => {
-    const validas = (lineas || []).filter(l => l && (l.imagenUrl || (l.inicio != null && l.fin != null) || l.videoUrl));
+    const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
@@ -1075,7 +1075,10 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       let base = null;
       if (baseSrc) base = await mkVid(baseSrc);
       const segs = [];
+      const rangos = [];
       for (const linea of validas) {
+        rangos.push([segs.length, segs.length]);
+        if (linea.tipo === 'transicion') continue;
         const nombre = linea.concepto || '';
         const vistos = new Set();
         if (linea.imagenUrl) { vistos.add(linea.imagenUrl); const im = await mkImg(linea.imagenUrl); segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre }); totalDur += 4; }
@@ -1092,7 +1095,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           const v = await mkVid(linea.videoUrl);
           let d = 5;
           try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
-          segs.push({ el: v, desde: 0, hasta: d, nombre });
+          segs.push({ el: v, src: linea.videoUrl, desde: 0, hasta: d, nombre });
           totalDur += d;
         } else if (linea.inicio != null && linea.fin != null && base) {
           const ini = Math.max(0, linea.inicio);
@@ -1104,17 +1107,48 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           let cursor = ini;
           for (const a of anims) {
             if (!(a.en > cursor && a.en < fin)) continue;
-            segs.push({ el: base, desde: cursor, hasta: a.en, nombre });
+            segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre });
             totalDur += a.en - cursor;
             const av = await mkVid(a.src);
-            segs.push({ el: av, desde: 0, hasta: a.dur, esAnim: true, nombre });
+            segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
             totalDur += a.dur;
             cursor = a.en;
           }
-          segs.push({ el: base, desde: cursor, hasta: fin, nombre });
+          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: fin, nombre });
           totalDur += fin - cursor;
         }
+        rangos[rangos.length - 1][1] = segs.length;
       }
+      const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
+      for (let tk = validas.length - 1; tk >= 0; tk--) {
+        const tl = validas[tk];
+        if (!tl || tl.tipo !== 'transicion') continue;
+        let ia = -1;
+        for (let s = rangos[tk][0] - 1; s >= 0; s--) { if (segs[s] && !segs[s].kind) { ia = s; break; } }
+        let ib = -1;
+        for (let s = rangos[tk][1]; s < segs.length; s++) { if (segs[s] && !segs[s].kind) { ib = s; break; } }
+        if (ia < 0 || ib < 0 || ia === ib) continue;
+        const A = segs[ia];
+        const B = segs[ib];
+        let d = Math.max(0.3, tl.duracion || 2);
+        d = Math.min(d, A.hasta - A.desde, B.hasta - B.desde);
+        if (!(d >= 0.2) || !(A.hasta > A.desde) || !(B.hasta > B.desde)) continue;
+        if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
+        if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
+        let elB = B.el;
+        if (esVideoSeg(B) && B.src) {
+          try {
+            const clon = document.createElement('video');
+            clon.muted = true; clon.playsInline = true; clon.preload = 'auto'; clon.src = B.src;
+            clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+            document.body.appendChild(clon);
+            els.push(clon);
+            elB = clon;
+          } catch (_) {}
+        }
+        segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? A.hasta : 0, elB, bDesde: esVideoSeg(B) ? B.desde : 0, desde: 0, hasta: d, nombre: '' });
+      }
+      totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
       const segsOk = segs.filter(s => s.hasta > s.desde);
       if (!segsOk.length) { setAviso('Nada que descargar'); return; }
       const nombreArchivo = validas.length === 1
@@ -1151,6 +1185,50 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
           const esImagen = seg.tipo === 'imagen';
           segElapsed += 1 / 30;
           elapsedTotal += 1 / 30;
+          if (seg.kind) {
+            const durK = Math.max(0.1, seg.hasta - seg.desde);
+            const t = Math.min(segElapsed / durK, 1);
+            if (segElapsed <= 1 / 30 + 0.001) {
+              for (const par of [[seg.elA, seg.aDesde], [seg.elB, seg.bDesde]]) {
+                const elx = par[0];
+                if (elx && elx.tagName !== 'IMG') { try { elx.currentTime = Math.max(0, par[1] || 0); } catch (_) {} elx.play().catch(() => {}); }
+              }
+            }
+            const dib = (elx, al) => {
+              if (!elx) return;
+              const ok = elx.tagName === 'IMG' ? elx.complete : elx.readyState >= 2;
+              if (!ok) return;
+              ctx.globalAlpha = Math.max(0, Math.min(1, al));
+              try { ctx.drawImage(elx, 0, 0, w, h); } catch (_) {}
+            };
+            if (seg.kind === 'negro') {
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, w, h);
+              if (t < 0.5) dib(seg.elA, 1 - t * 2);
+              else dib(seg.elB, (t - 0.5) * 2);
+            } else if (seg.kind === 'flash') {
+              dib(t < 0.5 ? seg.elA : seg.elB, 1);
+              ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, w, h);
+            } else {
+              ctx.globalAlpha = 1;
+              dib(seg.elA, 1 - t);
+              dib(seg.elB, t);
+            }
+            ctx.globalAlpha = 1;
+            if (segElapsed >= durK) {
+              const vistos = new Set();
+              for (const elx of [seg.elA, seg.elB]) {
+                if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); try { elx.pause(); } catch (_) {} }
+              }
+              currentSeg++; segElapsed = 0;
+            }
+            setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
+            setTimeout(loop, 1000 / 30);
+            return;
+          }
           if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
             try { seg.el.currentTime = Math.max(0, Math.min(seg.desde, (seg.el.duration || seg.desde + 1) - 0.05)); } catch (_) {}
             seg.el.play().catch(() => {});
@@ -3801,7 +3879,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             )}
             <button
               onClick={async () => {
-                const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null)));
+                const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
                 if (!marcadas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
                 await descargarLineas(marcadas);
               }}
