@@ -3335,12 +3335,14 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={() => {
                   if (lineaArrastre === null || lineaArrastre === i) { setLineaArrastre(null); return; }
+                  const idMovida = filasMontaje[lineaArrastre] ? filasMontaje[lineaArrastre].id : null;
                   setFilasMontaje(prev => {
                     const copy = [...prev];
                     const [moved] = copy.splice(lineaArrastre, 1);
                     copy.splice(i, 0, moved);
                     return copy;
                   });
+                  if (idMovida != null) setLineasSelMontaje(prev => { const c = { ...prev }; delete c[idMovida]; return c; });
                   setLineaArrastre(null);
                 }}
                 onDragEnd={() => setLineaArrastre(null)}
