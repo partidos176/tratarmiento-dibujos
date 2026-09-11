@@ -2850,7 +2850,6 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                   <tr>
                     <td colSpan={2} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'left', color: '#64748b', fontSize: '0.85rem' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.7rem' }}>
-                        <span>Sin vídeos. Genera animaciones en Edición o carga uno:</span>
                         {selectorCargar()}
                       </div>
                     </td>
