@@ -1001,8 +1001,13 @@ const bdVideoTargetRef = useRef(null);
 
   const capsEditadasDeLinea = (fila) => (capturas || []).filter(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
 
-  const selectorCargar = () => (
-    <select
+  const cargarVideoEnCortes = (url, nombre) => {
+    if (!url) return;
+    setVideoUrlCortes(url);
+    setArchivoCortes({ name: nombre || 'video' });
+  };
+
+  const selectorCargar = () => (   <select
       value=""
       title="Cargar vídeo o archivo"
       onChange={(e) => {
@@ -1011,9 +1016,7 @@ const bdVideoTargetRef = useRef(null);
         if (!val) return;
         if (val === '__file__') { bdFileRef.current?.click(); return; }
         const vb = videosBD.find(x => x.videoUrl === val);
-        const nombreCorte = vb ? (vb.nombre || 'video') : 'video';
-        setVideoUrlCortes(val);
-        setArchivoCortes({ name: nombreCorte });
+        cargarVideoEnCortes(val, vb ? (vb.nombre || 'video') : 'video');
         deseaPlayPreviewRef.current = true;
         setFasePreview('base');
         prevTPreviewRef.current = null;
@@ -1044,8 +1047,15 @@ const bdVideoTargetRef = useRef(null);
         e.target.value = '';
         if (!val) return;
         if (val === '__file__') { bdVideoTargetRef.current = { kind, id }; bdVideoRef.current?.click(); return; }
-        if (kind === 'bd') setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
-        else setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
+        if (kind === 'bd') {
+          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
+          const vv = videosBD.find(x => x.videoUrl === val);
+          cargarVideoEnCortes(val, (vv && vv.nombre) || 'video');
+        } else {
+          setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
+          const cc = (capturas || []).find(x => x && x.videoUrl === val);
+          cargarVideoEnCortes(val, cc ? `Animación ${formatoTiempo(cc.tiempo ?? 0)}` : 'video');
+        }
       }}
       style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '110px' }}
     >
@@ -2860,6 +2870,7 @@ const bdVideoTargetRef = useRef(null);
                 } else {
                   setCapturas(prev => prev.map(c => c && c.id === tgt.id ? { ...c, videoUrl: url } : c));
                 }
+                cargarVideoEnCortes(url, f.name);
                 bdVideoTargetRef.current = null;
               }}
             />
@@ -2893,6 +2904,13 @@ const bdVideoTargetRef = useRef(null);
                             const [kind, rid] = val.split(':');
                             const nid = Number(rid);
                             setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, videoRef: { kind, id: nid } } : x));
+                            if (kind === 'bd') {
+                              const vv = videosBD.find(x => x.id === nid);
+                              if (vv) cargarVideoEnCortes(vv.videoUrl, vv.nombre || 'video');
+                            } else {
+                              const cc = (capturas || []).find(x => x && x.id === nid);
+                              if (cc) cargarVideoEnCortes(cc.videoUrl, `Animación ${formatoTiempo(cc.tiempo ?? 0)}`);
+                            }
                           }}
                           style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '150px' }}
                         >
