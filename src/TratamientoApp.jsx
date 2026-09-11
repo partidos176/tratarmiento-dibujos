@@ -2848,8 +2848,8 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
               <tbody>
                 {videosBD.length === 0 && (capturas || []).filter(c => c && c.videoUrl).length === 0 ? (
                   <tr>
-                    <td colSpan={2} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.7rem' }}>
+                    <td colSpan={2} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'left', color: '#64748b', fontSize: '0.85rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.7rem' }}>
                         <span>Sin vídeos. Genera animaciones en Edición o carga uno:</span>
                         {selectorCargar()}
                       </div>
