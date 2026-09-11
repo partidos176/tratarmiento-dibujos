@@ -2898,7 +2898,7 @@ const bdVideoTargetRef = useRef(null);
                           const nombre = ref.kind === 'bd'
                             ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || '')
                             : formatoTiempo((((capturas || []).find(x => x && x.id === ref.id) || {}).tiempo ?? 0));
-                          return nombre ? <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', marginLeft: '0.5rem' }}>{nombre}</span> : null;
+                          return nombre ? <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', marginLeft: '1.5rem' }}>{nombre}</span> : null;
                         })()}
                       </div>
                     </td>
