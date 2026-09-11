@@ -519,6 +519,7 @@ const bdVideoTargetRef = useRef(null);
 
   const previewRestauradaRef = useRef(false);
   const capsListasRef = useRef(false);
+  const bdCargadoRef = useRef(false);
   useEffect(() => {
     if (previewMontaje && !(previewMontaje.anims && previewMontaje.anims.length)) { try { localStorage.removeItem('preview_anim'); } catch (_) {} }
   }, [previewMontaje]);
@@ -1586,9 +1587,10 @@ const bdVideoTargetRef = useRef(null);
   };
 
   useEffect(() => {
-        cargarVideosBD().then(v => {
+    cargarVideosBD().then(v => {
           const vivos = (v || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin));
           if (vivos.length > 0) setVideosBD(vivos);
+          bdCargadoRef.current = true;
         });
         setVideosBD(prev => (prev || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin)));
   }, []);
@@ -1599,7 +1601,7 @@ const bdVideoTargetRef = useRef(null);
   }, [videosBD]);
 
   useEffect(() => {
-    if (videosBD.length === 0) {
+    if (bdCargadoRef.current && videosBD.length === 0) {
       setFilasMontaje([]);
       setCapturas([]);
       setCortes([]);
@@ -1638,6 +1640,31 @@ const bdVideoTargetRef = useRef(null);
           if (ix >= 0) { const copy = [...prev]; copy[ix] = reg; return copy; }
           return [...prev, reg];
         });
+        if (Array.isArray(data.animaciones)) {
+          for (const a of data.animaciones) {
+            if (!a || a.id == null || !a.videoDataUrl) continue;
+            const url = await dataUrlAVideoBlobUrl(a.videoDataUrl);
+            if (!url) continue;
+            const capAnim = { id: a.id, dataUrl: null, baseDataUrl: null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: [], tiempo: a.tiempo ?? 0, insertarEn: null };
+            setCapturas(prev => prev.some(c => c && c.id === capAnim.id)
+              ? prev.map(c => c && c.id === capAnim.id ? { ...c, videoUrl: url, duracionAnim: capAnim.duracionAnim } : c)
+              : [...prev, capAnim]);
+          }
+        }
+        if (Array.isArray(data.fotos)) {
+          for (const f of data.fotos) {
+            if (!f || f.id == null || !f.dataUrl) continue;
+            setCapturas(prev => {
+              const ix = prev.findIndex(c => c && c.id === f.id);
+              if (ix >= 0) {
+                const copy = [...prev];
+                copy[ix] = { ...copy[ix], dataUrl: f.dataUrl, tiempo: f.tiempo ?? copy[ix].tiempo };
+                return copy;
+              }
+              return [...prev, { id: f.id, dataUrl: f.dataUrl, baseDataUrl: null, videoUrl: null, duracion: 4, figuras: [], tiempo: f.tiempo ?? 0, insertarEn: null }];
+            });
+          }
+        }
         const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
         if (Array.isArray(dc.cortes) && dc.cortes.length) {
           const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
