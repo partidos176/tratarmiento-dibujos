@@ -2859,6 +2859,10 @@ const bdVideoTargetRef = useRef(null);
                 const url = URL.createObjectURL(f);
                 if (tgt.kind === 'new') {
                   setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
+                } else                 if (tgt.kind === 'arc') {
+                  const nid = Date.now() + Math.floor(Math.random() * 1000000);
+                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url }]);
+                  setArchivosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoRef: { kind: 'bd', id: nid } } : x));
                 } else if (tgt.kind === 'bd') {
                   setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
                 } else {
@@ -2893,6 +2897,7 @@ const bdVideoTargetRef = useRef(null);
                             const val = e.target.value;
                             e.target.value = '';
                             if (!val) return;
+                            if (val === '__file__') { bdVideoTargetRef.current = { kind: 'arc', id: a.id }; bdVideoRef.current?.click(); return; }
                             const [kind, rid] = val.split(':');
                             const nid = Number(rid);
                             setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, videoRef: { kind, id: nid } } : x));
