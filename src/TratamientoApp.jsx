@@ -2920,7 +2920,7 @@ const bdVideoTargetRef = useRef(null);
                           </div>
                         </td>
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'bd_' + v.id ? null : 'bd_' + v.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'bd_' + v.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.3rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start', marginBottom: '0.3rem' }}>
                             <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{v.nombre}</div>
                             <button onClick={() => { bdVideoTargetRef.current = { kind: 'bd', id: v.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('bd', v.id)}
@@ -2935,7 +2935,7 @@ const bdVideoTargetRef = useRef(null);
                             {selectorCargar()}
                         </td>
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'cap_' + c.id ? null : 'cap_' + c.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'cap_' + c.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginBottom: '0.3rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '0.4rem', marginBottom: '0.3rem' }}>
                             <button onClick={() => { bdVideoTargetRef.current = { kind: 'cap', id: c.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('cap', c.id)}
                           </div>
