@@ -1613,7 +1613,11 @@ const bdVideoTargetRef = useRef(null);
   };
 
   useEffect(() => {
-    cargarVideosBD().then(v => { if (v.length > 0) setVideosBD(v); });
+        cargarVideosBD().then(v => {
+          const vivos = (v || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin));
+          if (vivos.length > 0) setVideosBD(vivos);
+        });
+        setVideosBD(prev => (prev || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin)));
   }, []);
 
   useEffect(() => {
