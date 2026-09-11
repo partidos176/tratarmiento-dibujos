@@ -4164,6 +4164,17 @@ const bdVideoTargetRef = useRef(null);
               </div>
             )}
           </div>
+          {(videoUrlCortes || videoUrl) && (
+            <div style={{ width: '100%', maxWidth: '720px' }}>
+              <video
+                src={videoUrlCortes || videoUrl}
+                controls
+                playsInline
+                preload="metadata"
+                style={{ width: '100%', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+              />
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
