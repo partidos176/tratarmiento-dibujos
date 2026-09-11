@@ -4237,6 +4237,12 @@ const bdVideoTargetRef = useRef(null);
             >
               Exportar
             </button>
+            <button
+              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); }}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Limpiar
+            </button>
           </div>
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
