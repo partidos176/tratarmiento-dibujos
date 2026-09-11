@@ -159,3 +159,38 @@ export const limpiarSesion = () => {
   localStorage.removeItem('fm_sesion');
   localStorage.removeItem('cap_sesion');
 };
+
+export const guardarVideosBD = async (lista) => {
+  try {
+    const idx = [];
+    for (const v of (lista || [])) {
+      if (!v) continue;
+      if (v.videoUrl && typeof v.videoUrl === 'string' && v.videoUrl.startsWith('blob:')) {
+        const key = v.key || `bd_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+        await blobUrlToIndexedDB('videos', key, v.videoUrl);
+        idx.push({ id: v.id, nombre: v.nombre || 'video', key });
+      } else if (v.key) {
+        idx.push({ id: v.id, nombre: v.nombre || 'video', key: v.key });
+      }
+    }
+    localStorage.setItem('bd_videos', JSON.stringify(idx));
+  } catch (e) {
+    console.error('Error al guardar videos BD', e);
+  }
+};
+
+export const cargarVideosBD = async () => {
+  try {
+    const idx = JSON.parse(localStorage.getItem('bd_videos') || '[]');
+    const out = [];
+    for (const e of (idx || [])) {
+      if (!e || !e.key) continue;
+      const blob = await dbGet('videos', e.key);
+      if (blob) out.push({ id: e.id, nombre: e.nombre || 'video', key: e.key, videoUrl: URL.createObjectURL(blob) });
+    }
+    return out;
+  } catch (e) {
+    console.error('Error al cargar videos BD', e);
+    return [];
+  }
+};

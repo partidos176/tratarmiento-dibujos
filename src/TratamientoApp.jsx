@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { guardarSesion, cargarSesion } from './persistencia';
+import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './persistencia';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -78,6 +78,7 @@ function TratamientoApp({ videoInicial }) {
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
+  const [videosBD, setVideosBD] = useState([]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
 const previewVideoRef = useRef(null);
 const deseaPlayPreviewRef = useRef(false);
@@ -1531,6 +1532,39 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     if (cerrar) setShowTransiciones(false);
   };
 
+  useEffect(() => {
+    cargarVideosBD().then(v => { if (v.length > 0) setVideosBD(v); });
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => guardarVideosBD(videosBD), 1500);
+    return () => clearTimeout(timer);
+  }, [videosBD]);
+
+  const importarMontaje = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const filas = Array.isArray(data) ? data : data.filas;
+        if (!Array.isArray(filas)) { setAviso('Archivo no válido'); return; }
+        const restauradas = await Promise.all(filas.map(async (f) => {
+          const copia = { ...f };
+          if (f.videoDataUrl) { copia.videoUrl = await dataUrlAVideoBlobUrl(f.videoDataUrl); delete copia.videoDataUrl; }
+          if (f.imagenDataUrl) { copia.imagenUrl = f.imagenDataUrl; delete copia.imagenDataUrl; }
+          return copia;
+        }));
+        setFilasMontaje(prev => [...prev, ...restauradas]);
+        setAviso(`Montaje importado: ${restauradas.length} filas`);
+      } catch (e) {
+        console.error('Error al importar montaje', e);
+        setAviso('No se pudo importar: ' + ((e && e.message) || e));
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const exportarMontaje = async () => {
     try {
       const incrustar = async (url) => {
@@ -2744,44 +2778,100 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
           <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '1.2rem', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Base de datos</span>
-          <div style={{ width: '100%', maxWidth: '700px' }}>
+          <div>
+            <label style={{ display: 'inline-block', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>
+              + Añadir vídeo del PC
+              <input
+                type="file"
+                accept="video/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (!files.length) return;
+                  const nuevos = files.map(f => ({ id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: URL.createObjectURL(f) }));
+                  setVideosBD(prev => [...prev, ...nuevos]);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          <div style={{ width: '100%', maxWidth: '800px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
                 <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
-                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '140px' }}>Cargar</th>
+                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '180px' }}>Cargar</th>
                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Video</th>
                 </tr>
               </thead>
               <tbody>
-                {(capturas || []).filter(c => c && c.videoUrl).length === 0 ? (
+                {videosBD.length === 0 && (capturas || []).filter(c => c && c.videoUrl).length === 0 ? (
                   <tr>
                     <td colSpan={2} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                      Sin vídeos. Genera animaciones en Edición.
+                      Sin vídeos. Añade vídeos del PC o genera animaciones en Edición.
                     </td>
                   </tr>
-                ) : (capturas || []).filter(c => c && c.videoUrl).map(c => (
-                  <tr key={c.id}>
-                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      <button
-                        onClick={() => {
-                          deseaPlayPreviewRef.current = true;
-                          setFasePreview('base');
-                          prevTPreviewRef.current = null;
-                          limpiarTimerAnim();
-                          animMostradasRef.current.clear(); animActualRef.current = null;
-                          setPreviewMontaje({ src: c.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: '', anims: [] });
-                          setHoja('Montaje');
-                        }}
-                        style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}
-                      >
-                        Cargar
-                      </button>
-                    </td>
-                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
-                    </td>
-                  </tr>
-                ))}
+                ) : (
+                  <>
+                    {videosBD.map(v => (
+                      <tr key={'bd_' + v.id}>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
+                            <button
+                              onClick={() => {
+                                deseaPlayPreviewRef.current = true;
+                                setFasePreview('base');
+                                prevTPreviewRef.current = null;
+                                limpiarTimerAnim();
+                                animMostradasRef.current.clear(); animActualRef.current = null;
+                                setPreviewMontaje({ src: v.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: v.nombre || '', anims: [] });
+                                setHoja('Montaje');
+                              }}
+                              style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}
+                            >
+                              Cargar
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (v.videoUrl && v.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(v.videoUrl); } catch (_) {} }
+                                setVideosBD(prev => prev.filter(x => x.id !== v.id));
+                              }}
+                              title="Eliminar vídeo"
+                              style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
+                            >×</button>
+                          </div>
+                        </td>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                          <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.3rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px', margin: '0 auto 0.3rem auto' }}>{v.nombre}</div>
+                          <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
+                        </td>
+                      </tr>
+                    ))}
+                    {(capturas || []).filter(c => c && c.videoUrl).map(c => (
+                      <tr key={c.id}>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                          <button
+                            onClick={() => {
+                              deseaPlayPreviewRef.current = true;
+                              setFasePreview('base');
+                              prevTPreviewRef.current = null;
+                              limpiarTimerAnim();
+                              animMostradasRef.current.clear(); animActualRef.current = null;
+                              setPreviewMontaje({ src: c.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: '', anims: [] });
+                              setHoja('Montaje');
+                            }}
+                            style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}
+                          >
+                            Cargar
+                          </button>
+                        </td>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                          <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                )}
               </tbody>
             </table>
           </div>
@@ -3980,6 +4070,18 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             >
               Exportar
             </button>
+            <label
+              title="Importar montaje desde archivo"
+              style={{ background: '#f97316', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Importar
+              <input
+                type="file"
+                accept=".json,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
+              />
+            </label>
             {descargandoMontaje && (
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div style={{ flex: 1, height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
