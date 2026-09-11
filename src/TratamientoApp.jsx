@@ -1061,6 +1061,7 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
         const val = e.target.value;
         e.target.value = '';
         if (!val) return;
+        if (val === '__file__') { setBdVideoTarget({ kind, id }); bdVideoRef.current?.click(); return; }
         if (kind === 'bd') setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
         else setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
       }}
@@ -2899,7 +2900,8 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                           }}
                           style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '150px' }}
                         >
-                          <option value="">Vídeo…</option>
+      <option value="">Vídeo…</option>
+      <option value="__file__">📁 Del PC…</option>
                           {videosBD.length > 0 && (
                             <optgroup label="Vídeos PC">
                               {videosBD.map(x => <option key={'abd_' + x.id} value={'bd:' + x.id}>{x.nombre || 'video'}</option>)}
