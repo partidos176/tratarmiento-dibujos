@@ -1533,6 +1533,12 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
 
   const exportarMontaje = async () => {
     try {
+      const incrustar = async (url) => {
+        if (!url || typeof url !== 'string') return null;
+        if (url.startsWith('data:')) return url;
+        if (url.startsWith('blob:')) return await videoBlobADataUrl(url);
+        return null;
+      };
       const filas = await Promise.all((filasMontaje || []).map(async (f) => {
         const copia = { ...f };
         if (f.videoUrl && f.videoUrl.startsWith('blob:')) {
@@ -1545,7 +1551,15 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
         }
         return copia;
       }));
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 1, guardado: new Date().toISOString(), filas }, null, 2)], { type: 'application/json' });
+      const animaciones = await Promise.all(
+        (capturas || [])
+          .filter(c => c && c.videoUrl)
+          .map(async (c) => ({ id: c.id, tiempo: c.tiempo ?? null, duracionAnim: c.duracionAnim || 4, videoDataUrl: await incrustar(c.videoUrl) }))
+      );
+      const fotos = (capturas || [])
+        .filter(c => c && c.dataUrl)
+        .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl }));
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), filas, animaciones, fotos }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
