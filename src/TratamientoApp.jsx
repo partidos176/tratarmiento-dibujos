@@ -3600,9 +3600,8 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             )}
             <button
               onClick={async () => {
-                const selId = Object.keys(lineasSelMontaje).find(k => lineasSelMontaje[k]);
-                const linea = selId ? filasMontaje.find(f => String(f.id) === String(selId)) : null;
-                if (!linea || linea.inicio == null || linea.fin == null) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+                const linea = filasMontaje.find(f => lineasSelMontaje[f.id] && f.inicio != null && f.fin != null);
+                if (!linea) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
                 const pv = previewMontaje;
                 if (pv && pv.anims && pv.anims.length && pv.inicio === linea.inicio && pv.fin === linea.fin) {
                   const ok = await descargarClipConAnimacion();
