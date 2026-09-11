@@ -1602,7 +1602,6 @@ const bdVideoTargetRef = useRef(null);
   useEffect(() => {
     if (bdCargadoRef.current && videosBD.length === 0) {
       setFilasMontaje([]);
-      setCapturas([]);
       setCortes([]);
       setDuracionCortes({});
       setNombreCortes({});
