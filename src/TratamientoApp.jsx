@@ -2800,25 +2800,6 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
             <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Cortes ({cortes.length})
             </span>
-            <button
-              onClick={exportarCortes}
-              title="Guardar cortes en archivo"
-              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-            >
-              Exportar
-            </button>
-            <label
-              title="Recuperar cortes desde archivo"
-              style={{ background: '#f97316', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-            >
-              Importar
-              <input
-                type="file"
-                accept=".json,application/json"
-                style={{ display: 'none' }}
-                onChange={(e) => { importarCortes(e.target.files && e.target.files[0]); e.target.value = ''; }}
-              />
-            </label>
           </div>
           {cortes.length === 0 ? (
             <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
