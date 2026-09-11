@@ -3856,8 +3856,8 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
                 setLineaArrastre(null);
               }}
               title="Soltar aquí para poner al final"
-              style={{ marginTop: '0.6rem', minHeight: '44px', border: '1px dashed #38bdf8', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}
-            >Soltar al final</div>
+              style={{ marginTop: '0.6rem', minHeight: '44px', border: '1px dashed #38bdf8', borderRadius: '8px' }}
+            ></div>
           )}
           </div>
           {previewMontaje && (
