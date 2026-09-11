@@ -1255,6 +1255,7 @@ const bdVideoTargetRef = useRef(null);
             }
             if (seg.kind) {
               const t = Math.min((Date.now() - segT0Wall) / 1000 / segDur, 1);
+              ctx.clearRect(0, 0, w, h);
               const dib = (elx, al) => {
                 if (!elx) return;
                 const ok = elx.tagName === 'IMG' ? elx.complete : elx.readyState >= 2;
