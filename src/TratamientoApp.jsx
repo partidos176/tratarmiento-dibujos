@@ -3612,9 +3612,23 @@ const [lineaArrastre, setLineaArrastre] = useState(null);
                   return (
                     <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
                       {listaEd.map((capEd) => (
-                        <img key={capEd.id} src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
-                          onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
-                          style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
+                        <div key={capEd.id} style={{ position: 'relative', flexShrink: 0 }}>
+                          <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición"
+                            onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                            style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', display: 'block' }} />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCapturas(prev => {
+                                const t = prev.find(c => c.id === capEd.id);
+                                if (t && t.videoUrl) return prev.map(c => c.id === capEd.id ? { ...c, dataUrl: null, baseDataUrl: null, imagenEditada: null } : c);
+                                return prev.filter(c => c.id !== capEd.id);
+                              });
+                            }}
+                            title="Borrar foto"
+                            style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', background: '#dc2626', border: 'none', borderRadius: '5px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', lineHeight: '18px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
+                          >×</button>
+                        </div>
                       ))}
                     </div>
                   );
