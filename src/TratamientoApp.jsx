@@ -2899,17 +2899,7 @@ const bdVideoTargetRef = useRef(null);
                               ? ((videosBD.find(x => x.id === ref.id) || {}).videoUrl || null)
                               : (((capturas || []).find(x => x && x.id === ref.id) || {}).videoUrl || null))
                             : null;
-                          const texto = a.ruta || (ref && ref.kind === 'bd' ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || url) : url);
-                          return (<>
-                            {texto ? <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{texto}</div> : null}
-                            <input
-                              value={a.ruta || ''}
-                              onChange={(e) => { setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, ruta: e.target.value } : x)); }}
-                              placeholder="Escribe la ruta…"
-                              title="Ruta donde está guardado el vídeo"
-                              style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'var(--font-mono, monospace)', outline: 'none', width: '100%', maxWidth: '300px' }}
-                            />
-                          </>);
+                          return url ? <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{ref.kind === 'bd' ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || url) : url}</div> : null;
                         })()}
                       </div>
                     </td>
