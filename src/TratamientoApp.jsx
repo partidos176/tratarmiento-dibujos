@@ -2863,7 +2863,7 @@ const bdVideoTargetRef = useRef(null);
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                         <span style={{ fontSize: '1.1rem' }}>📁</span>
-                        <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>{a.nombre}</span>
+                        <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', marginLeft: '0.5rem' }}>{a.nombre}</span>
                         <button onClick={() => setArchivosBD(prev => prev.filter(x => x.id !== a.id))} title="Quitar registro" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
                       </div>
                     </td>
