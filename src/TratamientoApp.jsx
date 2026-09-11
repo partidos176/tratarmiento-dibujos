@@ -79,6 +79,7 @@ function TratamientoApp({ videoInicial }) {
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
   const [videosBD, setVideosBD] = useState([]);
+  const [selVideoBD, setSelVideoBD] = useState(null);
   const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
   useEffect(() => { try { localStorage.setItem('bd_archivos', JSON.stringify(archivosBD)); } catch (_) {} }, [archivosBD]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
@@ -2878,12 +2879,12 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                             >×</button>
                           </div>
                         </td>
-                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                        <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'bd_' + v.id ? null : 'bd_' + v.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'bd_' + v.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.3rem' }}>
                             <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>{v.nombre}</div>
                             <button onClick={() => { setBdVideoTarget({ kind: 'bd', id: v.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                           </div>
-                          <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
+                          <video src={v.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'bd_' + v.id ? '2px solid #facc15' : 'none' }} />
                         </td>
                       </tr>
                     ))}
@@ -2892,11 +2893,11 @@ const [bdVideoTarget, setBdVideoTarget] = useState(null);
                         <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
                             {selectorCargar()}
                         </td>
-                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                        <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'cap_' + c.id ? null : 'cap_' + c.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'cap_' + c.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.3rem' }}>
                             <button onClick={() => { setBdVideoTarget({ kind: 'cap', id: c.id }); bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                           </div>
-                          <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000' }} />
+                          <video src={c.videoUrl} muted controls playsInline preload="metadata" style={{ width: '250px', borderRadius: '6px', background: '#000000', border: selVideoBD === 'cap_' + c.id ? '2px solid #facc15' : 'none' }} />
                         </td>
                       </tr>
                     ))}
