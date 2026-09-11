@@ -1275,6 +1275,7 @@ const bdVideoTargetRef = useRef(null);
               } else if (!esImagen) {
                 ponerEnMarcha(seg.el, seg.desde);
               }
+              segElapsed = 1 / 30;
             } else {
               segElapsed += 1 / 30;
             }
