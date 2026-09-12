@@ -1184,8 +1184,8 @@ const bdVideoTargetRef = useRef(null);
       totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
       const segsOk = segs.filter(s => s.hasta > s.desde);
       if (!segsOk.length) { setAviso('Nada que descargar'); return; }
-      const videoName = (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
-      const nombreArchivo = `${videoName}.webm`;
+      const videoName = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
+      const nombreArchivo = `resumen_${videoName}.webm`;
       await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
