@@ -1657,7 +1657,7 @@ const bdVideoTargetRef = useRef(null);
             const url = await dataUrlAVideoBlobUrl(a.videoDataUrl);
             if (!url) continue;
             videoDataUrlCacheRef.current.set(url, a.videoDataUrl);
-            capturasImportadas.push({ id: a.id, dataUrl: null, baseDataUrl: null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: [], tiempo: a.tiempo ?? 0, insertarEn: null });
+            capturasImportadas.push({ id: a.id, dataUrl: null, baseDataUrl: a.baseDataUrl || null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: normalizarFiguras(a.figuras), tiempo: a.tiempo ?? 0, insertarEn: null });
           }
         }
         if (Array.isArray(data.fotos)) {
@@ -1665,9 +1665,10 @@ const bdVideoTargetRef = useRef(null);
             if (!f || f.id == null || !f.dataUrl) continue;
             const ix = capturasImportadas.findIndex(c => c && c.id === f.id);
             if (ix >= 0) {
-              capturasImportadas[ix] = { ...capturasImportadas[ix], dataUrl: f.dataUrl, tiempo: f.tiempo ?? capturasImportadas[ix].tiempo };
+              const ex = capturasImportadas[ix];
+              capturasImportadas[ix] = { ...ex, dataUrl: f.dataUrl, tiempo: f.tiempo ?? ex.tiempo, figuras: (ex.figuras && ex.figuras.length > 0) ? ex.figuras : normalizarFiguras(f.figuras), baseDataUrl: ex.baseDataUrl || f.baseDataUrl || null };
             } else {
-              capturasImportadas.push({ id: f.id, dataUrl: f.dataUrl, baseDataUrl: null, videoUrl: null, duracion: 4, figuras: [], tiempo: f.tiempo ?? 0, insertarEn: null });
+              capturasImportadas.push({ id: f.id, dataUrl: f.dataUrl, baseDataUrl: f.baseDataUrl || null, videoUrl: null, duracion: 4, duracionAnim: f.duracionAnim || 4, figuras: normalizarFiguras(f.figuras), tiempo: f.tiempo ?? 0, insertarEn: null });
             }
           }
         }
@@ -1677,7 +1678,7 @@ const bdVideoTargetRef = useRef(null);
             for (const c of capturasImportadas) {
               if (map.has(c.id)) {
                 const existing = map.get(c.id);
-                map.set(c.id, { ...existing, ...c, videoUrl: c.videoUrl || existing.videoUrl, dataUrl: c.dataUrl || existing.dataUrl });
+                map.set(c.id, { ...existing, ...c, videoUrl: c.videoUrl || existing.videoUrl, dataUrl: c.dataUrl || existing.dataUrl, figuras: (c.figuras && c.figuras.length > 0) ? c.figuras : (existing.figuras || []), baseDataUrl: c.baseDataUrl || existing.baseDataUrl || null });
               } else {
                 map.set(c.id, c);
               }
@@ -1731,11 +1732,11 @@ const bdVideoTargetRef = useRef(null);
       const animaciones = await Promise.all(
         (capturas || [])
           .filter(c => c && c.videoUrl)
-          .map(async (c) => ({ id: c.id, tiempo: c.tiempo ?? null, duracionAnim: c.duracionAnim || 4, videoDataUrl: await incrustar(c.videoUrl) }))
+          .map(async (c) => ({ id: c.id, tiempo: c.tiempo ?? null, duracionAnim: c.duracionAnim || 4, videoDataUrl: await incrustar(c.videoUrl), figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }))
       );
       const fotos = (capturas || [])
         .filter(c => c && c.dataUrl)
-        .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl }));
+        .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl, duracionAnim: c.duracionAnim || 4, figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }));
       const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), filas, animaciones, fotos }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -2876,7 +2877,7 @@ const bdVideoTargetRef = useRef(null);
                                 setFiguras(normalizarFiguras(c.figuras));
                                 setFiguraSeleccionada(null);
                                 setCapturaSeleccionada(c);
-                                setCapturaGuardada(null);
+                                setCapturaGuardada((c.videoUrl || c.dataUrl) ? { id: c.id, dataUrl: c.dataUrl, videoUrl: c.videoUrl || null, duracion: c.duracion || 4, figuras: normalizarFiguras(c.figuras), tiempo: c.tiempo } : null);
                                 setImgDim(null);
                                 setHoja('Edición');
                               }}
@@ -4302,7 +4303,7 @@ const bdVideoTargetRef = useRef(null);
                         <div key={capEd.id} style={{ position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                           <div style={{ position: 'relative' }}>
                           <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición" draggable={false}
-                            onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                            onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada((capEd.videoUrl || capEd.dataUrl) ? { id: capEd.id, dataUrl: capEd.dataUrl, videoUrl: capEd.videoUrl || null, duracion: capEd.duracion || 4, figuras: normalizarFiguras(capEd.figuras), tiempo: capEd.tiempo } : null); setImgDim(null); setHoja('Edición'); }}
                             style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', display: 'block' }} />
                           <button
                             onClick={(e) => {
