@@ -1221,6 +1221,7 @@ const bdVideoTargetRef = useRef(null);
         let enTick = false;
         let segT0Wall = 0;
         let completado = 0;
+        let segVideoLista = true;
         const ponerEnMarcha = (elx, t0) => {
           if (!elx || elx.tagName === 'IMG') return;
           try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
@@ -1256,8 +1257,10 @@ const bdVideoTargetRef = useRef(null);
               if (seg.kind) {
                 ponerEnMarcha(seg.elA, seg.aDesde);
                 ponerEnMarcha(seg.elB, seg.bDesde);
-              } else if (!esImagen) {
-                ponerEnMarcha(seg.el, seg.desde);
+                segVideoLista = true;
+              } else {
+                if (!esImagen) ponerEnMarcha(seg.el, seg.desde);
+                segVideoLista = esImagen || !!seg.esAnim;
               }
               segElapsed = 1 / 30;
             } else {
@@ -1299,7 +1302,16 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              if (!segVideoLista && seg.el && seg.el.tagName !== 'IMG') {
+                try {
+                  const ct = seg.el.currentTime;
+                  if (Number.isFinite(ct) && Math.abs(ct - seg.desde) <= 0.35) segVideoLista = true;
+                } catch (_) { segVideoLista = true; }
+                if (!segVideoLista && (Date.now() - segT0Wall) >= 1500) segVideoLista = true;
+              }
+              if (segVideoLista) {
+                try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              }
               if (seg.nombre) {
                 try {
                   ctx.font = '800 32px Inter, sans-serif';
