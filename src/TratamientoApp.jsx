@@ -1598,15 +1598,34 @@ const bdVideoTargetRef = useRef(null);
 
   const insertarTransicion = (modelo, dur, soloHuecos, cerrar = true) => {
     const nombres = { crossfade: 'Crossfade', negro: 'Fundido a negro', flash: 'Flash blanco' };
+    const nueva = (id) => ({ id: id ?? Date.now(), tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: modelo === 'negro' ? nombres[modelo] : `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
+    if (!soloHuecos) {
+      const sel = filaSelMontaje;
+      const ix = (filasMontaje || []).findIndex(f => f && f.id === sel);
+      if (sel == null || ix < 0) { setAviso('Selecciona una línea para añadir la transición'); return; }
+      if (filasMontaje[ix].tipo !== 'transicion' && ix >= filasMontaje.length - 1) { setAviso('La transición necesita una fila debajo de la seleccionada'); return; }
+      setFilasMontaje(prev => {
+        const copy = [...prev];
+        const j = copy.findIndex(f => f && f.id === sel);
+        if (j < 0) return prev;
+        if (copy[j].tipo === 'transicion') { copy[j] = nueva(copy[j].id); return copy; }
+        if (j >= copy.length - 1) return prev;
+        if (copy[j + 1] && copy[j + 1].tipo === 'transicion') copy[j + 1] = nueva(copy[j + 1].id);
+        else copy.splice(j + 1, 0, nueva());
+        return copy;
+      });
+      if (cerrar) setShowTransiciones(false);
+      return;
+    }
     setFilasMontaje(prev => {
-      const limpias = soloHuecos ? [...prev] : prev.filter(f => f.tipo !== 'transicion');
+      const limpias = [...prev];
       if (limpias.length < 2) return prev;
       const esMedia = (x) => x && x.tipo !== 'transicion';
       const resultado = [];
       for (let i = 0; i < limpias.length; i++) {
         resultado.push(limpias[i]);
         if (i < limpias.length - 1 && esMedia(limpias[i]) && esMedia(limpias[i + 1])) {
-          resultado.push({ id: Date.now() + i, tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: modelo === 'negro' ? nombres[modelo] : `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
+          resultado.push(nueva(Date.now() + i));
         }
       }
       return resultado;
