@@ -1078,6 +1078,15 @@ const bdVideoTargetRef = useRef(null);
     requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, destino); v.play().catch(() => {}); } catch (_) {} } });
   };
 
+  const mimeDescarga = () => {
+    try {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4')) return { mime: 'video/mp4', ext: 'mp4' };
+    } catch (_) {}
+    let fb = 'video/webm';
+    try { if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) fb = 'video/webm;codecs=vp9'; } catch (_) {}
+    return { mime: fb, ext: 'webm' };
+  };
+
   const descargarLineas = async (lineas) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
@@ -1098,7 +1107,8 @@ const bdVideoTargetRef = useRef(null);
       canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const { mime, ext } = mimeDescarga();
+      if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
       rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -1193,7 +1203,7 @@ const bdVideoTargetRef = useRef(null);
       const segsOk = segs.filter(s => s.hasta > s.desde);
       if (!segsOk.length) { setAviso('Nada que descargar'); return; }
       const videoName = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
-      const nombreArchivo = `resumen_${videoName}.webm`;
+      const nombreArchivo = `resumen_${videoName}.${ext}`;
       await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
@@ -1382,7 +1392,7 @@ const bdVideoTargetRef = useRef(null);
       canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const { mime, ext } = mimeDescarga();
       rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -1418,7 +1428,7 @@ const bdVideoTargetRef = useRef(null);
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${(pv.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`;
+          a.download = `${(pv.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.${ext}`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -1504,7 +1514,7 @@ const bdVideoTargetRef = useRef(null);
       canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const { mime, ext } = mimeDescarga();
       rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -1538,7 +1548,7 @@ const bdVideoTargetRef = useRef(null);
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.webm`;
+          a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.${ext}`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
