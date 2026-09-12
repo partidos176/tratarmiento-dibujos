@@ -519,6 +519,7 @@ const bdVideoTargetRef = useRef(null);
   const previewRestauradaRef = useRef(false);
   const capsListasRef = useRef(false);
   const bdCargadoRef = useRef(false);
+  const videoDataUrlCacheRef = useRef(new Map());
   useEffect(() => {
     if (previewMontaje && !(previewMontaje.anims && previewMontaje.anims.length)) { try { localStorage.removeItem('preview_anim'); } catch (_) {} }
   }, [previewMontaje]);
@@ -576,7 +577,14 @@ const bdVideoTargetRef = useRef(null);
   useEffect(() => {
     cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
       if (fm.length > 0) setFilasMontaje(fm);
-      if (caps.length > 0) setCapturas(caps);
+      if (caps.length > 0) {
+        setCapturas(caps);
+        for (const c of caps) {
+          if (c && c.videoUrl && c.videoUrl.startsWith('blob:')) {
+            videoBlobADataUrl(c.videoUrl).then(r => { if (r) videoDataUrlCacheRef.current.set(c.videoUrl, r); }).catch(() => {});
+          }
+        }
+      }
       capsListasRef.current = true;
     });
   }, []);
@@ -1648,6 +1656,7 @@ const bdVideoTargetRef = useRef(null);
             if (!a || a.id == null || !a.videoDataUrl) continue;
             const url = await dataUrlAVideoBlobUrl(a.videoDataUrl);
             if (!url) continue;
+            videoDataUrlCacheRef.current.set(url, a.videoDataUrl);
             capturasImportadas.push({ id: a.id, dataUrl: null, baseDataUrl: null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: [], tiempo: a.tiempo ?? 0, insertarEn: null });
           }
         }
@@ -1699,7 +1708,12 @@ const bdVideoTargetRef = useRef(null);
       const incrustar = async (url) => {
         if (!url || typeof url !== 'string') return null;
         if (url.startsWith('data:')) return url;
-        if (url.startsWith('blob:')) return await videoBlobADataUrl(url);
+        if (videoDataUrlCacheRef.current.has(url)) return videoDataUrlCacheRef.current.get(url);
+        if (url.startsWith('blob:')) {
+          const r = await videoBlobADataUrl(url);
+          if (r) videoDataUrlCacheRef.current.set(url, r);
+          return r;
+        }
         return null;
       };
       const filas = await Promise.all((filasMontaje || []).map(async (f) => {
@@ -2427,6 +2441,7 @@ const bdVideoTargetRef = useRef(null);
         const gv = await generarVideo(figurasFn, fondoLimpio, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
         videoUrl = gv.url;
         duracionAnim = gv.duracion || 4;
+        try { videoDataUrlCacheRef.current.set(videoUrl, await videoBlobADataUrl(videoUrl)); } catch (_) {}
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
         setAviso('No se pudo generar el vídeo de la animación. Se ha guardado la imagen.');
