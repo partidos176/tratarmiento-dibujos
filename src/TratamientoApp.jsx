@@ -1120,7 +1120,11 @@ const bdVideoTargetRef = useRef(null);
         rangos.push([segs.length, segs.length]);
         if (linea.tipo === 'transicion') continue;
         const nombre = linea.concepto || '';
-        if (linea.videoUrl) {
+        if (linea.tipo === 'imagen' && linea.imagenUrl) {
+          const im = await mkImg(linea.imagenUrl);
+          segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
+          totalDur += 4;
+        } else if (linea.videoUrl) {
           const v = await mkVid(linea.videoUrl);
           let d = 5;
           try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
