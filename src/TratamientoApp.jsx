@@ -4107,47 +4107,6 @@ const bdVideoTargetRef = useRef(null);
                     </svg>
                   )}
                 </div>
-                {capturaGuardada && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
-                    <div style={{ position: 'relative', display: 'inline-block' }}>
-                      {capturaGuardada.videoUrl ? (
-                        <video
-                          src={capturaGuardada.videoUrl}
-                          muted
-                          controls
-                          playsInline
-                          onLoadedMetadata={(e) => setCapturaDuracion(e.currentTarget.duration || 0)}
-                          onClick={(e) => {
-                            const v = e.currentTarget;
-                            if (v.paused) v.play(); else v.pause();
-                          }}
-                          style={{ width: '320px', borderRadius: '8px', border: '2px solid #16a34a', background: '#000000', cursor: 'pointer' }}
-                        />
-                      ) : (
-                        <img
-                          src={capturaGuardada.dataUrl}
-                          alt="Captura guardada"
-                          style={{ width: '160px', borderRadius: '8px', border: '2px solid #16a34a' }}
-                        />
-                      )}
-                      <button
-                        onClick={() => {
-                          setCapturas(prev => prev.filter(x => x.id !== capturaGuardada.id));
-                          setCapturaGuardada(null);
-                        }}
-                        title="Borrar el video modificado"
-                        style={{ position: 'absolute', top: '4px', right: '4px', width: '24px', height: '24px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '1rem', lineHeight: '24px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    {capturaDuracion != null && (
-                      <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
-                        Duración: {formatoTiempo(capturaDuracion)}
-                      </span>
-                    )}
-                  </div>
-                )}
                 <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.8rem', color: '#94a3b8' }}>
                     Captura {formatoTiempo(capturaSeleccionada.tiempo)}
                   </span>
