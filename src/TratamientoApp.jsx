@@ -1222,6 +1222,7 @@ const bdVideoTargetRef = useRef(null);
         let segT0Wall = 0;
         let completado = 0;
         let segVideoLista = true;
+        let segSeekToken = 0;
         const ponerEnMarcha = (elx, t0) => {
           if (!elx || elx.tagName === 'IMG') return;
           try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
@@ -1258,9 +1259,19 @@ const bdVideoTargetRef = useRef(null);
                 ponerEnMarcha(seg.elA, seg.aDesde);
                 ponerEnMarcha(seg.elB, seg.bDesde);
                 segVideoLista = true;
-              } else {
+              } else if (esImagen || seg.esAnim) {
                 if (!esImagen) ponerEnMarcha(seg.el, seg.desde);
-                segVideoLista = esImagen || !!seg.esAnim;
+                segVideoLista = true;
+              } else {
+                const elx = seg.el;
+                let necesita = false;
+                try { necesita = !!elx && elx.tagName !== 'IMG' && Number.isFinite(elx.currentTime) && Math.abs(elx.currentTime - seg.desde) > 0.08; } catch (_) { necesita = false; }
+                ponerEnMarcha(seg.el, seg.desde);
+                segVideoLista = !necesita;
+                if (necesita && elx) {
+                  const tk = ++segSeekToken;
+                  try { elx.addEventListener('seeked', () => { if (tk === segSeekToken) segVideoLista = true; }, { once: true }); } catch (_) { segVideoLista = true; }
+                }
               }
               segElapsed = 1 / 30;
             } else {
@@ -1302,13 +1313,7 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              if (!segVideoLista && seg.el && seg.el.tagName !== 'IMG') {
-                try {
-                  const ct = seg.el.currentTime;
-                  if (Number.isFinite(ct) && Math.abs(ct - seg.desde) <= 0.35) segVideoLista = true;
-                } catch (_) { segVideoLista = true; }
-                if (!segVideoLista && (Date.now() - segT0Wall) >= 1500) segVideoLista = true;
-              }
+              if (!segVideoLista && (Date.now() - segT0Wall) >= 1200) segVideoLista = true;
               if (segVideoLista) {
                 try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
               }
