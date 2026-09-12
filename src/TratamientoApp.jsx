@@ -1642,30 +1642,39 @@ const bdVideoTargetRef = useRef(null);
           if (ix >= 0) { const copy = [...prev]; copy[ix] = reg; return copy; }
           return [...prev, reg];
         });
+        const capturasImportadas = [];
         if (Array.isArray(data.animaciones)) {
           for (const a of data.animaciones) {
             if (!a || a.id == null || !a.videoDataUrl) continue;
             const url = await dataUrlAVideoBlobUrl(a.videoDataUrl);
             if (!url) continue;
-            const capAnim = { id: a.id, dataUrl: null, baseDataUrl: null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: [], tiempo: a.tiempo ?? 0, insertarEn: null };
-            setCapturas(prev => prev.some(c => c && c.id === capAnim.id)
-              ? prev.map(c => c && c.id === capAnim.id ? { ...c, videoUrl: url, duracionAnim: capAnim.duracionAnim } : c)
-              : [...prev, capAnim]);
+            capturasImportadas.push({ id: a.id, dataUrl: null, baseDataUrl: null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: [], tiempo: a.tiempo ?? 0, insertarEn: null });
           }
         }
         if (Array.isArray(data.fotos)) {
           for (const f of data.fotos) {
             if (!f || f.id == null || !f.dataUrl) continue;
-            setCapturas(prev => {
-              const ix = prev.findIndex(c => c && c.id === f.id);
-              if (ix >= 0) {
-                const copy = [...prev];
-                copy[ix] = { ...copy[ix], dataUrl: f.dataUrl, tiempo: f.tiempo ?? copy[ix].tiempo };
-                return copy;
-              }
-              return [...prev, { id: f.id, dataUrl: f.dataUrl, baseDataUrl: null, videoUrl: null, duracion: 4, figuras: [], tiempo: f.tiempo ?? 0, insertarEn: null }];
-            });
+            const ix = capturasImportadas.findIndex(c => c && c.id === f.id);
+            if (ix >= 0) {
+              capturasImportadas[ix] = { ...capturasImportadas[ix], dataUrl: f.dataUrl, tiempo: f.tiempo ?? capturasImportadas[ix].tiempo };
+            } else {
+              capturasImportadas.push({ id: f.id, dataUrl: f.dataUrl, baseDataUrl: null, videoUrl: null, duracion: 4, figuras: [], tiempo: f.tiempo ?? 0, insertarEn: null });
+            }
           }
+        }
+        if (capturasImportadas.length) {
+          setCapturas(prev => {
+            const map = new Map(prev.map(c => [c.id, c]));
+            for (const c of capturasImportadas) {
+              if (map.has(c.id)) {
+                const existing = map.get(c.id);
+                map.set(c.id, { ...existing, ...c, videoUrl: c.videoUrl || existing.videoUrl, dataUrl: c.dataUrl || existing.dataUrl });
+              } else {
+                map.set(c.id, c);
+              }
+            }
+            return [...map.values()];
+          });
         }
         const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
         if (Array.isArray(dc.cortes) && dc.cortes.length) {
