@@ -2877,7 +2877,7 @@ const bdVideoTargetRef = useRef(null);
                                 setFiguras(normalizarFiguras(c.figuras));
                                 setFiguraSeleccionada(null);
                                 setCapturaSeleccionada(c);
-                                setCapturaGuardada((c.videoUrl || c.dataUrl) ? { id: c.id, dataUrl: c.dataUrl, videoUrl: c.videoUrl || null, duracion: c.duracion || 4, figuras: normalizarFiguras(c.figuras), tiempo: c.tiempo } : null);
+                                setCapturaGuardada(null);
                                 setImgDim(null);
                                 setHoja('Edición');
                               }}
@@ -4303,7 +4303,7 @@ const bdVideoTargetRef = useRef(null);
                         <div key={capEd.id} style={{ position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                           <div style={{ position: 'relative' }}>
                           <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición" draggable={false}
-                            onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada((capEd.videoUrl || capEd.dataUrl) ? { id: capEd.id, dataUrl: capEd.dataUrl, videoUrl: capEd.videoUrl || null, duracion: capEd.duracion || 4, figuras: normalizarFiguras(capEd.figuras), tiempo: capEd.tiempo } : null); setImgDim(null); setHoja('Edición'); }}
+                            onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
                             style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', display: 'block' }} />
                           <button
                             onClick={(e) => {
