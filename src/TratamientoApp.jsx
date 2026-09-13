@@ -1103,21 +1103,19 @@ const bdVideoTargetRef = useRef(null);
     const els = [];
     let totalDur = 0;
     let elapsedTotal = 0;
+    const lastProgRef = { current: -1 };
     try {
       const baseSrc = videoUrlCortes || videoUrl;
-      let vw = 1280, vh = 720;
-      try { const tmp = document.createElement('video'); tmp.src = baseSrc; await new Promise(r => { tmp.onloadedmetadata = r; tmp.onerror = r; }); vw = tmp.videoWidth || 1280; vh = tmp.videoHeight || 720; } catch (_) {}
-      const w = vw % 2 === 0 ? vw : vw + 1;
-      const h = vh % 2 === 0 ? vh : vh + 1;
+      const w = 1280;
+      const h = 720;
       canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
       const { mime, ext } = mimeDescarga();
-      const bitrate = Math.max(8000000, w * h * 30 * 0.1);
       if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bitrate });
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const mkVid = async (src) => {
@@ -1383,7 +1381,8 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             }
-            setProgresoDescarga(Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100)));
+            const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
+            if (prog !== lastProgRef.current) { lastProgRef.current = prog; setProgresoDescarga(prog); }
             setTimeout(tick, 1000 / 30);
           } finally {
             enTick = false;
@@ -1425,8 +1424,7 @@ const bdVideoTargetRef = useRef(null);
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
       const { mime, ext } = mimeDescarga();
-      const bitrate = Math.max(8000000, w * h * 30 * 0.1);
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bitrate });
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const mkVid = async (src) => {
@@ -1548,8 +1546,7 @@ const bdVideoTargetRef = useRef(null);
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
       const { mime, ext } = mimeDescarga();
-      const bitrate = Math.max(8000000, w * h * 30 * 0.1);
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bitrate });
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const segs = [];
