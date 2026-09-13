@@ -99,6 +99,7 @@ const [lineasSelMontaje, setLineasSelMontaje] = useState({});
 const [lineaArrastre, setLineaArrastre] = useState(null);
 const lineaArrastrandoRef = useRef(false);
 const [filaSelMontaje, setFilaSelMontaje] = useState(null);
+const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
@@ -1062,7 +1063,7 @@ const bdVideoTargetRef = useRef(null);
     </select>
   );
 
-  const abrirPreviewLinea = (fila, tIr) => {
+  const abrirPreviewLinea = (fila, tIr, autoPlay = true) => {
     const src = videoUrlCortes || videoUrl;
     if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
     const anims = (capturas || [])
@@ -1072,7 +1073,8 @@ const bdVideoTargetRef = useRef(null);
     prevTPreviewRef.current = null;
     limpiarTimerAnim();
     animMostradasRef.current.clear(); animActualRef.current = null;
-    deseaPlayPreviewRef.current = true;
+    deseaPlayPreviewRef.current = autoPlay;
+    retomarEnRef.current = tIr != null ? tIr : undefined;
     setFasePreview('base');
     setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '', anims });
     const destino = tIr ?? fila.inicio;
@@ -3135,89 +3137,86 @@ const bdVideoTargetRef = useRef(null);
             )}
           </div>
           {videoUrlCortes && (
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch', width: '100%', maxWidth: '1080px' }}>
-            <video
-              ref={videoRefCortes}
-              src={videoUrlCortes}
-              muted
-              controls
-              playsInline
-              preload="metadata"
-              onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
-              style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button
-                onClick={() => {
-                  const v = videoRefCortes.current;
-                  if (!v) return;
-                  const t = v.currentTime || 0;
-                  const existe = cortes.some(c => Math.abs(c - t) < 0.3);
-                  if (existe) return;
-                  setCortes(prev => [...prev, t].sort((a, b) => a - b));
-                }}
-              style={{ background: '#ef4444', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-            >
-              Corte
-            </button>
-            </div>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Cortes ({cortes.length})
-            </span>
-            {cortes.length > 0 && (
-              <button onClick={() => {
-                const nuevas = cortes.map((ct, i) => {
-                  const dur = duracionCortes[String(ct)] ?? 15;
-                  const nombre = (nombreCortes[String(ct)] || '').trim() || `P${cortes.length - i}`;
-                  const ini = Math.max(0, ct);
-                  const fin = ini + dur;
-                  const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
-                  if (existente) return null;
-                  return { id: Date.now() + i, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur };
-                }).filter(Boolean);
-                if (nuevas.length === 0) { setAviso('Todos los cortes ya están en Montaje'); return; }
-                setFilasMontaje(prev => [...prev, ...nuevas]);
-                setHoja('Montaje');
-              }} style={{ background: '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.7rem', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', cursor: 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                Montaje
-              </button>
-            )}
-          </div>
-          {cortes.length === 0 ? null : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '800px' }}>
-              {(() => {
-                const ord = [...cortes].sort((a, b) => b - a);
-                return ord.map((ct, i) => (
-                <div key={`corte-${i}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
-                  <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                    P{ord.length - i}: <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
-                  </span>
-                  <input
-                    value={nombreCortes[String(ct)] ?? ''}
-                    onChange={(e) => { const v = e.target.value; setNombreCortes(prev => ({ ...prev, [String(ct)]: v })); }}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder="Nombre"
-                    style={{ flex: 1, minWidth: '100px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = Math.max(1, dur - 1); setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = Math.max(0, ct - 1); if (nuevo === ct || cortes.includes(nuevo)) return; const nk = String(nuevo); const nd = (ct + dur) - nuevo; setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Retroceder el inicio del corte 1s (fin fijo)" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
-                    <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
-                    <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = dur + 1; setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = ct + 1; const nd = (ct + dur) - nuevo; if (nd < 1 || cortes.includes(nuevo)) return; const nk = String(nuevo); setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Avanzar el inicio del corte 1s (fin fijo)" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
-                  </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
-                      title={`Eliminar corte en ${formatoTiempo(ct)}`}
-                      style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
-                    >
-                      ×
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
+                <video
+                  ref={videoRefCortes}
+                  src={videoUrlCortes}
+                  muted
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
+                  style={{ width: '100%', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', gap: '2rem', alignItems: 'center' }}>
+                  <button
+                    onClick={() => {
+                      const v = videoRefCortes.current;
+                      if (!v) return;
+                      const t = v.currentTime || 0;
+                      const existe = cortes.some(c => Math.abs(c - t) < 0.3);
+                      if (existe) return;
+                      setCortes(prev => [...prev, t].sort((a, b) => a - b));
+                    }}
+                  style={{ background: '#ef4444', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Corte
+                  </button>
+                  {cortes.length > 0 && (
+                    <button onClick={() => {
+                      const nuevas = cortes.map((ct, i) => {
+                        const dur = duracionCortes[String(ct)] ?? 15;
+                        const nombre = (nombreCortes[String(ct)] || '').trim() || `P${cortes.length - i}`;
+                        const ini = Math.max(0, ct);
+                        const fin = ini + dur;
+                        const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
+                        if (existente) return null;
+                        return { id: Date.now() + i, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur };
+                      }).filter(Boolean);
+                      if (nuevas.length === 0) { setAviso('Todos los cortes ya están en Montaje'); return; }
+                      setFilasMontaje(prev => [...prev, ...nuevas]);
+                      setHoja('Montaje');
+                    }} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
+                      Montaje
                     </button>
+                  )}
                 </div>
-                ));
-              })()}
+              </div>
+              {cortes.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '0 0 auto', width: '380px', maxHeight: '60vh', overflowY: 'auto' }}>
+                  {(() => {
+                    const ord = [...cortes].sort((a, b) => b - a);
+                    return ord.map((ct, i) => (
+                    <div key={`corte-${i}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
+                      <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
+                      <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
+                        <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
+                      </span>
+                      <input
+                        value={nombreCortes[String(ct)] ?? ''}
+                        onChange={(e) => { const v = e.target.value; setNombreCortes(prev => ({ ...prev, [String(ct)]: v })); }}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Nombre"
+                        style={{ flex: 1, minWidth: '80px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = Math.max(1, dur - 1); setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = Math.max(0, ct - 1); if (nuevo === ct || cortes.includes(nuevo)) return; const nk = String(nuevo); const nd = (ct + dur) - nuevo; setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Retroceder el inicio del corte 1s (fin fijo)" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                        <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '32px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
+                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = dur + 1; setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = ct + 1; const nd = (ct + dur) - nuevo; if (nd < 1 || cortes.includes(nuevo)) return; const nk = String(nuevo); setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Avanzar el inicio del corte 1s (fin fijo)" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                      </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
+                          title={`Eliminar corte en ${formatoTiempo(ct)}`}
+                          style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
+                        >
+                          ×
+                        </button>
+                    </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -4376,7 +4375,23 @@ const bdVideoTargetRef = useRef(null);
                   );
                 })()}
                 {fila.inicio != null && fila.fin != null && (
-                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>P{i + 1}: <span onClick={() => abrirPreviewLinea(fila, fila.inicio)} title="Ir al inicio" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.inicio)}</span> — <span onClick={() => abrirPreviewLinea(fila, fila.fin)} title="Ir al final" style={{ cursor: 'pointer' }}>{formatoTiempo(fila.fin)}</span></span>
+                  <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
+                    <span onClick={() => { setSelPeriodoMontaje(p => ({ ...p, [fila.id]: p[fila.id] === 'ini' ? null : 'ini' })); abrirPreviewLinea(fila, fila.inicio, false); }} title="Seleccionar inicio" style={{ cursor: 'pointer', color: selPeriodoMontaje[fila.id] === 'ini' ? '#ef4444' : '#ffffff', textDecoration: selPeriodoMontaje[fila.id] === 'ini' ? 'underline' : 'none' }}>{formatoTiempo(fila.inicio)}</span>
+                    {selPeriodoMontaje[fila.id] === 'ini' && (
+                      <>
+                        <button onClick={(e) => { e.stopPropagation(); const nuevo = Math.max(0, fila.inicio - 1); setFilasMontaje(prev => prev.map(f => { if (f.id !== fila.id) return f; const dur = f.fin - f.inicio; const oldKey = String(f.inicio); const cortesIdx = cortes.indexOf(f.inicio); if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); } return { ...f, inicio: nuevo, fin: nuevo + dur }; })); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } }); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.7rem', border: 'none', borderRadius: '4px', width: '18px', height: '18px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                        <button onClick={(e) => { e.stopPropagation(); const nuevo = fila.inicio + 1; if (nuevo >= fila.fin) return; setFilasMontaje(prev => prev.map(f => { if (f.id !== fila.id) return f; const dur = f.fin - f.inicio; const oldKey = String(f.inicio); const cortesIdx = cortes.indexOf(f.inicio); if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); } return { ...f, inicio: nuevo, fin: nuevo + dur }; })); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } }); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.7rem', border: 'none', borderRadius: '4px', width: '18px', height: '18px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                      </>
+                    )}
+                    —
+                    <span onClick={() => { setSelPeriodoMontaje(p => ({ ...p, [fila.id]: p[fila.id] === 'fin' ? null : 'fin' })); abrirPreviewLinea(fila, fila.fin, false); }} title="Seleccionar fin" style={{ cursor: 'pointer', color: selPeriodoMontaje[fila.id] === 'fin' ? '#ef4444' : '#ffffff', textDecoration: selPeriodoMontaje[fila.id] === 'fin' ? 'underline' : 'none' }}>{formatoTiempo(fila.fin)}</span>
+                    {selPeriodoMontaje[fila.id] === 'fin' && (
+                      <>
+                        <button onClick={(e) => { e.stopPropagation(); const nuevo = Math.max(fila.inicio + 1, fila.fin - 1); const dur = nuevo - fila.inicio; setFilasMontaje(prev => prev.map(f => { if (f.id !== fila.id) return f; const cortesIdx = cortes.indexOf(f.inicio); if (cortesIdx !== -1) { setDuracionCortes(prev => ({ ...prev, [String(f.inicio)]: dur })); } return { ...f, fin: nuevo, duracion: dur }; })); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } }); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.7rem', border: 'none', borderRadius: '4px', width: '18px', height: '18px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                        <button onClick={(e) => { e.stopPropagation(); const nuevo = fila.fin + 1; const dur = nuevo - fila.inicio; setFilasMontaje(prev => prev.map(f => { if (f.id !== fila.id) return f; const cortesIdx = cortes.indexOf(f.inicio); if (cortesIdx !== -1) { setDuracionCortes(prev => ({ ...prev, [String(f.inicio)]: dur })); } return { ...f, fin: nuevo, duracion: dur }; })); requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } }); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.7rem', border: 'none', borderRadius: '4px', width: '18px', height: '18px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                      </>
+                    )}
+                  </span>
                 )}
                 {fila.tipo !== 'imagen' && fila.tipo !== 'transicion' && (
                 <input
@@ -4394,9 +4409,6 @@ const bdVideoTargetRef = useRef(null);
                 ) : fila.videoUrl ? (
                   <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000', flexShrink: 0 }} />
                 ) : null}
-                {fila.duracion != null && fila.modelo !== 'negro' && (
-                  <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>{fila.duracion}s</span>
-                )}
                 {fila.inicio != null && fila.fin != null && (
                   <button
                     onClick={() => {
