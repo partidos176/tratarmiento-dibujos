@@ -106,6 +106,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [progresoDescarga, setProgresoDescarga] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [showModalDescarga, setShowModalDescarga] = useState(false);
+  const [corteSelMontaje, setCorteSelMontaje] = useState('todos');
   const [todasTrans, setTodasTrans] = useState(false);
   const [modeloTransSel, setModeloTransSel] = useState(null);
   const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5 });
@@ -3170,23 +3171,33 @@ const bdVideoTargetRef = useRef(null);
                     Corte
                   </button>
                   {cortes.length > 0 && (
-                    <button onClick={() => {
-                      const ord = [...cortes].sort((a, b) => b - a);
-                      const nuevas = cortes.map((ct) => {
-                        const dur = duracionCortes[String(ct)] ?? 15;
-                        const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
-                        const ini = Math.max(0, ct);
-                        const fin = ini + dur;
-                        const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
-                        if (existente) return null;
-                        return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
-                      }).filter(Boolean);
-                      if (nuevas.length === 0) { setAviso('Todos los cortes ya están en Montaje'); return; }
-                      setFilasMontaje(prev => [...prev, ...nuevas]);
-                      setHoja('Montaje');
-                    }} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
-                      Montaje
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <select value={corteSelMontaje} onChange={(e) => setCorteSelMontaje(e.target.value)} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.6rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', outline: 'none' }}>
+                        <option value="todos">Todos</option>
+                        {[...cortes].sort((a, b) => b - a).map((ct, idx) => {
+                          const num = [...cortes].sort((a, b) => b - a).length - idx;
+                          return <option key={ct} value={ct}>P{num}</option>;
+                        })}
+                      </select>
+                      <button onClick={() => {
+                        const ord = [...cortes].sort((a, b) => b - a);
+                        const cortesAEnviar = corteSelMontaje === 'todos' ? cortes : [Number(corteSelMontaje)];
+                        const nuevas = cortesAEnviar.map((ct) => {
+                          const dur = duracionCortes[String(ct)] ?? 15;
+                          const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
+                          const ini = Math.max(0, ct);
+                          const fin = ini + dur;
+                          const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
+                          if (existente) return null;
+                          return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
+                        }).filter(Boolean);
+                        if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
+                        setFilasMontaje(prev => [...prev, ...nuevas]);
+                        setHoja('Montaje');
+                      }} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
+                        Montaje
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
