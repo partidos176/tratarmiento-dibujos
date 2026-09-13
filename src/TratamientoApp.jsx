@@ -104,6 +104,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
   const [progresoDescarga, setProgresoDescarga] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
+  const [showModalDescarga, setShowModalDescarga] = useState(false);
   const [todasTrans, setTodasTrans] = useState(false);
   const [modeloTransSel, setModeloTransSel] = useState(null);
   const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5 });
@@ -1087,7 +1088,7 @@ const bdVideoTargetRef = useRef(null);
     return { mime: fb, ext: 'webm' };
   };
 
-  const descargarLineas = async (lineas) => {
+  const descargarLineas = async (lineas, nombreCustom) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
@@ -1202,8 +1203,8 @@ const bdVideoTargetRef = useRef(null);
       totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
       const segsOk = segs.filter(s => s.hasta > s.desde);
       if (!segsOk.length) { setAviso('Nada que descargar'); return; }
-      const videoName = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
-      const nombreArchivo = `resumen_${videoName}.${ext}`;
+      const nombreBase = nombreCustom || (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
+      const nombreArchivo = `${nombreBase}.${ext}`;
       await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
@@ -2929,8 +2930,8 @@ const bdVideoTargetRef = useRef(null);
                               }}
                               style={{ width: '160px', borderRadius: '8px', border: '1px solid #334155', cursor: 'pointer' }}
                             />
-                          )}
-                          <button
+            )}
+            <button
                             onClick={() => setCapturas(prev => prev.filter(x => x.id !== c.id))}
                             title="Eliminar captura"
                             style={{ position: 'absolute', top: '4px', right: '4px', width: '22px', height: '22px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.9rem', lineHeight: '22px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
@@ -4236,11 +4237,46 @@ const bdVideoTargetRef = useRef(null);
                 </div>
               </div>
             )}
+            {showModalDescarga && (() => {
+              const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
+              return (
+                <div onClick={() => setShowModalDescarga(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+                  <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '380px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                    <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Descargar</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>{marcadas.length} {marcadas.length === 1 ? 'linea marcada' : 'lineas marcadas'}</div>
+                    <button
+                      onClick={async () => {
+                        setShowModalDescarga(false);
+                        for (let i = 0; i < marcadas.length; i++) {
+                          const nombre = (marcadas[i].concepto || '').trim() || `video_${i + 1}`;
+                          await descargarLineas([marcadas[i]], nombre);
+                        }
+                      }}
+                      disabled={descargandoMontaje}
+                      style={{ background: '#22c55e', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
+                    >
+                      Descargar cada uno por separado
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowModalDescarga(false);
+                        await descargarLineas(marcadas);
+                      }}
+                      disabled={descargandoMontaje}
+                      style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
+                    >
+                      Descargar todo junto
+                    </button>
+                    <button onClick={() => setShowModalDescarga(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              );
+            })()}
             <button
-              onClick={async () => {
+              onClick={() => {
                 const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
                 if (!marcadas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
-                await descargarLineas(marcadas);
+                setShowModalDescarga(true);
               }}
               disabled={descargandoMontaje}
               style={{ background: descargandoMontaje ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: descargandoMontaje ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
