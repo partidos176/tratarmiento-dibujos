@@ -3176,7 +3176,7 @@ const bdVideoTargetRef = useRef(null);
                         <option value="todos">Todos</option>
                         {[...cortes].sort((a, b) => b - a).map((ct, idx) => {
                           const num = [...cortes].sort((a, b) => b - a).length - idx;
-                          return <option key={ct} value={ct}>P{num}</option>;
+                          return <option key={ct} value={ct}>{num}</option>;
                         })}
                       </select>
                       <button onClick={() => {
