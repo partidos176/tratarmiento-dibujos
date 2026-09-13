@@ -578,7 +578,7 @@ const bdVideoTargetRef = useRef(null);
 
   useEffect(() => {
     cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
-      if (fm.length > 0) setFilasMontaje(fm);
+      if (fm.length > 0) setFilasMontaje(fm.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : (fm.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length) }));
       if (caps.length > 0) {
         setCapturas(caps);
         for (const c of caps) {
@@ -1687,10 +1687,16 @@ const bdVideoTargetRef = useRef(null);
         }));
         setFilasMontaje(prev => {
           const ids = new Set();
-          return restauradas.filter(f => {
+          const filtradas = restauradas.filter(f => {
             if (!f || ids.has(f.id)) return false;
             ids.add(f.id);
             return true;
+          });
+          let numCorte = 0;
+          return filtradas.map(f => {
+            if (f.tipo === 'transicion') return f;
+            numCorte++;
+            return f.numCorte != null ? f : { ...f, numCorte };
           });
         });
         setArchivosBD(prev => {
@@ -3168,12 +3174,12 @@ const bdVideoTargetRef = useRef(null);
                       const ord = [...cortes].sort((a, b) => b - a);
                       const nuevas = cortes.map((ct) => {
                         const dur = duracionCortes[String(ct)] ?? 15;
-                        const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.indexOf(ct) + 1}`;
+                        const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
                         const ini = Math.max(0, ct);
                         const fin = ini + dur;
                         const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
                         if (existente) return null;
-                        return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.indexOf(ct) + 1 };
+                        return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
                       }).filter(Boolean);
                       if (nuevas.length === 0) { setAviso('Todos los cortes ya están en Montaje'); return; }
                       setFilasMontaje(prev => [...prev, ...nuevas]);
