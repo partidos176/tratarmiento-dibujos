@@ -109,7 +109,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [corteSelMontaje, setCorteSelMontaje] = useState('todos');
   const [todasTrans, setTodasTrans] = useState(false);
   const [modeloTransSel, setModeloTransSel] = useState(null);
-  const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5 });
+  const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5, 'slide-left': 1, 'slide-right': 1, 'zoom-in': 1, wipe: 1 });
 
   const datosCortes = () => ({
     cortes: [...cortes].sort((a, b) => a - b),
@@ -1312,6 +1312,30 @@ const bdVideoTargetRef = useRef(null);
                 ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, w, h);
+              } else if (seg.kind === 'slide-left') {
+                ctx.globalAlpha = 1;
+                try { ctx.drawImage(seg.elB, w * t, 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elA, -w * (1 - t), 0, w, h); } catch (_) {}
+              } else if (seg.kind === 'slide-right') {
+                ctx.globalAlpha = 1;
+                try { ctx.drawImage(seg.elB, -w * t, 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elA, w * (1 - t), 0, w, h); } catch (_) {}
+              } else if (seg.kind === 'zoom-in') {
+                ctx.globalAlpha = 1;
+                dib(seg.elA, 1 - t);
+                const s = 0.5 + t * 0.5;
+                const ox = w * (1 - s) / 2;
+                const oy = h * (1 - s) / 2;
+                try { ctx.drawImage(seg.elB, ox, oy, w * s, h * s); } catch (_) {}
+              } else if (seg.kind === 'wipe') {
+                ctx.globalAlpha = 1;
+                try { ctx.drawImage(seg.elA, 0, 0, w, h); } catch (_) {}
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, w * t, h);
+                ctx.clip();
+                try { ctx.drawImage(seg.elB, 0, 0, w, h); } catch (_) {}
+                ctx.restore();
               } else {
                 ctx.globalAlpha = 1;
                 dib(seg.elA, 1 - t);
@@ -1611,7 +1635,7 @@ const bdVideoTargetRef = useRef(null);
   };
 
   const insertarTransicion = (modelo, dur, soloHuecos, cerrar = true) => {
-    const nombres = { crossfade: 'Crossfade', negro: 'Fundido a negro', flash: 'Flash blanco' };
+    const nombres = { crossfade: 'Crossfade', negro: 'Fundido a negro', flash: 'Flash blanco', 'slide-left': 'Deslizar izquierda', 'slide-right': 'Deslizar derecha', 'zoom-in': 'Zoom entrada', wipe: 'Barrido' };
     const nueva = (id) => ({ id: id ?? Date.now(), tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: modelo === 'negro' ? nombres[modelo] : `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
     if (!soloHuecos) {
       const sel = filaSelMontaje;
@@ -1920,6 +1944,30 @@ const bdVideoTargetRef = useRef(null);
               ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
               ctx.fillStyle = '#ffffff';
               ctx.fillRect(0, 0, w, h);
+            } else if (modelo === 'slide-left') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(nextEl, w * t, 0, w, h); } catch (_) {}
+              try { ctx.drawImage(prevEl, -w * (1 - t), 0, w, h); } catch (_) {}
+            } else if (modelo === 'slide-right') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(nextEl, -w * t, 0, w, h); } catch (_) {}
+              try { ctx.drawImage(prevEl, w * (1 - t), 0, w, h); } catch (_) {}
+            } else if (modelo === 'zoom-in') {
+              ctx.globalAlpha = 1;
+              dibujar(prevEl, 1 - t);
+              const s = 0.5 + t * 0.5;
+              const ox = w * (1 - s) / 2;
+              const oy = h * (1 - s) / 2;
+              try { ctx.drawImage(nextEl, ox, oy, w * s, h * s); } catch (_) {}
+            } else if (modelo === 'wipe') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(prevEl, 0, 0, w, h); } catch (_) {}
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(0, 0, w * t, h);
+              ctx.clip();
+              try { ctx.drawImage(nextEl, 0, 0, w, h); } catch (_) {}
+              ctx.restore();
             } else {
               ctx.globalAlpha = 1;
               dibujar(prevEl, 1 - t);
@@ -4229,6 +4277,10 @@ const bdVideoTargetRef = useRef(null);
                     { id: 'crossfade', nombre: 'Fundido cruzado' },
                     { id: 'negro', nombre: 'Fundido a negro' },
                     { id: 'flash', nombre: 'Flash blanco' },
+                    { id: 'slide-left', nombre: 'Deslizar izquierda' },
+                    { id: 'slide-right', nombre: 'Deslizar derecha' },
+                    { id: 'zoom-in', nombre: 'Zoom entrada' },
+                    { id: 'wipe', nombre: 'Barrido' },
                   ].map(m => (
                     <div key={m.id} onClick={() => { setModeloTransSel(m.id); insertarTransicion(m.id, durTrans[m.id], false, false); }} title="Aplicar esta transición" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: modeloTransSel === m.id ? 'rgba(250,204,21,0.85)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem', cursor: 'pointer' }}>
                       <span style={{ flex: 1, color: modeloTransSel === m.id ? '#0f172a' : '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif' }}>{m.nombre}</span>
