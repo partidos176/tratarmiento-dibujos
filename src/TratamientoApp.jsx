@@ -3155,7 +3155,7 @@ const bdVideoTargetRef = useRef(null);
                   onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
                   style={{ width: '100%', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
-                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-start', gap: '2rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2rem', alignItems: 'center' }}>
                   <button
                     onClick={() => {
                       const v = videoRefCortes.current;
