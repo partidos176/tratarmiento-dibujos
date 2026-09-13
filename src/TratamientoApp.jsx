@@ -4386,11 +4386,11 @@ const bdVideoTargetRef = useRef(null);
                       const esIni = selPeriodoMontaje[fila.id] === 'ini';
                       if (esIni) {
                         const nuevo = Math.max(0, fila.inicio - 1);
-                        const dur = fila.fin - fila.inicio;
+                        const dur = fila.fin - nuevo;
                         const oldKey = String(fila.inicio);
                         const cortesIdx = cortes.indexOf(fila.inicio);
                         if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
-                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, fin: nuevo + dur }));
+                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
                       } else {
                         const dur = Math.max(1, (fila.duracion ?? (fila.fin - fila.inicio)) - 1);
@@ -4406,11 +4406,11 @@ const bdVideoTargetRef = useRef(null);
                       if (esIni) {
                         const nuevo = fila.inicio + 1;
                         if (nuevo >= fila.fin) return;
-                        const dur = fila.fin - fila.inicio;
+                        const dur = fila.fin - nuevo;
                         const oldKey = String(fila.inicio);
                         const cortesIdx = cortes.indexOf(fila.inicio);
                         if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
-                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, fin: nuevo + dur }));
+                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
                       } else {
                         const dur = (fila.duracion ?? (fila.fin - fila.inicio)) + 1;
