@@ -3165,14 +3165,15 @@ const bdVideoTargetRef = useRef(null);
                   </button>
                   {cortes.length > 0 && (
                     <button onClick={() => {
-                      const nuevas = cortes.map((ct, i) => {
+                      const ord = [...cortes].sort((a, b) => b - a);
+                      const nuevas = cortes.map((ct) => {
                         const dur = duracionCortes[String(ct)] ?? 15;
-                        const nombre = (nombreCortes[String(ct)] || '').trim() || `P${cortes.length - i}`;
+                        const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.indexOf(ct) + 1}`;
                         const ini = Math.max(0, ct);
                         const fin = ini + dur;
                         const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
                         if (existente) return null;
-                        return { id: Date.now() + i, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur };
+                        return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.indexOf(ct) + 1 };
                       }).filter(Boolean);
                       if (nuevas.length === 0) { setAviso('Todos los cortes ya están en Montaje'); return; }
                       setFilasMontaje(prev => [...prev, ...nuevas]);
@@ -4335,7 +4336,7 @@ const bdVideoTargetRef = useRef(null);
                 onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
                 title="Arrastra para mover la fila (clic para seleccionar)"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: (fila.tipo === 'imagen' || fila.tipo === 'transicion') ? 'auto' : 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
-                {fila.tipo !== 'transicion' && <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
+                {fila.tipo !== 'transicion' && <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
                 <div
                   data-sq="1"
                   onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
