@@ -4609,6 +4609,23 @@ const bdVideoTargetRef = useRef(null);
               Exportar
             </button>
             <button
+              onClick={async () => {
+                setAviso('Iniciando servidor de recorte...');
+                try {
+                  const r = await fetch('/iniciar-servidor');
+                  if (!r.ok) { setAviso('Solo disponible en localhost'); return; }
+                  const d = await r.json().catch(() => ({}));
+                  if (d && d.ok) setAviso(d.ya ? 'Servidor ya en marcha (puerto 3001)' : 'Servidor iniciado (puerto 3001)');
+                  else setAviso('No se pudo iniciar el servidor' + (d && d.error ? ': ' + d.error : ''));
+                } catch (e) {
+                  setAviso('Solo disponible en localhost');
+                }
+              }}
+              style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Iniciar servidor
+            </button>
+            <button
               onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
               style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >

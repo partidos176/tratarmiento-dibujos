@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { exec } from 'node:child_process';
 
@@ -43,6 +44,32 @@ export default defineConfig({
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ ok: true }));
           });
+        });
+        server.middlewares.use('/iniciar-servidor', (req, res) => {
+          const responder = (obj) => {
+            try {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(obj));
+            } catch (_) {}
+          };
+          const puertoAbierto = () => new Promise((ok) => {
+            try {
+              const q = http.get({ host: 'localhost', port: 3001, path: '/api/cortar', timeout: 2500 }, (r) => {
+                r.resume();
+                r.on('end', () => ok(true));
+              });
+              q.on('timeout', () => { try { q.destroy(); } catch (_) {} ok(false); });
+              q.on('error', () => ok(false));
+            } catch (_) { ok(false); }
+          });
+          (async () => {
+            if (await puertoAbierto()) { responder({ ok: true, ya: true }); return; }
+            exec('"C:\\Users\\uSer\\Documents\\Default Project\\futbol\\iniciar-servidor.bat"', () => {});
+            await new Promise((r) => setTimeout(r, 5000));
+            if (await puertoAbierto()) responder({ ok: true, ya: false });
+            else responder({ ok: false, error: 'El servidor no responde en el puerto 3001' });
+          })();
         });
       }
     }
