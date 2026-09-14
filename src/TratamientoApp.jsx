@@ -1987,18 +1987,22 @@ const bdVideoTargetRef = useRef(null);
           rec.onstop = async () => {
             const blob = new Blob(chunks, { type: mime });
             let finalBlob = blob;
+            let trimmed = false;
             try {
+              setProgresoDescarga(100);
               const fd = new FormData();
               fd.append('video', blob, 'montaje.webm');
               fd.append('trimStart', '0.2');
               const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
               if (resp.ok) {
                 finalBlob = await resp.blob();
+                trimmed = true;
               }
             } catch (_) {}
             const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             a.href = url; a.download = 'montaje.webm'; a.click();
+            setAviso(trimmed ? 'Montaje descargado (negro inicial recortado)' : 'Montaje descargado SIN recorte: enciende server.js (puerto 3001)');
             setTimeout(() => URL.revokeObjectURL(url), 5000);
             resolve(url);
           };
