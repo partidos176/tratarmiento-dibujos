@@ -1177,6 +1177,7 @@ const bdVideoTargetRef = useRef(null);
         rangos[rangos.length - 1][1] = segs.length;
       }
       const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
+      const clonesListos = [];
       for (let tk = validas.length - 1; tk >= 0; tk--) {
         const tl = validas[tk];
         if (!tl || tl.tipo !== 'transicion') continue;
@@ -1193,6 +1194,7 @@ const bdVideoTargetRef = useRef(null);
         if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
         if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
         let elB = B.el;
+        const bDesdeVal = esVideoSeg(B) ? B.desde : 0;
         if (esVideoSeg(B) && B.src) {
           try {
             const clon = document.createElement('video');
@@ -1201,6 +1203,24 @@ const bdVideoTargetRef = useRef(null);
             document.body.appendChild(clon);
             els.push(clon);
             elB = clon;
+            // Pre-cargar metadata y pre-posicionar el clon. Sin esto, el seek al
+            // iniciar la transición falla en silencio (sin metadata) y el clon
+            // reproduce desde 0: frames del inicio del vídeo entre cortes.
+            clonesListos.push(new Promise((res) => {
+              let done = false;
+              const fin = () => {
+                if (done) return; done = true;
+                try { clon.currentTime = Math.max(0, bDesdeVal); } catch (_) {}
+                try { clon.pause(); } catch (_) {}
+                res();
+              };
+              try {
+                if (clon.readyState >= 1) { fin(); return; }
+                clon.onloadedmetadata = fin;
+                clon.onerror = fin;
+              } catch (_) { fin(); return; }
+              setTimeout(fin, 2500);
+            }));
           } catch (_) {}
         }
         segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? A.hasta : 0, elB, bDesde: esVideoSeg(B) ? B.desde : 0, desde: 0, hasta: d, nombre: '' });
@@ -1210,6 +1230,7 @@ const bdVideoTargetRef = useRef(null);
       if (!segsOk.length) { setAviso('Nada que descargar'); return; }
       const nombreBase = nombreCustom || (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
       const nombreArchivo = `${nombreBase}.${ext}`;
+      await Promise.all(clonesListos);
       await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
