@@ -4642,7 +4642,7 @@ const bdVideoTargetRef = useRef(null);
               style={{ background: serverOn ? '#16a34a' : '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
               <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: serverOn ? '#4ade80' : '#ef4444', display: 'inline-block' }} />
-              {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
+              Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
             <button
               onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
