@@ -1984,9 +1984,19 @@ const bdVideoTargetRef = useRef(null);
           setDescargandoMontaje(false);
           setProgresoDescarga(0);
           if (error) { resolve(null); return; }
-          rec.onstop = () => {
+          rec.onstop = async () => {
             const blob = new Blob(chunks, { type: mime });
-            const url = URL.createObjectURL(blob);
+            let finalBlob = blob;
+            try {
+              const fd = new FormData();
+              fd.append('video', blob, 'montaje.webm');
+              fd.append('trimStart', '0.2');
+              const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+              if (resp.ok) {
+                finalBlob = await resp.blob();
+              }
+            } catch (_) {}
+            const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             a.href = url; a.download = 'montaje.webm'; a.click();
             setTimeout(() => URL.revokeObjectURL(url), 5000);
