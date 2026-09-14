@@ -1962,6 +1962,7 @@ const bdVideoTargetRef = useRef(null);
           }
         }
       }
+      rec.start(250);
       requestFrame();
 
       const resultado = await new Promise((resolve) => {
