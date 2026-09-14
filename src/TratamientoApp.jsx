@@ -62,6 +62,21 @@ function TratamientoApp({ videoInicial }) {
   const [arrastrandoMarcaId, setArrastrandoMarcaId] = useState(null);
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [serverOn, setServerOn] = useState(null);
+  const comprobarServidor = async () => {
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => { try { ctl.abort(); } catch (_) {} }, 3000);
+      const r = await fetch('http://localhost:3001/api/cortar', { signal: ctl.signal });
+      clearTimeout(t);
+      setServerOn(!!r.ok);
+    } catch (_) { setServerOn(false); }
+  };
+  useEffect(() => {
+    comprobarServidor();
+    const iv = setInterval(comprobarServidor, 10000);
+    return () => clearInterval(iv);
+  }, []);
   const [exportando, setExportando] = useState(false);
   const [progresoExport, setProgresoExport] = useState(0);
   const [nombreVideo, setNombreVideo] = useState('');
@@ -4610,6 +4625,7 @@ const bdVideoTargetRef = useRef(null);
             </button>
             <button
               onClick={async () => {
+                if (serverOn) { await comprobarServidor(); return; }
                 setAviso('Iniciando servidor de recorte...');
                 try {
                   const r = await fetch('/iniciar-servidor');
@@ -4620,10 +4636,13 @@ const bdVideoTargetRef = useRef(null);
                 } catch (e) {
                   setAviso('Solo disponible en localhost');
                 }
+                await comprobarServidor();
               }}
-              style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+              title={serverOn ? 'Servidor conectado (pulsar para re-comprobar)' : 'Servidor desconectado (pulsar para iniciar)'}
+              style={{ background: serverOn ? '#16a34a' : '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
-              Iniciar servidor
+              <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: serverOn ? '#4ade80' : '#ef4444', display: 'inline-block' }} />
+              {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
             <button
               onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
