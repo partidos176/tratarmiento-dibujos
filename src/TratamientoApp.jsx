@@ -1874,14 +1874,24 @@ const bdVideoTargetRef = useRef(null);
           img.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
           document.body.appendChild(img);
           await new Promise((res) => { img.onload = res; img.onerror = res; img.src = item.imagenUrl; });
+          try { if (img.decode) await img.decode(); } catch (_) {}
           mediaEls.push({ el: img, tipo: 'imagen', duracion: item.duracion || 4 });
         } else if (item.videoUrl) {
           const vid = document.createElement('video');
           vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = item.videoUrl;
           vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
           document.body.appendChild(vid);
-          await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
-          mediaEls.push({ el: vid, tipo: 'video', duracion: vid.duration || 5 });
+          await new Promise((res) => {
+            let done = false;
+            const finish = () => { if (done) return; done = true; res(); };
+            vid.onloadeddata = finish;
+            vid.oncanplay = finish;
+            vid.onerror = finish;
+            setTimeout(finish, 1500);
+          });
+          // asegurar duración válida
+          const dur = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 5;
+          mediaEls.push({ el: vid, tipo: 'video', duracion: dur });
         }
       }
 
@@ -1895,6 +1905,31 @@ const bdVideoTargetRef = useRef(null);
             segs.push({ tipo: mediaEls[mediaIdx].tipo, el: mediaEls[mediaIdx].el, duracion: mediaEls[mediaIdx].duracion });
             mediaIdx++;
           }
+        }
+      }
+      // Pre-dibujar primer frame antes de iniciar grabación para evitar fotograma negro inicial
+      if (segs.length > 0) {
+        const first = segs[0];
+        if (first.tipo !== 'transicion' && first.el) {
+          if (first.tipo === 'imagen') {
+            try { ctx.drawImage(first.el, 0, 0, w, h); } catch (_) {}
+          } else {
+            const v = first.el;
+            try { v.currentTime = 0; await v.play().catch(() => {}); } catch (_) {}
+            if (v.readyState < 2) {
+              await new Promise(res => {
+                let done = false;
+                const fin = () => { if (done) return; done = true; res(); };
+                v.onloadeddata = fin; v.oncanplay = fin; v.onerror = fin;
+                setTimeout(fin, 600);
+              });
+            }
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.drawImage(v, 0, 0, w, h); } catch (_) {}
+            await new Promise(r => setTimeout(r, 80));
+          }
+        } else if (first.tipo === 'transicion') {
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
         }
       }
 
@@ -2000,10 +2035,18 @@ const bdVideoTargetRef = useRef(null);
             const el = seg.el;
             const esImagen = seg.tipo === 'imagen';
             if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
-              el.currentTime = 0;
-              el.play().catch(() => {});
+              // evitar reset del primer segmento ya pre-reproducido (causaba seek y fotograma negro)
+              const esPrimerPreroll = currentSeg === 0 && !el.paused && el.currentTime < 0.12 && el.readyState >= 2;
+              if (!esPrimerPreroll) {
+                try { el.currentTime = 0; } catch (_) {}
+                el.play().catch(() => {});
+              }
             }
-            try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+            // solo dibujar si hay frame válido, si no mantener frame anterior para no grabar negro
+            const ok = esImagen ? el.complete : el.readyState >= 2;
+            if (ok) {
+              try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+            }
             const ended = esImagen ? segElapsed >= seg.duracion : (el.ended || segElapsed >= seg.duracion);
             if (ended) {
               if (!esImagen) try { el.pause(); } catch (_) {}
