@@ -1275,17 +1275,13 @@ const bdVideoTargetRef = useRef(null);
         rec.onstop = async () => {
           const blob = new Blob(chunks, { type: mime });
           let finalBlob = blob;
-          let trimmed = false;
           try {
             const fd = new FormData();
             fd.append('video', blob, `montaje.${ext}`);
             fd.append('trimStart', '0.2');
             fd.append('ext', ext);
             const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-            if (resp.ok) {
-              finalBlob = await resp.blob();
-              trimmed = true;
-            }
+            if (resp.ok) finalBlob = await resp.blob();
           } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
@@ -1295,7 +1291,6 @@ const bdVideoTargetRef = useRef(null);
           a.click();
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
-          setAviso(trimmed ? 'Montaje descargado (negro recortado, keyframes cada 1s)' : 'Montaje descargado SIN procesar: enciende server.js (puerto 3001)');
           resolve();
         };
         const terminar = () => {
