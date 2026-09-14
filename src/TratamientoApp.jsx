@@ -1227,6 +1227,9 @@ const bdVideoTargetRef = useRef(null);
           } catch (_) {}
         }
         segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
+        // B continúa donde termina el clon (b0+d): sin salto atrás ni repetición
+        // del head ya mostrado en la transición. Duración total -d/2 por transición.
+        if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
       }
       totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
       const segsOk = segs.filter(s => s.hasta > s.desde);
@@ -1353,13 +1356,16 @@ const bdVideoTargetRef = useRef(null);
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, w, h);
               } else if (seg.kind === 'slide-left') {
+                // A sale por la izquierda, B entra por la derecha (B encima).
+                // t=0: A puro; t=1: B puro (como el resto de modelos).
                 ctx.globalAlpha = 1;
-                try { ctx.drawImage(seg.elB, w * t, 0, w, h); } catch (_) {}
-                try { ctx.drawImage(seg.elA, -w * (1 - t), 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elA, -w * t, 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elB, w * (1 - t), 0, w, h); } catch (_) {}
               } else if (seg.kind === 'slide-right') {
+                // A sale por la derecha, B entra por la izquierda (B encima).
                 ctx.globalAlpha = 1;
-                try { ctx.drawImage(seg.elB, -w * t, 0, w, h); } catch (_) {}
-                try { ctx.drawImage(seg.elA, w * (1 - t), 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elA, w * t, 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elB, -w * (1 - t), 0, w, h); } catch (_) {}
               } else if (seg.kind === 'zoom-in') {
                 ctx.globalAlpha = 1;
                 dib(seg.elA, 1 - t);
