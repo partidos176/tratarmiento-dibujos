@@ -1875,7 +1875,7 @@ const bdVideoTargetRef = useRef(null);
           document.body.appendChild(img);
           await new Promise((res) => { img.onload = res; img.onerror = res; img.src = item.imagenUrl; });
           try { if (img.decode) await img.decode(); } catch (_) {}
-          mediaEls.push({ el: img, tipo: 'imagen', duracion: item.duracion || 4 });
+          mediaEls.push({ el: img, tipo: 'imagen', duracion: item.duracion || 4, inicio: 0, fin: null });
         } else if (item.videoUrl) {
           const vid = document.createElement('video');
           vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = item.videoUrl;
@@ -1889,9 +1889,11 @@ const bdVideoTargetRef = useRef(null);
             vid.onerror = finish;
             setTimeout(finish, 1500);
           });
-          // asegurar duración válida
-          const dur = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 5;
-          mediaEls.push({ el: vid, tipo: 'video', duracion: dur });
+          const fullDur = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 5;
+          const inicio = item.inicio != null && isFinite(Number(item.inicio)) ? Number(item.inicio) : 0;
+          const fin = item.fin != null && isFinite(Number(item.fin)) ? Number(item.fin) : fullDur;
+          const segDur = item.duracion != null && isFinite(Number(item.duracion)) ? Number(item.duracion) : (fin > inicio ? fin - inicio : fullDur);
+          mediaEls.push({ el: vid, tipo: 'video', duracion: segDur, inicio, fin });
         }
       }
 
@@ -1902,12 +1904,13 @@ const bdVideoTargetRef = useRef(null);
           segs.push({ tipo: 'transicion', modelo: items[i].modelo || 'crossfade', duracion: items[i].duracion || 2 });
         } else {
           if (mediaIdx < mediaEls.length) {
-            segs.push({ tipo: mediaEls[mediaIdx].tipo, el: mediaEls[mediaIdx].el, duracion: mediaEls[mediaIdx].duracion });
+            const me = mediaEls[mediaIdx];
+            segs.push({ tipo: me.tipo, el: me.el, duracion: me.duracion, inicio: me.inicio, fin: me.fin });
             mediaIdx++;
           }
         }
       }
-      // Pre-dibujar primer frame antes de iniciar grabación para evitar fotograma negro inicial
+      // Pre-dibujar primer frame antes de iniciar grabación para evitar fotograma negro inicial (respeta inicio/fin del corte)
       if (segs.length > 0) {
         const first = segs[0];
         if (first.tipo !== 'transicion' && first.el) {
@@ -1915,7 +1918,19 @@ const bdVideoTargetRef = useRef(null);
             try { ctx.drawImage(first.el, 0, 0, w, h); } catch (_) {}
           } else {
             const v = first.el;
-            try { v.currentTime = 0; await v.play().catch(() => {}); } catch (_) {}
+            const ini = first.inicio != null ? Number(first.inicio) : 0;
+            try {
+              if (Math.abs(v.currentTime - ini) > 0.05) {
+                await new Promise(res => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; v.removeEventListener('seeked', fin); res(); };
+                  v.addEventListener('seeked', fin, { once: true });
+                  try { v.currentTime = ini; } catch (_) { fin(); }
+                  setTimeout(fin, 600);
+                });
+              }
+              await v.play().catch(() => {});
+            } catch (_) {}
             if (v.readyState < 2) {
               await new Promise(res => {
                 let done = false;
@@ -2025,7 +2040,11 @@ const bdVideoTargetRef = useRef(null);
               prevEl = nextEl;
               if (prevEl) {
                 if (prevEl.tagName === 'IMG') { /* images don't need play */ }
-                else { prevEl.currentTime = 0; prevEl.play().catch(() => {}); }
+                else {
+                  const ini = segs[currentSeg + 1] && segs[currentSeg + 1].inicio != null ? Number(segs[currentSeg + 1].inicio) : 0;
+                  try { if (Math.abs(prevEl.currentTime - ini) > 0.05) prevEl.currentTime = ini; } catch (_) {}
+                  prevEl.play().catch(() => {});
+                }
               }
               nextEl = null;
               crossfadeElapsed = 0;
@@ -2034,11 +2053,14 @@ const bdVideoTargetRef = useRef(null);
           } else {
             const el = seg.el;
             const esImagen = seg.tipo === 'imagen';
+            const segIni = seg.inicio != null ? Number(seg.inicio) : 0;
+            const segFin = seg.fin != null ? Number(seg.fin) : null;
             if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
               // evitar reset del primer segmento ya pre-reproducido (causaba seek y fotograma negro)
-              const esPrimerPreroll = currentSeg === 0 && !el.paused && el.currentTime < 0.12 && el.readyState >= 2;
+              const cercaIni = Math.abs(el.currentTime - segIni) < 0.12;
+              const esPrimerPreroll = currentSeg === 0 && !el.paused && cercaIni && el.readyState >= 2;
               if (!esPrimerPreroll) {
-                try { el.currentTime = 0; } catch (_) {}
+                try { el.currentTime = segIni; } catch (_) {}
                 el.play().catch(() => {});
               }
             }
@@ -2047,7 +2069,8 @@ const bdVideoTargetRef = useRef(null);
             if (ok) {
               try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
             }
-            const ended = esImagen ? segElapsed >= seg.duracion : (el.ended || segElapsed >= seg.duracion);
+            const pasadoFin = segFin != null && !esImagen ? el.currentTime >= segFin - 0.05 : false;
+            const ended = esImagen ? segElapsed >= seg.duracion : (pasadoFin || segElapsed >= seg.duracion);
             if (ended) {
               if (!esImagen) try { el.pause(); } catch (_) {}
               prevEl = el;
@@ -2057,7 +2080,11 @@ const bdVideoTargetRef = useRef(null);
                 const nextIdx = currentSeg + 1;
                 if (nextIdx < segs.length && segs[nextIdx].tipo !== 'transicion') {
                   nextEl = segs[nextIdx].el;
-                  if (nextEl.tagName !== 'IMG') { nextEl.currentTime = 0; nextEl.play().catch(() => {}); }
+                  if (nextEl.tagName !== 'IMG') {
+                    const ini = segs[nextIdx].inicio != null ? Number(segs[nextIdx].inicio) : 0;
+                    try { if (Math.abs(nextEl.currentTime - ini) > 0.05) nextEl.currentTime = ini; } catch (_) {}
+                    nextEl.play().catch(() => {});
+                  }
                 }
                 crossfadeElapsed = 0;
               }
