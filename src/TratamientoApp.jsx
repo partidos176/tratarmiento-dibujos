@@ -812,7 +812,7 @@ const bdVideoTargetRef = useRef(null);
           try {
             const ffmpeg = await loadFFmpeg();
             await ffmpeg.writeFile('input_export.webm', new Uint8Array(await blob.arrayBuffer()));
-            await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-an', 'output_export.mp4']);
+            await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', 'output_export.mp4']);
             const out = await ffmpeg.readFile('output_export.mp4');
             const mp4Blob = new Blob([out], { type: 'video/mp4' });
             const enlace = document.createElement('a');
@@ -1218,18 +1218,17 @@ const bdVideoTargetRef = useRef(null);
           const blob = new Blob(chunks, { type: mime });
           let finalBlob = blob;
           let trimmed = false;
-          if (ext === 'webm') {
-            try {
-              const fd = new FormData();
-              fd.append('video', blob, 'montaje.webm');
-              fd.append('trimStart', '0.2');
-              const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-              if (resp.ok) {
-                finalBlob = await resp.blob();
-                trimmed = true;
-              }
-            } catch (_) {}
-          }
+          try {
+            const fd = new FormData();
+            fd.append('video', blob, `montaje.${ext}`);
+            fd.append('trimStart', '0.2');
+            fd.append('ext', ext);
+            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp.ok) {
+              finalBlob = await resp.blob();
+              trimmed = true;
+            }
+          } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
           a.href = url;
@@ -1238,7 +1237,7 @@ const bdVideoTargetRef = useRef(null);
           a.click();
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
-          if (ext === 'webm') setAviso(trimmed ? 'Montaje descargado (negro inicial recortado)' : 'Montaje descargado SIN recorte: enciende server.js (puerto 3001)');
+          setAviso(trimmed ? 'Montaje descargado (negro recortado, keyframes cada 1s)' : 'Montaje descargado SIN procesar: enciende server.js (puerto 3001)');
           resolve();
         };
         const terminar = () => {
