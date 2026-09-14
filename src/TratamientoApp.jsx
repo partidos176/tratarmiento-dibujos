@@ -1645,6 +1645,10 @@ const bdVideoTargetRef = useRef(null);
       const ix = (filasMontaje || []).findIndex(f => f && f.id === sel);
       if (sel == null || ix < 0) { setAviso('Selecciona una línea para añadir la transición'); return; }
       if (filasMontaje[ix].tipo !== 'transicion' && ix >= filasMontaje.length - 1) { setAviso('La transición necesita una fila debajo de la seleccionada'); return; }
+      let nuevoId = null;
+      if (filasMontaje[ix].tipo === 'transicion') nuevoId = filasMontaje[ix].id;
+      else if (filasMontaje[ix + 1] && filasMontaje[ix + 1].tipo === 'transicion') nuevoId = filasMontaje[ix + 1].id;
+      else nuevoId = Date.now();
       setFilasMontaje(prev => {
         const copy = [...prev];
         const j = copy.findIndex(f => f && f.id === sel);
@@ -1652,25 +1656,29 @@ const bdVideoTargetRef = useRef(null);
         if (copy[j].tipo === 'transicion') { copy[j] = nueva(copy[j].id); return copy; }
         if (j >= copy.length - 1) return prev;
         if (copy[j + 1] && copy[j + 1].tipo === 'transicion') copy[j + 1] = nueva(copy[j + 1].id);
-        else copy.splice(j + 1, 0, nueva());
+        else copy.splice(j + 1, 0, nueva(nuevoId));
         return copy;
       });
+      setLineasSelMontaje(prev => ({ ...prev, [nuevoId]: true }));
       if (cerrar) setShowTransiciones(false);
       return;
     }
-    setFilasMontaje(prev => {
-      const limpias = [...prev];
-      if (limpias.length < 2) return prev;
-      const esMedia = (x) => x && x.tipo !== 'transicion';
-      const resultado = [];
-      for (let i = 0; i < limpias.length; i++) {
-        resultado.push(limpias[i]);
-        if (i < limpias.length - 1 && esMedia(limpias[i]) && esMedia(limpias[i + 1])) {
-          resultado.push(nueva(Date.now() + i));
-        }
+    const nuevosIds = [];
+    const base = [...filasMontaje];
+    if (base.length < 2) { if (cerrar) setShowTransiciones(false); return; }
+    const esMedia = (x) => x && x.tipo !== 'transicion';
+    const resultado = [];
+    for (let i = 0; i < base.length; i++) {
+      resultado.push(base[i]);
+      if (i < base.length - 1 && esMedia(base[i]) && esMedia(base[i + 1])) {
+        const nid = Date.now() + i + Math.floor(Math.random() * 10000);
+        nuevosIds.push(nid);
+        resultado.push(nueva(nid));
       }
-      return resultado;
-    });
+    }
+    if (nuevosIds.length === 0) { if (cerrar) setShowTransiciones(false); return; }
+    setFilasMontaje(resultado);
+    setLineasSelMontaje(prev => { const o = { ...prev }; nuevosIds.forEach(id => { o[id] = true; }); return o; });
     if (cerrar) setShowTransiciones(false);
   };
 
