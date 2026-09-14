@@ -1237,6 +1237,37 @@ const bdVideoTargetRef = useRef(null);
       const nombreBase = nombreCustom || (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
       const nombreArchivo = `${nombreBase}.${ext}`;
       await Promise.all(clonesListos);
+      // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
+      // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
+      // primer vídeo seekea y se dibuja). Con el frame ya pintado, el primer
+      // chunk capturado tiene contenido real.
+      try {
+        const first = segsOk.length && segsOk[0].kind
+          ? { el: segsOk[0].elA, desde: segsOk[0].aDesde }
+          : segsOk[0];
+        const fel = first && first.el;
+        if (fel) {
+          if (fel.tagName === 'IMG') {
+            if (fel.complete) { try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) {} }
+          } else {
+            const target = Math.max(0, Number(first.desde) || 0);
+            try {
+              if (Math.abs(fel.currentTime - target) > 0.05) {
+                await new Promise((res) => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; try { fel.removeEventListener('seeked', fin); } catch (_) {} res(); };
+                  fel.addEventListener('seeked', fin, { once: true });
+                  try { fel.currentTime = target; } catch (_) { fin(); }
+                  setTimeout(fin, 900);
+                });
+              }
+              try { await fel.play().catch(() => {}); } catch (_) {}
+            } catch (_) {}
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) {}
+          }
+        }
+      } catch (_) {}
       await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
@@ -1495,14 +1526,44 @@ const bdVideoTargetRef = useRef(null);
       }
       segs.push({ el: base, desde: cursor, hasta: fin });
       totalDur += fin - cursor;
-      segs = segs.filter(s => s.hasta > s.desde);
-      await new Promise((resolve) => {
+        segs = segs.filter(s => s.hasta > s.desde);
+        // Pre-dibujar primer frame antes de grabar (canvas vacío = negro inicial)
+        try {
+          const f0 = segs[0];
+          if (f0 && f0.el && f0.el.tagName !== 'IMG') {
+            const target = Math.max(0, Number(f0.desde) || 0);
+            try {
+              if (Math.abs(f0.el.currentTime - target) > 0.05) {
+                await new Promise((res) => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; try { f0.el.removeEventListener('seeked', fin); } catch (_) {} res(); };
+                  f0.el.addEventListener('seeked', fin, { once: true });
+                  try { f0.el.currentTime = target; } catch (_) { fin(); }
+                  setTimeout(fin, 900);
+                });
+              }
+              try { await f0.el.play().catch(() => {}); } catch (_) {}
+            } catch (_) {}
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
+          }
+        } catch (_) {}
+        await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
         let segElapsed = 0;
-        rec.onstop = () => {
+        rec.onstop = async () => {
           const blob = new Blob(chunks, { type: mime });
-          const url = URL.createObjectURL(blob);
+          let finalBlob = blob;
+          try {
+            const fd = new FormData();
+            fd.append('video', blob, `clip.${ext}`);
+            fd.append('trimStart', '0.2');
+            fd.append('ext', ext);
+            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp.ok) finalBlob = await resp.blob();
+          } catch (_) {}
+          const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
           a.href = url;
           a.download = `${(pv.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.${ext}`;
@@ -1616,13 +1677,46 @@ const bdVideoTargetRef = useRef(null);
         segs.push({ el: base, desde: ini, hasta: fin });
         totalDur += fin - ini;
       }
+      // Pre-dibujar primer frame antes de grabar (canvas vacío = negro inicial)
+      try {
+        const f0 = segs[0];
+        if (f0 && f0.el) {
+          if (f0.el.tagName === 'IMG') {
+            if (f0.el.complete) { try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {} }
+          } else {
+            try {
+              if (Math.abs(f0.el.currentTime - ini) > 0.05) {
+                await new Promise((res) => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; try { f0.el.removeEventListener('seeked', fin); } catch (_) {} res(); };
+                  f0.el.addEventListener('seeked', fin, { once: true });
+                  try { f0.el.currentTime = ini; } catch (_) { fin(); }
+                  setTimeout(fin, 900);
+                });
+              }
+              try { await f0.el.play().catch(() => {}); } catch (_) {}
+            } catch (_) {}
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
+          }
+        }
+      } catch (_) {}
       await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
         let segElapsed = 0;
-        rec.onstop = () => {
+        rec.onstop = async () => {
           const blob = new Blob(chunks, { type: mime });
-          const url = URL.createObjectURL(blob);
+          let finalBlob = blob;
+          try {
+            const fd = new FormData();
+            fd.append('video', blob, `clip.${ext}`);
+            fd.append('trimStart', '0.2');
+            fd.append('ext', ext);
+            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp.ok) finalBlob = await resp.blob();
+          } catch (_) {}
+          const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
           a.href = url;
           a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.${ext}`;
