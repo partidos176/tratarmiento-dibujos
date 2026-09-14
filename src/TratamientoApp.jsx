@@ -1863,7 +1863,10 @@ const bdVideoTargetRef = useRef(null);
       document.body.appendChild(canvas);
       ctx = canvas.getContext('2d');
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const stream = canvas.captureStream(0);
+      const videoTrack = stream.getVideoTracks()[0];
+      const requestFrame = () => { try { videoTrack.requestFrame(); } catch (_) {} };
+      rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 3500000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
 
@@ -1944,16 +1947,22 @@ const bdVideoTargetRef = useRef(null);
             await new Promise(r => setTimeout(r, 80));
           }
         } else if (first.tipo === 'transicion') {
-          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+          // dibujar el siguiente segmento no-transición como primer frame
+          const nextSeg = segs.find((s, i) => i > 0 && s.tipo !== 'transicion');
+          if (nextSeg && nextSeg.el) {
+            const el = nextSeg.el;
+            const ok = el.tagName === 'IMG' ? el.complete : el.readyState >= 2;
+            if (ok) {
+              try { ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+            } else {
+              ctx.fillStyle = '#111'; ctx.fillRect(0, 0, w, h);
+            }
+          } else {
+            ctx.fillStyle = '#111'; ctx.fillRect(0, 0, w, h);
+          }
         }
       }
-
-      const esperarFrames = (n) => new Promise(r => {
-        let c = 0;
-        const f = () => { if (++c >= n) r(); else requestAnimationFrame(f); };
-        requestAnimationFrame(f);
-      });
-      await esperarFrames(3);
+      requestFrame();
 
       const resultado = await new Promise((resolve) => {
         let terminado = false;
@@ -2042,6 +2051,7 @@ const bdVideoTargetRef = useRef(null);
               dibujar(nextEl, t);
             }
             ctx.globalAlpha = 1;
+            requestFrame();
             if (crossfadeElapsed >= seg.duracion) {
               if (prevEl) { try { prevEl.pause && prevEl.pause(); } catch (_) {} }
               prevEl = nextEl;
@@ -2075,6 +2085,7 @@ const bdVideoTargetRef = useRef(null);
             const ok = esImagen ? el.complete : el.readyState >= 2;
             if (ok) {
               try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+              requestFrame();
             }
             const pasadoFin = segFin != null && !esImagen ? el.currentTime >= segFin - 0.05 : false;
             const ended = esImagen ? segElapsed >= seg.duracion : (pasadoFin || segElapsed >= seg.duracion);
