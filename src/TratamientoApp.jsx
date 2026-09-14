@@ -1948,6 +1948,13 @@ const bdVideoTargetRef = useRef(null);
         }
       }
 
+      const esperarFrames = (n) => new Promise(r => {
+        let c = 0;
+        const f = () => { if (++c >= n) r(); else requestAnimationFrame(f); };
+        requestAnimationFrame(f);
+      });
+      await esperarFrames(3);
+
       const resultado = await new Promise((resolve) => {
         let terminado = false;
         let currentSeg = 0;
