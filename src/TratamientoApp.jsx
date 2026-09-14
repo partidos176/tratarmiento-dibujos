@@ -1194,7 +1194,10 @@ const bdVideoTargetRef = useRef(null);
         if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
         if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
         let elB = B.el;
-        const bDesdeVal = esVideoSeg(B) ? B.desde : 0;
+        // elB arranca d/2 antes del inicio recortado (= head real de B): así la
+        // transición muestra contenido legítimo y B continúa con solo d/2 de
+        // solape dissolve en vez de repetir d segundos (frames cruzados).
+        const bDesdeVal = esVideoSeg(B) ? Math.max(0, B.desde - d / 2) : 0;
         if (esVideoSeg(B) && B.src) {
           try {
             const clon = document.createElement('video');
@@ -1223,7 +1226,7 @@ const bdVideoTargetRef = useRef(null);
             }));
           } catch (_) {}
         }
-        segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? A.hasta : 0, elB, bDesde: esVideoSeg(B) ? B.desde : 0, desde: 0, hasta: d, nombre: '' });
+        segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
       }
       totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
       const segsOk = segs.filter(s => s.hasta > s.desde);
