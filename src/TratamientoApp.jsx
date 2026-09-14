@@ -1367,7 +1367,9 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              if (!segVideoLista && (Date.now() - segT0Wall) >= 1200) segVideoLista = true;
+              // Si el seek aún no terminó (elemento compartido entre cortes), NO dibujar:
+              // el canvas conserva el último frame de la transición (vídeo 2 puro).
+              // Dibujar el elemento sin seekear mostraría frames del vídeo 1 con el 2 ya iniciado.
               if (segVideoLista) {
                 try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
               }
