@@ -1214,9 +1214,23 @@ const bdVideoTargetRef = useRef(null);
         let terminado = false;
         let currentSeg = 0;
         let segElapsed = 0;
-        rec.onstop = () => {
+        rec.onstop = async () => {
           const blob = new Blob(chunks, { type: mime });
-          const url = URL.createObjectURL(blob);
+          let finalBlob = blob;
+          let trimmed = false;
+          if (ext === 'webm') {
+            try {
+              const fd = new FormData();
+              fd.append('video', blob, 'montaje.webm');
+              fd.append('trimStart', '0.2');
+              const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+              if (resp.ok) {
+                finalBlob = await resp.blob();
+                trimmed = true;
+              }
+            } catch (_) {}
+          }
+          const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
           a.href = url;
           a.download = nombreArchivo;
@@ -1224,6 +1238,7 @@ const bdVideoTargetRef = useRef(null);
           a.click();
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
+          if (ext === 'webm') setAviso(trimmed ? 'Montaje descargado (negro inicial recortado)' : 'Montaje descargado SIN recorte: enciende server.js (puerto 3001)');
           resolve();
         };
         const terminar = () => {
