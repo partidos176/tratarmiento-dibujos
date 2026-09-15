@@ -2160,15 +2160,19 @@ const bdVideoTargetRef = useRef(null);
 
         let nextReady = false;
         let waitingNextEl = null;
+        let lastFrameTime = performance.now();
 
         const loop = () => {
           if (terminado) return;
           if (currentSeg >= segs.length) { terminar(false); return; }
+          const now = performance.now();
+          const dt = (now - lastFrameTime) / 1000;
+          lastFrameTime = now;
           const seg = segs[currentSeg];
-          segElapsed += 1 / 30;
+          segElapsed += dt;
 
           if (seg.tipo === 'transicion') {
-            crossfadeElapsed += 1 / 30;
+            crossfadeElapsed += dt;
             const t = Math.min(crossfadeElapsed / seg.duracion, 1);
             const modelo = seg.modelo || 'crossfade';
             const dibujar = (el, alpha) => {
