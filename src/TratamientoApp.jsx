@@ -2158,6 +2158,9 @@ const bdVideoTargetRef = useRef(null);
           };
         };
 
+        let nextReady = false;
+        let waitingNextEl = null;
+
         const loop = () => {
           if (terminado) return;
           if (currentSeg >= segs.length) { terminar(false); return; }
@@ -2212,8 +2215,16 @@ const bdVideoTargetRef = useRef(null);
               ctx.restore();
             } else {
               ctx.globalAlpha = 1;
-              dibujar(prevEl, 1 - t);
-              dibujar(nextEl, t);
+              const prevOk = prevEl ? (prevEl.tagName === 'IMG' ? prevEl.complete : prevEl.readyState >= 2) : false;
+              const nextOk = nextEl ? (nextEl.tagName === 'IMG' ? nextEl.complete : nextEl.readyState >= 2) : false;
+              if (prevOk && nextOk) {
+                dibujar(prevEl, 1 - t);
+                dibujar(nextEl, t);
+              } else if (prevOk) {
+                dibujar(prevEl, 1);
+              } else if (nextOk) {
+                dibujar(nextEl, 1);
+              }
             }
             ctx.globalAlpha = 1;
             requestFrame();
@@ -2263,10 +2274,23 @@ const bdVideoTargetRef = useRef(null);
                 const nextIdx = currentSeg + 1;
                 if (nextIdx < segs.length && segs[nextIdx].tipo !== 'transicion') {
                   nextEl = segs[nextIdx].el;
-                  if (nextEl.tagName !== 'IMG') {
+                  nextReady = false;
+                  if (nextEl.tagName === 'IMG') {
+                    nextReady = nextEl.complete;
+                  } else {
                     const ini = segs[nextIdx].inicio != null ? Number(segs[nextIdx].inicio) : 0;
-                    try { if (Math.abs(nextEl.currentTime - ini) > 0.05) nextEl.currentTime = ini; } catch (_) {}
+                    try {
+                      if (Math.abs(nextEl.currentTime - ini) > 0.05) nextEl.currentTime = ini;
+                    } catch (_) {}
                     nextEl.play().catch(() => {});
+                    const checkReady = () => { nextReady = true; };
+                    waitingNextEl = checkReady;
+                    if (nextEl.readyState >= 2) {
+                      nextReady = true;
+                    } else {
+                      nextEl.addEventListener('canplay', checkReady, { once: true });
+                      nextEl.addEventListener('loadeddata', checkReady, { once: true });
+                    }
                   }
                 }
                 crossfadeElapsed = 0;
