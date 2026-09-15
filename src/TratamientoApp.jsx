@@ -497,7 +497,7 @@ function TratamientoApp({ videoInicial }) {
     cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
       if (fm.length > 0) setFilasMontaje(fm);
       if (caps.length > 0) setCapturas(caps);
-    });
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
