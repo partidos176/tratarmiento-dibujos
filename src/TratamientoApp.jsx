@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { guardarSesion, cargarSesion } from './persistencia';
+import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './persistencia';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -62,6 +62,21 @@ function TratamientoApp({ videoInicial }) {
   const [arrastrandoMarcaId, setArrastrandoMarcaId] = useState(null);
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [serverOn, setServerOn] = useState(null);
+  const comprobarServidor = async () => {
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => { try { ctl.abort(); } catch (_) {} }, 3000);
+      const r = await fetch('http://localhost:3001/api/cortar', { signal: ctl.signal });
+      clearTimeout(t);
+      setServerOn(!!r.ok);
+    } catch (_) { setServerOn(false); }
+  };
+  useEffect(() => {
+    comprobarServidor();
+    const iv = setInterval(comprobarServidor, 10000);
+    return () => clearInterval(iv);
+  }, []);
   const [exportando, setExportando] = useState(false);
   const [progresoExport, setProgresoExport] = useState(0);
   const [nombreVideo, setNombreVideo] = useState('');
@@ -72,15 +87,44 @@ function TratamientoApp({ videoInicial }) {
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
+  const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
+  const [videosBD, setVideosBD] = useState([]);
+  const [selVideoBD, setSelVideoBD] = useState(null);
+  const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
+  useEffect(() => { try { localStorage.setItem('bd_archivos', JSON.stringify(archivosBD)); } catch (_) {} }, [archivosBD]);
+const [previewMontaje, setPreviewMontaje] = useState(null);
+const previewVideoRef = useRef(null);
+const deseaPlayPreviewRef = useRef(false);
+const [fasePreview, setFasePreview] = useState('base');
+const prevTPreviewRef = useRef(null);
+const retomarEnRef = useRef(null);
+const animTimerRef = useRef(null);
+const animActualRef = useRef(null);
+const animMostradasRef = useRef(new Set());
+const limpiarTimerAnim = () => { if (animTimerRef.current) { clearTimeout(animTimerRef.current); animTimerRef.current = null; } };
+const [previewT, setPreviewT] = useState(null);
+const [previewDur, setPreviewDur] = useState(0);
+const [previewPlaying, setPreviewPlaying] = useState(false);
+const [lineasSelMontaje, setLineasSelMontaje] = useState({});
+const [lineaArrastre, setLineaArrastre] = useState(null);
+const lineaArrastrandoRef = useRef(false);
+const [filaSelMontaje, setFilaSelMontaje] = useState(null);
+const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [filaArrastrando, setFilaArrastrando] = useState(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
   const [progresoDescarga, setProgresoDescarga] = useState(0);
+  const [showTransiciones, setShowTransiciones] = useState(false);
+  const [showModalDescarga, setShowModalDescarga] = useState(false);
+  const [corteSelMontaje, setCorteSelMontaje] = useState('todos');
+  const [todasTrans, setTodasTrans] = useState(false);
+  const [modeloTransSel, setModeloTransSel] = useState(null);
+  const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5, 'slide-left': 1, 'slide-right': 1, 'zoom-in': 1, wipe: 1 });
 
   const datosCortes = () => ({
     cortes: [...cortes].sort((a, b) => a - b),
@@ -301,21 +345,6 @@ function TratamientoApp({ videoInicial }) {
     })();
     return () => { cancelado = true; };
   }, [videoUrl]);
-  useEffect(() => {
-    if (!videoUrlCortes || typeof videoUrlCortes !== 'string' || !videoUrlCortes.startsWith('blob:')) return;
-    if (videoGuardadoRef.current.cortes === videoUrlCortes) return;
-    videoGuardadoRef.current.cortes = videoUrlCortes;
-    let cancelado = false;
-    (async () => {
-      try {
-        const r = await fetch(videoUrlCortes);
-        const b = await r.blob();
-        if (cancelado || !b || !b.size) return;
-        await idbPonerKV(VIDEO_CORTES_KEY, { blob: b, nombre: (archivoCortes && archivoCortes.name) || 'video' });
-      } catch (_) {}
-    })();
-    return () => { cancelado = true; };
-  }, [videoUrlCortes]);
   const construirFotoSesion = () => ({
     v: 1,
     guardado: Date.now(),
@@ -350,15 +379,30 @@ function TratamientoApp({ videoInicial }) {
       try {
         const s = await idbLeer();
         if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
-          setCapturas(s.capturas);
+          setCapturas(prev => {
+            const prevById = new Map((prev || []).map(c => [c && c.id, c]));
+            return s.capturas.map(c => {
+              const p = prevById.get(c && c.id);
+              if (p && p.videoUrl && !c.videoUrl) return { ...c, videoUrl: p.videoUrl, duracionAnim: p.duracionAnim };
+              return c;
+            });
+          });
           try { await aplicarCortes(s); } catch (_) {}
           if (Array.isArray(s.figuras)) setFiguras(normalizarFiguras(s.figuras));
           const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
-          setCapturaSeleccionada(sel);
+          if (sel) {
+            setCapturaSeleccionada(prevSel => {
+              if (prevSel && prevSel.id === sel.id && prevSel.videoUrl && !sel.videoUrl) {
+                return { ...sel, videoUrl: prevSel.videoUrl, duracionAnim: prevSel.duracionAnim };
+              }
+              return sel;
+            });
+          } else {
+            setCapturaSeleccionada(null);
+          }
           setCapturaGuardada(null);
           setImgDim(null);
           setFiguraSeleccionada(null);
-          setAviso('Sesión anterior recuperada');
         }
         try {
           const vp = await idbLeerKV(VIDEO_PP_KEY);
@@ -371,13 +415,7 @@ function TratamientoApp({ videoInicial }) {
           }
         } catch (_) {}
         try {
-          const vc = await idbLeerKV(VIDEO_CORTES_KEY);
-          if (vc && vc.blob && vc.blob.size) {
-            const url = URL.createObjectURL(vc.blob);
-            videoGuardadoRef.current.cortes = url;
-            setArchivoCortes({ name: vc.nombre || 'video' });
-            setVideoUrlCortes(url);
-          }
+          await idbPonerKV(VIDEO_CORTES_KEY, null);
         } catch (_) {}
       } catch (_) {}
       sesionListaRef.current = true;
@@ -487,16 +525,85 @@ function TratamientoApp({ videoInicial }) {
     setArchivo(file);
     setVideoUrl(url);
     setProgreso(0);
-    setHoja('Presentación');
+    setHoja('Cortes');
   }, [videoInicial]);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const imagenInputRef = useRef(null);
+const bdFileRef = useRef(null);
+const bdVideoRef = useRef(null);
+const bdVideoTargetRef = useRef(null);
+
+  const previewRestauradaRef = useRef(false);
+  const capsListasRef = useRef(false);
+  const bdCargadoRef = useRef(false);
+  const videoDataUrlCacheRef = useRef(new Map());
+  useEffect(() => {
+    if (previewMontaje && !(previewMontaje.anims && previewMontaje.anims.length)) { try { localStorage.removeItem('preview_anim'); } catch (_) {} }
+  }, [previewMontaje]);
+  useEffect(() => {
+    if (previewRestauradaRef.current) return;
+    let meta = null;
+    try { meta = JSON.parse(localStorage.getItem('preview_anim') || 'null'); } catch (_) {}
+    if (!meta) return;
+    if (!capsListasRef.current) return;
+    const listaMeta = Array.isArray(meta.anims) && meta.anims.length
+      ? meta.anims
+      : (meta.capturaId != null ? [{ capturaId: meta.capturaId, en: meta.animEn, dur: meta.animDur }] : []);
+    if (!listaMeta.length) return;
+    const resueltas = [];
+    for (const m of listaMeta) {
+      if (m == null || m.capturaId == null) continue;
+      const cap = (capturas || []).find(c => c && String(c.id) === String(m.capturaId) && c.videoUrl);
+      if (cap) resueltas.push({ src: cap.videoUrl, en: m.en, dur: m.dur || cap.duracionAnim || 4, id: m.capturaId });
+    }
+    if (!resueltas.length) { try { localStorage.removeItem('preview_anim'); } catch (_) {} previewRestauradaRef.current = true; return; }
+    resueltas.sort((a, b) => a.en - b.en);
+    const esFallback = previewMontaje && !(previewMontaje.anims && previewMontaje.anims.length) && resueltas.some(a => previewMontaje.src === a.src);
+    if (previewMontaje && !esFallback) { previewRestauradaRef.current = true; return; }
+    const base = videoUrlCortes || videoUrl;
+    if (!base) {
+      if (!previewMontaje) {
+        deseaPlayPreviewRef.current = false;
+        setFasePreview('base');
+        prevTPreviewRef.current = null;
+        limpiarTimerAnim();
+        animMostradasRef.current.clear(); animActualRef.current = null;
+        setPreviewMontaje({ src: resueltas[0].src, inicio: 0, fin: Number.POSITIVE_INFINITY });
+      }
+      return;
+    }
+    deseaPlayPreviewRef.current = false;
+    setFasePreview('base');
+    prevTPreviewRef.current = null;
+    limpiarTimerAnim();
+    animMostradasRef.current.clear(); animActualRef.current = null;
+    setPreviewMontaje({ src: base, inicio: meta.inicio, fin: meta.fin, anims: resueltas, concepto: meta.concepto || '' });
+    previewRestauradaRef.current = true;
+  }, [capturas, videoUrl, videoUrlCortes, previewMontaje]);
+
+  useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current); }, []);
+
+  useEffect(() => {
+    if (hoja !== 'Montaje') {
+      deseaPlayPreviewRef.current = false;
+      limpiarTimerAnim();
+      if (previewVideoRef.current) { try { previewVideoRef.current.pause(); } catch (_) {} }
+    }
+  }, [hoja]);
 
   useEffect(() => {
     cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
-      if (fm.length > 0) setFilasMontaje(fm);
-      if (caps.length > 0) setCapturas(caps);
+      if (fm.length > 0) setFilasMontaje(fm.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : (fm.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length) }));
+      if (caps.length > 0) {
+        setCapturas(caps);
+        for (const c of caps) {
+          if (c && c.videoUrl && c.videoUrl.startsWith('blob:')) {
+            videoBlobADataUrl(c.videoUrl).then(r => { if (r) videoDataUrlCacheRef.current.set(c.videoUrl, r); }).catch(() => {});
+          }
+        }
+      }
+      capsListasRef.current = true;
     }).catch(() => {});
   }, []);
 
@@ -505,7 +612,7 @@ function TratamientoApp({ videoInicial }) {
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
-  const hojas = ['Cortes', 'Presentación', 'Edición', 'Montaje'];
+  const hojas = ['Base de datos', 'Cortes', 'Edición', 'Montaje'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -720,7 +827,7 @@ function TratamientoApp({ videoInicial }) {
           try {
             const ffmpeg = await loadFFmpeg();
             await ffmpeg.writeFile('input_export.webm', new Uint8Array(await blob.arrayBuffer()));
-            await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-an', 'output_export.mp4']);
+            await ffmpeg.exec(['-i', 'input_export.webm', '-c:v', 'libx264', '-preset', 'fast', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', 'output_export.mp4']);
             const out = await ffmpeg.readFile('output_export.mp4');
             const mp4Blob = new Blob([out], { type: 'video/mp4' });
             const enlace = document.createElement('a');
@@ -918,6 +1025,975 @@ function TratamientoApp({ videoInicial }) {
     }
   };
 
+  const capsEditadasDeLinea = (fila) => (capturas || []).filter(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
+
+  const cargarVideoEnCortes = (url, nombre) => {
+    if (!url) return;
+    setVideoUrlCortes(url);
+    setArchivoCortes({ name: nombre || 'video' });
+  };
+
+  const selectorCargar = () => (   <select
+      value=""
+      title="Cargar archivo .json"
+      onChange={(e) => {
+        const val = e.target.value;
+        e.target.value = '';
+        if (!val) return;
+        if (val === '__file__') { bdFileRef.current?.click(); return; }
+      }}
+      style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '130px' }}
+    >
+      <option value="">Cargar…</option>
+      <option value="__file__">📁 *.json…</option>
+    </select>
+  );
+
+  const selectorVideoPin = (kind, id) => (
+    <select
+      value=""
+      title="Elegir vídeo para la celda"
+      onChange={(e) => {
+        const val = e.target.value;
+        e.target.value = '';
+        if (!val) return;
+        if (val === '__file__') { bdVideoTargetRef.current = { kind, id }; bdVideoRef.current?.click(); return; }
+        if (kind === 'bd') {
+          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
+          const vv = videosBD.find(x => x.videoUrl === val);
+          cargarVideoEnCortes(val, (vv && vv.nombre) || 'video');
+        } else {
+          setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
+          const cc = (capturas || []).find(x => x && x.videoUrl === val);
+          cargarVideoEnCortes(val, cc ? `Animación ${formatoTiempo(cc.tiempo ?? 0)}` : 'video');
+        }
+      }}
+      style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '110px' }}
+    >
+      <option value="">Vídeo…</option>
+      {videosBD.length > 0 && (
+        <optgroup label="Vídeos PC">
+          {videosBD.map(x => <option key={'pbd_' + x.id} value={x.videoUrl}>{x.nombre || 'video'}</option>)}
+        </optgroup>
+      )}
+    </select>
+  );
+
+  const abrirPreviewLinea = (fila, tIr, autoPlay = true) => {
+    const src = videoUrlCortes || videoUrl;
+    if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
+    const anims = (capturas || [])
+      .filter(c => c && c.videoUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin)
+      .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4, id: c.id }))
+      .sort((a, b) => a.en - b.en);
+    prevTPreviewRef.current = null;
+    limpiarTimerAnim();
+    animMostradasRef.current.clear(); animActualRef.current = null;
+    deseaPlayPreviewRef.current = autoPlay;
+    retomarEnRef.current = tIr != null ? tIr : undefined;
+    setFasePreview('base');
+    setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '', anims });
+    const destino = tIr ?? fila.inicio;
+    requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, destino); if (autoPlay) v.play().catch(() => {}); } catch (_) {} } });
+  };
+
+  const mimeDescarga = () => {
+    try {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4')) return { mime: 'video/mp4', ext: 'mp4' };
+    } catch (_) {}
+    let fb = 'video/webm';
+    try { if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) fb = 'video/webm;codecs=vp9'; } catch (_) {}
+    return { mime: fb, ext: 'webm' };
+  };
+
+  const descargarLineas = async (lineas, nombreCustom) => {
+    const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
+    if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let rec = null;
+    const els = [];
+    let totalDur = 0;
+    let elapsedTotal = 0;
+    const lastProgRef = { current: -1 };
+    try {
+      const baseSrc = videoUrlCortes || videoUrl;
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const { mime, ext } = mimeDescarga();
+      if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const mkVid = async (src) => {
+        const vid = document.createElement('video');
+        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(vid);
+        els.push(vid);
+        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+        return vid;
+      };
+      const mkImg = async (u) => {
+        const im = document.createElement('img');
+        im.crossOrigin = 'anonymous';
+        im.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(im);
+        els.push(im);
+        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = u; });
+        return im;
+      };
+      let base = null;
+      if (baseSrc) base = await mkVid(baseSrc);
+      const segs = [];
+      const rangos = [];
+      for (const linea of validas) {
+        rangos.push([segs.length, segs.length]);
+        if (linea.tipo === 'transicion') continue;
+        const nombre = linea.concepto || '';
+        if (linea.tipo === 'imagen' && linea.imagenUrl) {
+          const im = await mkImg(linea.imagenUrl);
+          segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
+          totalDur += 4;
+        } else if (linea.videoUrl) {
+          const v = await mkVid(linea.videoUrl);
+          let d = 5;
+          try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
+          segs.push({ el: v, src: linea.videoUrl, desde: 0, hasta: d, nombre });
+          totalDur += d;
+        } else if (linea.inicio != null && linea.fin != null && base) {
+          const ini = Math.max(0, linea.inicio);
+          const fin = Math.max(ini + 0.5, linea.fin);
+          const anims = (capturas || [])
+            .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+            .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
+            .sort((a, b) => a.en - b.en);
+          let cursor = ini;
+          for (const a of anims) {
+            if (!(a.en > cursor && a.en < fin)) continue;
+            segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre });
+            totalDur += a.en - cursor;
+            const av = await mkVid(a.src);
+            segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
+            totalDur += a.dur;
+            cursor = a.en;
+          }
+          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: fin, nombre });
+          totalDur += fin - cursor;
+        }
+        rangos[rangos.length - 1][1] = segs.length;
+      }
+      const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
+      const clonesListos = [];
+      for (let tk = validas.length - 1; tk >= 0; tk--) {
+        const tl = validas[tk];
+        if (!tl || tl.tipo !== 'transicion') continue;
+        let ia = -1;
+        for (let s = rangos[tk][0] - 1; s >= 0; s--) { if (segs[s] && !segs[s].kind) { ia = s; break; } }
+        let ib = -1;
+        for (let s = rangos[tk][1]; s < segs.length; s++) { if (segs[s] && !segs[s].kind) { ib = s; break; } }
+        if (ia < 0 || ib < 0 || ia === ib) continue;
+        const A = segs[ia];
+        const B = segs[ib];
+        let d = Math.max(0.3, tl.duracion || 2);
+        d = Math.min(d, A.hasta - A.desde, B.hasta - B.desde);
+        if (!(d >= 0.2) || !(A.hasta > A.desde) || !(B.hasta > B.desde)) continue;
+        if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
+        if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
+        let elB = B.el;
+        // elB arranca d/2 antes del inicio recortado (= head real de B): así la
+        // transición muestra contenido legítimo y B continúa con solo d/2 de
+        // solape dissolve en vez de repetir d segundos (frames cruzados).
+        const bDesdeVal = esVideoSeg(B) ? Math.max(0, B.desde - d / 2) : 0;
+        if (esVideoSeg(B) && B.src) {
+          try {
+            const clon = document.createElement('video');
+            clon.muted = true; clon.playsInline = true; clon.preload = 'auto'; clon.src = B.src;
+            clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+            document.body.appendChild(clon);
+            els.push(clon);
+            elB = clon;
+            // Pre-cargar metadata y pre-posicionar el clon. Sin esto, el seek al
+            // iniciar la transición falla en silencio (sin metadata) y el clon
+            // reproduce desde 0: frames del inicio del vídeo entre cortes.
+            clonesListos.push(new Promise((res) => {
+              let done = false;
+              const fin = () => {
+                if (done) return; done = true;
+                try { clon.currentTime = Math.max(0, bDesdeVal); } catch (_) {}
+                try { clon.pause(); } catch (_) {}
+                res();
+              };
+              try {
+                if (clon.readyState >= 1) { fin(); return; }
+                clon.onloadedmetadata = fin;
+                clon.onerror = fin;
+              } catch (_) { fin(); return; }
+              setTimeout(fin, 2500);
+            }));
+          } catch (_) {}
+        }
+        segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
+        // B continúa donde termina el clon (b0+d): sin salto atrás ni repetición
+        // del head ya mostrado en la transición. Duración total -d/2 por transición.
+        if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
+      }
+      totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
+      const segsOk = segs.filter(s => s.hasta > s.desde);
+      if (!segsOk.length) { setAviso('Nada que descargar'); return; }
+      const nombreBase = nombreCustom || (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
+      const nombreArchivo = `${nombreBase}.${ext}`;
+      await Promise.all(clonesListos);
+      // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
+      // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
+      // primer vídeo seekea y se dibuja). Con el frame ya pintado, el primer
+      // chunk capturado tiene contenido real.
+      try {
+        const first = segsOk.length && segsOk[0].kind
+          ? { el: segsOk[0].elA, desde: segsOk[0].aDesde }
+          : segsOk[0];
+        const fel = first && first.el;
+        if (fel) {
+          if (fel.tagName === 'IMG') {
+            if (fel.complete) { try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) {} }
+          } else {
+            const target = Math.max(0, Number(first.desde) || 0);
+            try {
+              if (Math.abs(fel.currentTime - target) > 0.05) {
+                await new Promise((res) => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; try { fel.removeEventListener('seeked', fin); } catch (_) {} res(); };
+                  fel.addEventListener('seeked', fin, { once: true });
+                  try { fel.currentTime = target; } catch (_) { fin(); }
+                  setTimeout(fin, 900);
+                });
+              }
+              try { await fel.play().catch(() => {}); } catch (_) {}
+            } catch (_) {}
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) {}
+          }
+        }
+      } catch (_) {}
+      await new Promise((resolve) => {
+        let terminado = false;
+        let currentSeg = 0;
+        let segElapsed = 0;
+        rec.onstop = async () => {
+          const blob = new Blob(chunks, { type: mime });
+          let finalBlob = blob;
+          try {
+            const fd = new FormData();
+            fd.append('video', blob, `montaje.${ext}`);
+            fd.append('trimStart', '0.2');
+            fd.append('ext', ext);
+            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp.ok) finalBlob = await resp.blob();
+          } catch (_) {}
+          const url = URL.createObjectURL(finalBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = nombreArchivo;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          resolve();
+        };
+        const terminar = () => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          try { document.body.removeChild(canvas); } catch (_) {}
+        };
+        rec.start(250);
+        let enTick = false;
+        let segT0Wall = 0;
+        let completado = 0;
+        let segVideoLista = true;
+        let segSeekToken = 0;
+        const ponerEnMarcha = (elx, t0) => {
+          if (!elx || elx.tagName === 'IMG') return;
+          try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
+          try { elx.play().catch(() => {}); } catch (_) {}
+          try { elx.ontimeupdate = () => tick(); } catch (_) {}
+        };
+        const detener = (elx) => {
+          if (!elx || elx.tagName === 'IMG') return;
+          try { elx.ontimeupdate = null; } catch (_) {}
+          try { elx.pause(); } catch (_) {}
+        };
+        const posContenido = (seg) => {
+          const segDur = Math.max(0, seg.hasta - seg.desde);
+          if (seg.kind || seg.esAnim || seg.tipo === 'imagen') {
+            return Math.min(Math.max(0, (Date.now() - segT0Wall) / 1000), segDur);
+          }
+          try {
+            const p = seg.el.currentTime - seg.desde;
+            if (Number.isFinite(p)) return Math.min(Math.max(0, p), segDur);
+          } catch (_) {}
+          return Math.min(Math.max(0, (Date.now() - segT0Wall) / 1000), segDur);
+        };
+        const tick = () => {
+          if (terminado || enTick) return;
+          enTick = true;
+          try {
+            if (currentSeg >= segsOk.length) { terminar(); return; }
+            const seg = segsOk[currentSeg];
+            const esImagen = seg.tipo === 'imagen';
+            const segDur = Math.max(0.1, seg.hasta - seg.desde);
+            if (segElapsed === 0) {
+              segT0Wall = Date.now();
+              if (seg.kind) {
+                ponerEnMarcha(seg.elA, seg.aDesde);
+                ponerEnMarcha(seg.elB, seg.bDesde);
+                segVideoLista = true;
+              } else if (esImagen || seg.esAnim) {
+                if (!esImagen) ponerEnMarcha(seg.el, seg.desde);
+                segVideoLista = true;
+              } else {
+                const elx = seg.el;
+                let necesita = false;
+                try { necesita = !!elx && elx.tagName !== 'IMG' && Number.isFinite(elx.currentTime) && Math.abs(elx.currentTime - seg.desde) > 0.08; } catch (_) { necesita = false; }
+                ponerEnMarcha(seg.el, seg.desde);
+                segVideoLista = !necesita;
+                if (necesita && elx) {
+                  const tk = ++segSeekToken;
+                  try { elx.addEventListener('seeked', () => { if (tk === segSeekToken) segVideoLista = true; }, { once: true }); } catch (_) { segVideoLista = true; }
+                }
+              }
+              segElapsed = 1 / 30;
+            } else {
+              segElapsed += 1 / 30;
+            }
+            if (seg.kind) {
+              const t = Math.min((Date.now() - segT0Wall) / 1000 / segDur, 1);
+              ctx.clearRect(0, 0, w, h);
+              const dib = (elx, al) => {
+                if (!elx) return;
+                const ok = elx.tagName === 'IMG' ? elx.complete : elx.readyState >= 2;
+                if (!ok) return;
+                ctx.globalAlpha = Math.max(0, Math.min(1, al));
+                try { ctx.drawImage(elx, 0, 0, w, h); } catch (_) {}
+              };
+              if (seg.kind === 'negro') {
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, w, h);
+                if (t < 0.5) dib(seg.elA, 1 - t * 2);
+                else dib(seg.elB, (t - 0.5) * 2);
+              } else if (seg.kind === 'flash') {
+                dib(t < 0.5 ? seg.elA : seg.elB, 1);
+                ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+              } else if (seg.kind === 'slide-left') {
+                // A sale por la izquierda, B entra por la derecha (B encima).
+                // t=0: A puro; t=1: B puro (como el resto de modelos).
+                ctx.globalAlpha = 1;
+                try { ctx.drawImage(seg.elA, -w * t, 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elB, w * (1 - t), 0, w, h); } catch (_) {}
+              } else if (seg.kind === 'slide-right') {
+                // A sale por la derecha, B entra por la izquierda (B encima).
+                ctx.globalAlpha = 1;
+                try { ctx.drawImage(seg.elA, w * t, 0, w, h); } catch (_) {}
+                try { ctx.drawImage(seg.elB, -w * (1 - t), 0, w, h); } catch (_) {}
+              } else if (seg.kind === 'zoom-in') {
+                ctx.globalAlpha = 1;
+                dib(seg.elA, 1 - t);
+                const s = 0.5 + t * 0.5;
+                const ox = w * (1 - s) / 2;
+                const oy = h * (1 - s) / 2;
+                try { ctx.drawImage(seg.elB, ox, oy, w * s, h * s); } catch (_) {}
+              } else if (seg.kind === 'wipe') {
+                ctx.globalAlpha = 1;
+                try { ctx.drawImage(seg.elA, 0, 0, w, h); } catch (_) {}
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, w * t, h);
+                ctx.clip();
+                try { ctx.drawImage(seg.elB, 0, 0, w, h); } catch (_) {}
+                ctx.restore();
+              } else {
+                ctx.globalAlpha = 1;
+                dib(seg.elA, 1 - t);
+                dib(seg.elB, t);
+              }
+              ctx.globalAlpha = 1;
+              if ((Date.now() - segT0Wall) >= segDur * 1000) {
+                const vistos = new Set();
+                for (const elx of [seg.elA, seg.elB]) {
+                  if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
+                }
+                completado += segDur;
+                currentSeg++; segElapsed = 0;
+              }
+            } else {
+              // Si el seek aún no terminó (elemento compartido entre cortes), NO dibujar:
+              // el canvas conserva el último frame de la transición (vídeo 2 puro).
+              // Dibujar el elemento sin seekear mostraría frames del vídeo 1 con el 2 ya iniciado.
+              if (segVideoLista) {
+                try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              }
+              if (seg.nombre) {
+                try {
+                  ctx.font = '800 32px Inter, sans-serif';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                  ctx.fillRect(0, 0, w, 52);
+                  ctx.fillStyle = '#facc15';
+                  ctx.fillText(seg.nombre, w / 2, 26);
+                } catch (_) {}
+              }
+              let fin = false;
+              if (seg.esAnim || esImagen) {
+                fin = (Date.now() - segT0Wall) >= segDur * 1000;
+              } else {
+                try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
+                if (!fin) fin = (Date.now() - segT0Wall) >= (segDur + 3) * 1000;
+              }
+              if (fin) {
+                if (!esImagen) detener(seg.el);
+                completado += segDur;
+                currentSeg++; segElapsed = 0;
+              }
+            }
+            const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
+            if (prog !== lastProgRef.current) { lastProgRef.current = prog; setProgresoDescarga(prog); }
+            setTimeout(tick, 1000 / 30);
+          } finally {
+            enTick = false;
+          }
+        };
+        tick();
+      });
+    } catch (e) {
+      console.error('Error al descargar líneas', e);
+      setAviso('No se pudo descargar: ' + ((e && e.message) || e));
+      try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+    } finally {
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+    }
+  };
+
+  const descargarClipConAnimacion = async () => {
+    const pv = previewMontaje;
+    if (!pv) return false;
+    const ini = Math.max(0, pv.inicio);
+    const fin = Math.max(ini + 0.5, pv.fin);
+    const anims = (pv.anims || []).filter(a => a && a.src && a.en > ini && a.en < fin).sort((a, b) => a.en - b.en);
+    if (!anims.length) return false;
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let rec = null;
+    const els = [];
+    let totalDur = 0;
+    let elapsedTotal = 0;
+    try {
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const { mime, ext } = mimeDescarga();
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const mkVid = async (src) => {
+        const vid = document.createElement('video');
+        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(vid);
+        els.push(vid);
+        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+        return vid;
+      };
+      const base = await mkVid(pv.src);
+      let segs = [];
+      let cursor = ini;
+      for (const a of anims) {
+        const dur = a.dur || 4;
+        segs.push({ el: base, desde: cursor, hasta: a.en });
+        const av = await mkVid(a.src);
+        segs.push({ el: av, desde: 0, hasta: dur, esAnim: true });
+        cursor = a.en;
+        totalDur += (a.en - segs[segs.length - 2].desde) + dur;
+      }
+      segs.push({ el: base, desde: cursor, hasta: fin });
+      totalDur += fin - cursor;
+        segs = segs.filter(s => s.hasta > s.desde);
+        // Pre-dibujar primer frame antes de grabar (canvas vacío = negro inicial)
+        try {
+          const f0 = segs[0];
+          if (f0 && f0.el && f0.el.tagName !== 'IMG') {
+            const target = Math.max(0, Number(f0.desde) || 0);
+            try {
+              if (Math.abs(f0.el.currentTime - target) > 0.05) {
+                await new Promise((res) => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; try { f0.el.removeEventListener('seeked', fin); } catch (_) {} res(); };
+                  f0.el.addEventListener('seeked', fin, { once: true });
+                  try { f0.el.currentTime = target; } catch (_) { fin(); }
+                  setTimeout(fin, 900);
+                });
+              }
+              try { await f0.el.play().catch(() => {}); } catch (_) {}
+            } catch (_) {}
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
+          }
+        } catch (_) {}
+        await new Promise((resolve) => {
+        let terminado = false;
+        let currentSeg = 0;
+        let segElapsed = 0;
+        rec.onstop = async () => {
+          const blob = new Blob(chunks, { type: mime });
+          let finalBlob = blob;
+          try {
+            const fd = new FormData();
+            fd.append('video', blob, `clip.${ext}`);
+            fd.append('trimStart', '0.2');
+            fd.append('ext', ext);
+            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp.ok) finalBlob = await resp.blob();
+          } catch (_) {}
+          const url = URL.createObjectURL(finalBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(pv.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          resolve();
+        };
+        const terminar = () => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          els.forEach(v => { try { v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          try { document.body.removeChild(canvas); } catch (_) {}
+        };
+        rec.start(250);
+        const loop = () => {
+          if (terminado) return;
+          if (currentSeg >= segs.length) { terminar(); return; }
+          const seg = segs[currentSeg];
+          const esImagen = seg.tipo === 'imagen';
+          segElapsed += 1 / 30;
+          elapsedTotal += 1 / 30;
+          if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
+            try { seg.el.currentTime = Math.max(0, Math.min(seg.desde, (seg.el.duration || seg.desde + 1) - 0.05)); } catch (_) {}
+            seg.el.play().catch(() => {});
+          }
+          try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+          if (pv.concepto) {
+            try {
+              ctx.font = '800 32px Inter, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.fillRect(0, 24, w, 52);
+              ctx.fillStyle = '#facc15';
+              ctx.fillText(pv.concepto, w / 2, 50);
+            } catch (_) {}
+          }
+          const segDur = seg.hasta - seg.desde;
+          const ended = seg.esAnim ? (segElapsed >= segDur) : esImagen ? (segElapsed >= segDur) : (seg.el.currentTime >= seg.hasta || segElapsed >= segDur + 1);
+          if (ended) { if (!esImagen) { try { seg.el.pause(); } catch (_) {} } currentSeg++; segElapsed = 0; }
+          setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
+          setTimeout(loop, 1000 / 30);
+        };
+        loop();
+      });
+    } catch (e) {
+      console.error('Error al descargar clip con animación', e);
+      setAviso('No se pudo descargar el clip: ' + ((e && e.message) || e));
+      try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+    } finally {
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+    }
+    return true;
+  };
+
+  const descargarFragmentoLinea = async (linea) => {
+    const baseSrc = videoUrlCortes || videoUrl;
+    const imgUrls = [];
+    if (linea.imagenUrl) imgUrls.push(linea.imagenUrl);
+    if (linea.inicio != null && linea.fin != null) {
+      for (const c of capsEditadasDeLinea(linea)) {
+        if (c && c.dataUrl && !imgUrls.includes(c.dataUrl)) imgUrls.push(c.dataUrl);
+      }
+    }
+    const tieneBase = !!baseSrc && linea.inicio != null && linea.fin != null;
+    if (!tieneBase && imgUrls.length === 0) { setAviso('Carga primero un vídeo para descargar el fragmento'); return false; }
+    const ini = Math.max(0, linea.inicio || 0);
+    const fin = Math.max(ini + 0.5, linea.fin || ini + 0.5);
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    let rec = null;
+    const els = [];
+    let totalDur = 0;
+    let elapsedTotal = 0;
+    try {
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const { mime, ext } = mimeDescarga();
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const segs = [];
+      for (const u of imgUrls) {
+        const im = document.createElement('img');
+        im.crossOrigin = 'anonymous';
+        im.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(im);
+        els.push(im);
+        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = u; });
+        segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4 });
+        totalDur += 4;
+      }
+      if (tieneBase) {
+        const base = document.createElement('video');
+        base.muted = true; base.playsInline = true; base.preload = 'auto'; base.src = baseSrc;
+        base.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(base);
+        els.push(base);
+        await new Promise((res) => { base.onloadedmetadata = res; base.onerror = res; });
+        segs.push({ el: base, desde: ini, hasta: fin });
+        totalDur += fin - ini;
+      }
+      // Pre-dibujar primer frame antes de grabar (canvas vacío = negro inicial)
+      try {
+        const f0 = segs[0];
+        if (f0 && f0.el) {
+          if (f0.el.tagName === 'IMG') {
+            if (f0.el.complete) { try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {} }
+          } else {
+            try {
+              if (Math.abs(f0.el.currentTime - ini) > 0.05) {
+                await new Promise((res) => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; try { f0.el.removeEventListener('seeked', fin); } catch (_) {} res(); };
+                  f0.el.addEventListener('seeked', fin, { once: true });
+                  try { f0.el.currentTime = ini; } catch (_) { fin(); }
+                  setTimeout(fin, 900);
+                });
+              }
+              try { await f0.el.play().catch(() => {}); } catch (_) {}
+            } catch (_) {}
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
+          }
+        }
+      } catch (_) {}
+      await new Promise((resolve) => {
+        let terminado = false;
+        let currentSeg = 0;
+        let segElapsed = 0;
+        rec.onstop = async () => {
+          const blob = new Blob(chunks, { type: mime });
+          let finalBlob = blob;
+          try {
+            const fd = new FormData();
+            fd.append('video', blob, `clip.${ext}`);
+            fd.append('trimStart', '0.2');
+            fd.append('ext', ext);
+            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp.ok) finalBlob = await resp.blob();
+          } catch (_) {}
+          const url = URL.createObjectURL(finalBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(linea.concepto || 'clip').replace(/[^\w\-áéíóúñ]+/gi, '_')}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          resolve();
+        };
+        const terminar = () => {
+          if (terminado) return;
+          terminado = true;
+          try { rec.stop(); } catch (_) {}
+          els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          try { document.body.removeChild(canvas); } catch (_) {}
+        };
+        rec.start(250);
+        const loop = () => {
+          if (terminado) return;
+          if (currentSeg >= segs.length) { terminar(); return; }
+          const seg = segs[currentSeg];
+          const esImagen = seg.tipo === 'imagen';
+          segElapsed += 1 / 30;
+          elapsedTotal += 1 / 30;
+          if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
+            try { seg.el.currentTime = Math.max(0, Math.min(seg.desde, (seg.el.duration || seg.desde + 1) - 0.05)); } catch (_) {}
+            seg.el.play().catch(() => {});
+          }
+          try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+          if (linea.concepto) {
+            try {
+              ctx.font = '800 32px Inter, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              ctx.fillRect(0, 24, w, 52);
+              ctx.fillStyle = '#facc15';
+              ctx.fillText(linea.concepto, w / 2, 50);
+            } catch (_) {}
+          }
+          const segDur = seg.hasta - seg.desde;
+          const ended = esImagen ? (segElapsed >= segDur) : (seg.el.currentTime >= seg.hasta || segElapsed >= segDur + 1);
+          if (ended) { if (!esImagen) { try { seg.el.pause(); } catch (_) {} } currentSeg++; segElapsed = 0; }
+          setProgresoDescarga(Math.min(99, Math.round((elapsedTotal / Math.max(0.1, totalDur)) * 100)));
+          setTimeout(loop, 1000 / 30);
+        };
+        loop();
+      });
+    } catch (e) {
+      console.error('Error al descargar fragmento', e);
+      setAviso('No se pudo descargar el fragmento: ' + ((e && e.message) || e));
+      try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
+    } finally {
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+    }
+    return true;
+  };
+
+  const insertarTransicion = (modelo, dur, soloHuecos, cerrar = true) => {
+    const nombres = { crossfade: 'Crossfade', negro: 'Fundido a negro', flash: 'Flash blanco', 'slide-left': 'Deslizar izquierda', 'slide-right': 'Deslizar derecha', 'zoom-in': 'Zoom entrada', wipe: 'Barrido' };
+    const nueva = (id) => ({ id: id ?? Date.now(), tipo: 'transicion', modelo, videoUrl: null, imagenUrl: null, concepto: modelo === 'negro' ? nombres[modelo] : `${nombres[modelo] || modelo} ${dur}s`, duracion: dur });
+    if (!soloHuecos) {
+      const sel = filaSelMontaje;
+      const ix = (filasMontaje || []).findIndex(f => f && f.id === sel);
+      if (sel == null || ix < 0) { setAviso('Selecciona una línea para añadir la transición'); return; }
+      if (filasMontaje[ix].tipo !== 'transicion' && ix >= filasMontaje.length - 1) { setAviso('La transición necesita una fila debajo de la seleccionada'); return; }
+      let nuevoId = null;
+      if (filasMontaje[ix].tipo === 'transicion') nuevoId = filasMontaje[ix].id;
+      else if (filasMontaje[ix + 1] && filasMontaje[ix + 1].tipo === 'transicion') nuevoId = filasMontaje[ix + 1].id;
+      else nuevoId = Date.now();
+      setFilasMontaje(prev => {
+        const copy = [...prev];
+        const j = copy.findIndex(f => f && f.id === sel);
+        if (j < 0) return prev;
+        if (copy[j].tipo === 'transicion') { copy[j] = nueva(copy[j].id); return copy; }
+        if (j >= copy.length - 1) return prev;
+        if (copy[j + 1] && copy[j + 1].tipo === 'transicion') copy[j + 1] = nueva(copy[j + 1].id);
+        else copy.splice(j + 1, 0, nueva(nuevoId));
+        return copy;
+      });
+      setLineasSelMontaje(prev => ({ ...prev, [nuevoId]: true }));
+      if (cerrar) setShowTransiciones(false);
+      return;
+    }
+    const nuevosIds = [];
+    const base = [...filasMontaje];
+    if (base.length < 2) { if (cerrar) setShowTransiciones(false); return; }
+    const esMedia = (x) => x && x.tipo !== 'transicion';
+    const resultado = [];
+    for (let i = 0; i < base.length; i++) {
+      resultado.push(base[i]);
+      if (i < base.length - 1 && esMedia(base[i]) && esMedia(base[i + 1])) {
+        const nid = Date.now() + i + Math.floor(Math.random() * 10000);
+        nuevosIds.push(nid);
+        resultado.push(nueva(nid));
+      }
+    }
+    if (nuevosIds.length === 0) { if (cerrar) setShowTransiciones(false); return; }
+    setFilasMontaje(resultado);
+    setLineasSelMontaje(prev => { const o = { ...prev }; nuevosIds.forEach(id => { o[id] = true; }); return o; });
+    if (cerrar) setShowTransiciones(false);
+  };
+
+  useEffect(() => {
+    cargarVideosBD().then(v => {
+          const vivos = (v || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin));
+          if (vivos.length > 0) setVideosBD(vivos);
+          bdCargadoRef.current = true;
+        });
+        setVideosBD(prev => (prev || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin)));
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => guardarVideosBD(videosBD), 1500);
+    return () => clearTimeout(timer);
+  }, [videosBD]);
+
+  useEffect(() => {
+    if (bdCargadoRef.current && videosBD.length === 0) {
+      setFilasMontaje([]);
+      setCortes([]);
+      setDuracionCortes({});
+      setNombreCortes({});
+      setLineasSelMontaje({});
+      setPreviewMontaje(null);
+    }
+  }, [videosBD.length]);
+
+  const importarMontaje = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const filas = Array.isArray(data) ? data : data.filas;
+        if (!Array.isArray(filas)) { setAviso('Archivo no válido'); return; }
+        const restauradas = await Promise.all(filas.map(async (f) => {
+          const copia = { ...f };
+          if (f.videoDataUrl) { copia.videoUrl = await dataUrlAVideoBlobUrl(f.videoDataUrl); delete copia.videoDataUrl; }
+          if (f.imagenDataUrl) { copia.imagenUrl = f.imagenDataUrl; delete copia.imagenDataUrl; }
+          return copia;
+        }));
+        setFilasMontaje(prev => {
+          const ids = new Set();
+          const filtradas = restauradas.filter(f => {
+            if (!f || ids.has(f.id)) return false;
+            ids.add(f.id);
+            return true;
+          });
+          let numCorte = 0;
+          return filtradas.map(f => {
+            if (f.tipo === 'transicion') return f;
+            numCorte++;
+            return f.numCorte != null ? f : { ...f, numCorte };
+          });
+        });
+        setArchivosBD(prev => {
+          const reg = { id: Date.now(), nombre: file.name, nFilas: restauradas.length };
+          const ix = prev.findIndex(x => x.nombre === file.name);
+          if (ix >= 0) { const copy = [...prev]; copy[ix] = reg; return copy; }
+          return [...prev, reg];
+        });
+        const capturasImportadas = [];
+        if (Array.isArray(data.animaciones)) {
+          for (const a of data.animaciones) {
+            if (!a || a.id == null || !a.videoDataUrl) continue;
+            const url = await dataUrlAVideoBlobUrl(a.videoDataUrl);
+            if (!url) continue;
+            videoDataUrlCacheRef.current.set(url, a.videoDataUrl);
+            capturasImportadas.push({ id: a.id, dataUrl: null, baseDataUrl: a.baseDataUrl || null, videoUrl: url, duracion: 4, duracionAnim: a.duracionAnim || 4, figuras: normalizarFiguras(a.figuras), tiempo: a.tiempo ?? 0, insertarEn: null });
+          }
+        }
+        if (Array.isArray(data.fotos)) {
+          for (const f of data.fotos) {
+            if (!f || f.id == null || !f.dataUrl) continue;
+            const ix = capturasImportadas.findIndex(c => c && c.id === f.id);
+            if (ix >= 0) {
+              const ex = capturasImportadas[ix];
+              capturasImportadas[ix] = { ...ex, dataUrl: f.dataUrl, tiempo: f.tiempo ?? ex.tiempo, figuras: (ex.figuras && ex.figuras.length > 0) ? ex.figuras : normalizarFiguras(f.figuras), baseDataUrl: ex.baseDataUrl || f.baseDataUrl || null };
+            } else {
+              capturasImportadas.push({ id: f.id, dataUrl: f.dataUrl, baseDataUrl: f.baseDataUrl || null, videoUrl: null, duracion: 4, duracionAnim: f.duracionAnim || 4, figuras: normalizarFiguras(f.figuras), tiempo: f.tiempo ?? 0, insertarEn: null });
+            }
+          }
+        }
+        if (capturasImportadas.length) {
+          setCapturas(prev => {
+            const map = new Map(prev.map(c => [c.id, c]));
+            for (const c of capturasImportadas) {
+              if (map.has(c.id)) {
+                const existing = map.get(c.id);
+                map.set(c.id, { ...existing, ...c, videoUrl: c.videoUrl || existing.videoUrl, dataUrl: c.dataUrl || existing.dataUrl, figuras: (c.figuras && c.figuras.length > 0) ? c.figuras : (existing.figuras || []), baseDataUrl: c.baseDataUrl || existing.baseDataUrl || null });
+              } else {
+                map.set(c.id, c);
+              }
+            }
+            return [...map.values()];
+          });
+        }
+        const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
+        if (Array.isArray(dc.cortes) && dc.cortes.length) {
+          const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
+          if (lista.length) {
+            setCortes(lista);
+            if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes({ ...dc.duracionCortes });
+            if (dc.nombreCortes && typeof dc.nombreCortes === 'object') setNombreCortes({ ...dc.nombreCortes });
+            if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
+          }
+        }
+      } catch (e) {
+        console.error('Error al importar montaje', e);
+        setAviso('No se pudo importar: ' + ((e && e.message) || e));
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const exportarMontaje = async () => {
+    try {
+      const incrustar = async (url) => {
+        if (!url || typeof url !== 'string') return null;
+        if (url.startsWith('data:')) return url;
+        if (videoDataUrlCacheRef.current.has(url)) return videoDataUrlCacheRef.current.get(url);
+        if (url.startsWith('blob:')) {
+          const r = await videoBlobADataUrl(url);
+          if (r) videoDataUrlCacheRef.current.set(url, r);
+          return r;
+        }
+        return null;
+      };
+      const filas = await Promise.all((filasMontaje || []).map(async (f) => {
+        const copia = { ...f };
+        if (f.videoUrl && f.videoUrl.startsWith('blob:')) {
+          copia.videoDataUrl = await videoBlobADataUrl(f.videoUrl);
+          copia.videoUrl = null;
+        }
+        if (f.imagenUrl && f.imagenUrl.startsWith('blob:')) {
+          copia.imagenDataUrl = await videoBlobADataUrl(f.imagenUrl);
+          copia.imagenUrl = null;
+        }
+        return copia;
+      }));
+      const animaciones = await Promise.all(
+        (capturas || [])
+          .filter(c => c && c.videoUrl)
+          .map(async (c) => ({ id: c.id, tiempo: c.tiempo ?? null, duracionAnim: c.duracionAnim || 4, videoDataUrl: await incrustar(c.videoUrl), figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }))
+      );
+      const fotos = (capturas || [])
+        .filter(c => c && c.dataUrl)
+        .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl, duracionAnim: c.duracionAnim || 4, figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }));
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), filas, animaciones, fotos }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const videoNameBD = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : 'montaje');
+      a.download = `resumen_${videoNameBD}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch (e) {
+      console.error('Error al exportar el montaje', e);
+      window.alert('No se pudo exportar el montaje: ' + (e?.message || e));
+    }
+  };
+
   const descargarMontaje = async () => {
     const items = filasMontaje;
     const mediaItems = items.filter(f => f.tipo !== 'transicion');
@@ -937,7 +2013,10 @@ function TratamientoApp({ videoInicial }) {
       document.body.appendChild(canvas);
       ctx = canvas.getContext('2d');
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3500000 });
+      const stream = canvas.captureStream(0);
+      const videoTrack = stream.getVideoTracks()[0];
+      const requestFrame = () => { try { videoTrack.requestFrame(); } catch (_) {} };
+      rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 3500000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
 
@@ -948,14 +2027,26 @@ function TratamientoApp({ videoInicial }) {
           img.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
           document.body.appendChild(img);
           await new Promise((res) => { img.onload = res; img.onerror = res; img.src = item.imagenUrl; });
-          mediaEls.push({ el: img, tipo: 'imagen', duracion: 4 });
+          try { if (img.decode) await img.decode(); } catch (_) {}
+          mediaEls.push({ el: img, tipo: 'imagen', duracion: item.duracion || 4, inicio: 0, fin: null });
         } else if (item.videoUrl) {
           const vid = document.createElement('video');
           vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = item.videoUrl;
           vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
           document.body.appendChild(vid);
-          await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
-          mediaEls.push({ el: vid, tipo: 'video', duracion: vid.duration || 5 });
+          await new Promise((res) => {
+            let done = false;
+            const finish = () => { if (done) return; done = true; res(); };
+            vid.onloadeddata = finish;
+            vid.oncanplay = finish;
+            vid.onerror = finish;
+            setTimeout(finish, 1500);
+          });
+          const fullDur = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 5;
+          const inicio = item.inicio != null && isFinite(Number(item.inicio)) ? Number(item.inicio) : 0;
+          const fin = item.fin != null && isFinite(Number(item.fin)) ? Number(item.fin) : fullDur;
+          const segDur = item.duracion != null && isFinite(Number(item.duracion)) ? Number(item.duracion) : (fin > inicio ? fin - inicio : fullDur);
+          mediaEls.push({ el: vid, tipo: 'video', duracion: segDur, inicio, fin });
         }
       }
 
@@ -963,14 +2054,66 @@ function TratamientoApp({ videoInicial }) {
       let mediaIdx = 0;
       for (let i = 0; i < items.length; i++) {
         if (items[i].tipo === 'transicion') {
-          segs.push({ tipo: 'transicion', duracion: items[i].duracion || 2 });
+          segs.push({ tipo: 'transicion', modelo: items[i].modelo || 'crossfade', duracion: items[i].duracion || 2 });
         } else {
           if (mediaIdx < mediaEls.length) {
-            segs.push({ tipo: mediaEls[mediaIdx].tipo, el: mediaEls[mediaIdx].el, duracion: mediaEls[mediaIdx].duracion });
+            const me = mediaEls[mediaIdx];
+            segs.push({ tipo: me.tipo, el: me.el, duracion: me.duracion, inicio: me.inicio, fin: me.fin });
             mediaIdx++;
           }
         }
       }
+      // Pre-dibujar primer frame antes de iniciar grabación para evitar fotograma negro inicial (respeta inicio/fin del corte)
+      if (segs.length > 0) {
+        const first = segs[0];
+        if (first.tipo !== 'transicion' && first.el) {
+          if (first.tipo === 'imagen') {
+            try { ctx.drawImage(first.el, 0, 0, w, h); } catch (_) {}
+          } else {
+            const v = first.el;
+            const ini = first.inicio != null ? Number(first.inicio) : 0;
+            try {
+              if (Math.abs(v.currentTime - ini) > 0.05) {
+                await new Promise(res => {
+                  let done = false;
+                  const fin = () => { if (done) return; done = true; v.removeEventListener('seeked', fin); res(); };
+                  v.addEventListener('seeked', fin, { once: true });
+                  try { v.currentTime = ini; } catch (_) { fin(); }
+                  setTimeout(fin, 600);
+                });
+              }
+              await v.play().catch(() => {});
+            } catch (_) {}
+            if (v.readyState < 2) {
+              await new Promise(res => {
+                let done = false;
+                const fin = () => { if (done) return; done = true; res(); };
+                v.onloadeddata = fin; v.oncanplay = fin; v.onerror = fin;
+                setTimeout(fin, 600);
+              });
+            }
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            try { ctx.drawImage(v, 0, 0, w, h); } catch (_) {}
+            await new Promise(r => setTimeout(r, 80));
+          }
+        } else if (first.tipo === 'transicion') {
+          // dibujar el siguiente segmento no-transición como primer frame
+          const nextSeg = segs.find((s, i) => i > 0 && s.tipo !== 'transicion');
+          if (nextSeg && nextSeg.el) {
+            const el = nextSeg.el;
+            const ok = el.tagName === 'IMG' ? el.complete : el.readyState >= 2;
+            if (ok) {
+              try { ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+            } else {
+              ctx.fillStyle = '#111'; ctx.fillRect(0, 0, w, h);
+            }
+          } else {
+            ctx.fillStyle = '#111'; ctx.fillRect(0, 0, w, h);
+          }
+        }
+      }
+      rec.start(250);
+      requestFrame();
 
       const resultado = await new Promise((resolve) => {
         let terminado = false;
@@ -991,11 +2134,25 @@ function TratamientoApp({ videoInicial }) {
           setDescargandoMontaje(false);
           setProgresoDescarga(0);
           if (error) { resolve(null); return; }
-          rec.onstop = () => {
+          rec.onstop = async () => {
             const blob = new Blob(chunks, { type: mime });
-            const url = URL.createObjectURL(blob);
+            let finalBlob = blob;
+            let trimmed = false;
+            try {
+              setProgresoDescarga(100);
+              const fd = new FormData();
+              fd.append('video', blob, 'montaje.webm');
+              fd.append('trimStart', '0.2');
+              const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+              if (resp.ok) {
+                finalBlob = await resp.blob();
+                trimmed = true;
+              }
+            } catch (_) {}
+            const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             a.href = url; a.download = 'montaje.webm'; a.click();
+            setAviso(trimmed ? 'Montaje descargado (negro inicial recortado)' : 'Montaje descargado SIN recorte: enciende server.js (puerto 3001)');
             setTimeout(() => URL.revokeObjectURL(url), 5000);
             resolve(url);
           };
@@ -1010,28 +2167,66 @@ function TratamientoApp({ videoInicial }) {
           if (seg.tipo === 'transicion') {
             crossfadeElapsed += 1 / 30;
             const t = Math.min(crossfadeElapsed / seg.duracion, 1);
-            ctx.globalAlpha = 1;
-            if (prevEl) {
-              const ok = prevEl.tagName === 'IMG' ? prevEl.complete : prevEl.readyState >= 2;
-              if (ok) {
-                ctx.globalAlpha = 1 - t;
-                try { ctx.drawImage(prevEl, 0, 0, w, h); } catch (_) {}
-              }
+            const modelo = seg.modelo || 'crossfade';
+            const dibujar = (el, alpha) => {
+              if (!el) return;
+              const ok = el.tagName === 'IMG' ? el.complete : el.readyState >= 2;
+              if (!ok) return;
+              ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+              try { ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+            };
+            if (modelo === 'negro') {
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, w, h);
+              if (t < 0.5) dibujar(prevEl, 1 - t * 2);
+              else dibujar(nextEl, (t - 0.5) * 2);
+            } else if (modelo === 'flash') {
+              dibujar(t < 0.5 ? prevEl : nextEl, 1);
+              ctx.globalAlpha = Math.max(0, Math.min(1, 1 - Math.abs(2 * t - 1)));
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, w, h);
+            } else if (modelo === 'slide-left') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(nextEl, w * t, 0, w, h); } catch (_) {}
+              try { ctx.drawImage(prevEl, -w * (1 - t), 0, w, h); } catch (_) {}
+            } else if (modelo === 'slide-right') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(nextEl, -w * t, 0, w, h); } catch (_) {}
+              try { ctx.drawImage(prevEl, w * (1 - t), 0, w, h); } catch (_) {}
+            } else if (modelo === 'zoom-in') {
+              ctx.globalAlpha = 1;
+              dibujar(prevEl, 1 - t);
+              const s = 0.5 + t * 0.5;
+              const ox = w * (1 - s) / 2;
+              const oy = h * (1 - s) / 2;
+              try { ctx.drawImage(nextEl, ox, oy, w * s, h * s); } catch (_) {}
+            } else if (modelo === 'wipe') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(prevEl, 0, 0, w, h); } catch (_) {}
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(0, 0, w * t, h);
+              ctx.clip();
+              try { ctx.drawImage(nextEl, 0, 0, w, h); } catch (_) {}
+              ctx.restore();
+            } else {
+              ctx.globalAlpha = 1;
+              dibujar(prevEl, 1 - t);
+              dibujar(nextEl, t);
             }
-            if (nextEl) {
-              const ok = nextEl.tagName === 'IMG' ? nextEl.complete : nextEl.readyState >= 2;
-              if (ok) {
-                ctx.globalAlpha = t;
-                try { ctx.drawImage(nextEl, 0, 0, w, h); } catch (_) {}
-              }
-            }
             ctx.globalAlpha = 1;
+            requestFrame();
             if (crossfadeElapsed >= seg.duracion) {
               if (prevEl) { try { prevEl.pause && prevEl.pause(); } catch (_) {} }
               prevEl = nextEl;
               if (prevEl) {
                 if (prevEl.tagName === 'IMG') { /* images don't need play */ }
-                else { prevEl.currentTime = 0; prevEl.play().catch(() => {}); }
+                else {
+                  const ini = segs[currentSeg + 1] && segs[currentSeg + 1].inicio != null ? Number(segs[currentSeg + 1].inicio) : 0;
+                  try { if (Math.abs(prevEl.currentTime - ini) > 0.05) prevEl.currentTime = ini; } catch (_) {}
+                  prevEl.play().catch(() => {});
+                }
               }
               nextEl = null;
               crossfadeElapsed = 0;
@@ -1040,12 +2235,25 @@ function TratamientoApp({ videoInicial }) {
           } else {
             const el = seg.el;
             const esImagen = seg.tipo === 'imagen';
+            const segIni = seg.inicio != null ? Number(seg.inicio) : 0;
+            const segFin = seg.fin != null ? Number(seg.fin) : null;
             if (segElapsed <= 1 / 30 + 0.001 && !esImagen) {
-              el.currentTime = 0;
-              el.play().catch(() => {});
+              // evitar reset del primer segmento ya pre-reproducido (causaba seek y fotograma negro)
+              const cercaIni = Math.abs(el.currentTime - segIni) < 0.12;
+              const esPrimerPreroll = currentSeg === 0 && !el.paused && cercaIni && el.readyState >= 2;
+              if (!esPrimerPreroll) {
+                try { el.currentTime = segIni; } catch (_) {}
+                el.play().catch(() => {});
+              }
             }
-            try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
-            const ended = esImagen ? segElapsed >= seg.duracion : (el.ended || segElapsed >= seg.duracion);
+            // solo dibujar si hay frame válido, si no mantener frame anterior para no grabar negro
+            const ok = esImagen ? el.complete : el.readyState >= 2;
+            if (ok) {
+              try { ctx.globalAlpha = 1; ctx.drawImage(el, 0, 0, w, h); } catch (_) {}
+              requestFrame();
+            }
+            const pasadoFin = segFin != null && !esImagen ? el.currentTime >= segFin - 0.05 : false;
+            const ended = esImagen ? segElapsed >= seg.duracion : (pasadoFin || segElapsed >= seg.duracion);
             if (ended) {
               if (!esImagen) try { el.pause(); } catch (_) {}
               prevEl = el;
@@ -1055,7 +2263,11 @@ function TratamientoApp({ videoInicial }) {
                 const nextIdx = currentSeg + 1;
                 if (nextIdx < segs.length && segs[nextIdx].tipo !== 'transicion') {
                   nextEl = segs[nextIdx].el;
-                  if (nextEl.tagName !== 'IMG') { nextEl.currentTime = 0; nextEl.play().catch(() => {}); }
+                  if (nextEl.tagName !== 'IMG') {
+                    const ini = segs[nextIdx].inicio != null ? Number(segs[nextIdx].inicio) : 0;
+                    try { if (Math.abs(nextEl.currentTime - ini) > 0.05) nextEl.currentTime = ini; } catch (_) {}
+                    nextEl.play().catch(() => {});
+                  }
                 }
                 crossfadeElapsed = 0;
               }
@@ -1486,7 +2698,7 @@ function TratamientoApp({ videoInicial }) {
       drawNext();
     });
     if (onProgress) onProgress(100);
-    return URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+    return { url: URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), duracion: (totalFrames + 1) / 30 };
   };
 
   const animarElipses = async () => {
@@ -1588,40 +2800,43 @@ function TratamientoApp({ videoInicial }) {
       URL.revokeObjectURL(url);
       setProgresoVideo(10);
       let videoUrl = null;
+      let duracionAnim = 4;
       try {
         const figurasFn = (t) => {
           const p = Math.min(1, Math.max(0, (t - 200) / 3600));
           const e = 1 - Math.pow(1 - p, 3);
           return figuras.map(f => ({ ...f, crecimiento: e })).map(f => svgFigura(f, imgDim)).join('');
         };
-        videoUrl = await generarVideo(figurasFn, fondoLimpio, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
+        const gv = await generarVideo(figurasFn, fondoLimpio, imgDim.w, imgDim.h, (p) => setProgresoVideo(p));
+        videoUrl = gv.url;
+        duracionAnim = gv.duracion || 4;
+        try { videoDataUrlCacheRef.current.set(videoUrl, await videoBlobADataUrl(videoUrl)); } catch (_) {}
       } catch (e) {
         console.error('Error al generar el video de la captura', e);
         setAviso('No se pudo generar el vídeo de la animación. Se ha guardado la imagen.');
       }
       const nuevoId = Date.now() + Math.floor(Math.random() * 1000);
       const figurasCopia = normalizarFiguras(figuras);
-      const nuevaEntrada = { id: nuevoId, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
-      const idsExpulsadas = new Set((capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).map(c => c.id));
-      (capturas || []).filter(c => c && c.tiempo === capturaSeleccionada.tiempo).forEach(c => {
-        if (c.videoUrl && typeof c.videoUrl === 'string' && c.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(c.videoUrl); } catch (_) {} }
-      });
-      setCapturas(prev => [...(prev || []).filter(c => !(c && c.tiempo === capturaSeleccionada.tiempo)), nuevaEntrada]);
-      if (idsExpulsadas.size > 0) {
-        setFotoPorCorte(prevF => {
-          const copia = { ...prevF };
-          Object.keys(copia).forEach(k => {
-            const v = copia[k];
-            const arr = (Array.isArray(v) ? v : (v ? [v] : [])).filter(x => !idsExpulsadas.has(idDeFoto(x)));
-            if (arr.length === 0) delete copia[k];
-            else copia[k] = arr;
-          });
-          return copia;
-        });
+      const previa = (capturas || []).find(c => c && c.id === capturaSeleccionada.id);
+      const urlVieja = previa ? previa.videoUrl : null;
+      const idFinal = previa ? previa.id : nuevoId;
+      const nuevaEntrada = { id: idFinal, dataUrl: nueva, baseDataUrl: fondoLimpio, videoUrl, duracion: 4, duracionAnim, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo, insertarEn: capturaSeleccionada.tiempo ?? 0 };
+      if (previa) setCapturas(prev => prev.map(c => c && c.id === previa.id ? nuevaEntrada : c));
+      else setCapturas(prev => [...(prev || []), nuevaEntrada]);
+      if (urlVieja && urlVieja !== videoUrl && urlVieja.startsWith('blob:')) {
+        const sigueEnUso = filasMontaje.some(f => f.videoUrl === urlVieja);
+        if (!sigueEnUso) { try { URL.revokeObjectURL(urlVieja); } catch (_) {} }
       }
-      setCapturaGuardada({ id: nuevoId, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
+      setCapturaGuardada({ id: idFinal, dataUrl: nueva, videoUrl, duracion: 4, figuras: figurasCopia, tiempo: capturaSeleccionada.tiempo });
       setCapturaSeleccionada(nuevaEntrada);
-      asignarFotoACorte(nuevoId, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
+      asignarFotoACorte(idFinal, nueva, figurasCopia, capturaSeleccionada.tiempo, false, fondoLimpio);
+      setPreviewMontaje(prev => {
+        if (!prev || !prev.anims || !prev.anims.length || !videoUrl) return prev;
+        if (!urlVieja || !prev.anims.some(a => a.src === urlVieja)) return prev;
+        const nuevas = prev.anims.map(a => a.src === urlVieja ? { ...a, src: videoUrl, id: idFinal, dur: duracionAnim } : a);
+        return { ...prev, anims: nuevas };
+      });
+      return { id: idFinal, videoUrl, tiempo: capturaSeleccionada.tiempo, duracionAnim };
     } catch (e) {
       console.error('Error al guardar la captura', e);
     } finally {
@@ -1722,7 +2937,7 @@ function TratamientoApp({ videoInicial }) {
           </button>
         ))}
       </div>
-      {hoja === 'Presentación' ? (
+      {false ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.5rem', padding: '2rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
@@ -1994,19 +3209,6 @@ function TratamientoApp({ videoInicial }) {
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   </button>
-                  <button
-                    onClick={async () => {
-                      const videoBlobUrl = await generarVideoParaMontaje();
-                      if (videoBlobUrl) {
-                        setFilasMontaje(prev => [...prev, { id: Date.now(), videoUrl: videoBlobUrl, concepto: '' }]);
-                      }
-                      setHoja('Montaje');
-                    }}
-                    title="Exportar vídeo a Montaje"
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    Montaje
-                  </button>
                   {exportando && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '140px' }}>
                       <div style={{ flex: 1, height: '8px', background: 'var(--bg-secondary, #1e293b)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -2049,8 +3251,8 @@ function TratamientoApp({ videoInicial }) {
                               }}
                               style={{ width: '160px', borderRadius: '8px', border: '1px solid #334155', cursor: 'pointer' }}
                             />
-                          )}
-                          <button
+            )}
+            <button
                             onClick={() => setCapturas(prev => prev.filter(x => x.id !== c.id))}
                             title="Eliminar captura"
                             style={{ position: 'absolute', top: '4px', right: '4px', width: '22px', height: '22px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.9rem', lineHeight: '22px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
@@ -2086,6 +3288,137 @@ function TratamientoApp({ videoInicial }) {
                 )}
             </>
           )}
+        </div>
+      ) : hoja === 'Base de datos' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+          <div style={{ width: '100%', maxWidth: '800px' }}>
+            <input
+              ref={bdFileRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
+            />
+            <input
+              ref={bdVideoRef}
+              type="file"
+              accept="video/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                e.target.value = '';
+                const tgt = bdVideoTargetRef.current;
+                if (!f || !tgt) return;
+                const url = URL.createObjectURL(f);
+                if (tgt.kind === 'new') {
+                  setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
+                } else                 if (tgt.kind === 'arc') {
+                  const nid = Date.now() + Math.floor(Math.random() * 1000000);
+                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url, oculto: true }]);
+                  setArchivosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoRef: { kind: 'bd', id: nid } } : x));
+                } else if (tgt.kind === 'bd') {
+                  setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
+                } else {
+                  setCapturas(prev => prev.map(c => c && c.id === tgt.id ? { ...c, videoUrl: url } : c));
+                }
+                cargarVideoEnCortes(url, f.name);
+                bdVideoTargetRef.current = null;
+              }}
+            />
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
+              <thead>
+                <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
+                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', width: '180px' }}>DATOS</th>
+                   <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff' }}>VIDEO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {archivosBD.map(a => (
+                  <tr key={'arc_' + a.id}>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1.1rem' }}>📁</span>
+                        <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', marginLeft: '0.5rem' }}>{a.nombre}</span>
+                        <button onClick={() => setArchivosBD(prev => prev.filter(x => x.id !== a.id))} title="Quitar registro" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                      </div>
+                    </td>
+                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <select
+                          value=""
+                          title="Elegir vídeo del archivo"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            e.target.value = '';
+                            if (!val) return;
+                            if (val === '__file__') { bdVideoTargetRef.current = { kind: 'arc', id: a.id }; bdVideoRef.current?.click(); return; }
+                            const [kind, rid] = val.split(':');
+                            const nid = Number(rid);
+                            setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, videoRef: { kind, id: nid } } : x));
+                            if (kind === 'bd') {
+                              const vv = videosBD.find(x => x.id === nid);
+                              if (vv) cargarVideoEnCortes(vv.videoUrl, vv.nombre || 'video');
+                            } else {
+                              const cc = (capturas || []).find(x => x && x.id === nid);
+                              if (cc) cargarVideoEnCortes(cc.videoUrl, `Animación ${formatoTiempo(cc.tiempo ?? 0)}`);
+                            }
+                          }}
+                          style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', outline: 'none', cursor: 'pointer', maxWidth: '150px' }}
+                        >
+      <option value="">Vídeo…</option>
+      <option value="__file__">📁 Del PC…</option>
+                          {videosBD.length > 0 && (
+                            <optgroup label="Vídeos PC">
+                              {videosBD.map(x => <option key={'abd_' + x.id} value={'bd:' + x.id}>{x.nombre || 'video'}</option>)}
+                            </optgroup>
+                          )}
+    </select>
+                        {(() => {
+                          const ref = a.videoRef;
+                          if (!ref) return null;
+                          const nombre = ref.kind === 'bd'
+                            ? ((videosBD.find(x => x.id === ref.id) || {}).nombre || '')
+                            : formatoTiempo((((capturas || []).find(x => x && x.id === ref.id) || {}).tiempo ?? 0));
+                          return nombre ? <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', marginLeft: '2.5rem' }}>{nombre}</span> : null;
+                        })()}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                    {videosBD.filter(v => !v.oculto).map(v => (
+                      <tr key={'bd_' + v.id}>
+                        <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-start', alignItems: 'center' }}>
+                            {selectorCargar()}
+                            <button
+                              onClick={() => {
+                                setVideosBD(prev => prev.filter(x => x.id !== v.id));
+                              }}
+                              title="Eliminar vídeo"
+                              style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
+                            >×</button>
+                          </div>
+                        </td>
+                        <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'bd_' + v.id ? null : 'bd_' + v.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'bd_' + v.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start', marginBottom: '0.3rem' }}>
+                            <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{v.nombre}</div>
+                            <button onClick={() => { bdVideoTargetRef.current = { kind: 'bd', id: v.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
+                            {selectorVideoPin('bd', v.id)}
+                          </div>
+                           <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{v.nombre}</div>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                        {selectorCargar()}
+                      </td>
+                      <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'left' }}>
+                      </td>
+                    </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
@@ -2123,174 +3456,97 @@ function TratamientoApp({ videoInicial }) {
             )}
           </div>
           {videoUrlCortes && (
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch', width: '100%', maxWidth: '1080px' }}>
-            <video
-              ref={videoRefCortes}
-              src={videoUrlCortes}
-              muted
-              controls
-              playsInline
-              preload="metadata"
-              onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
-              style={{ flex: 1, minWidth: 0, borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button
-                onClick={() => {
-                  const v = videoRefCortes.current;
-                  if (!v) return;
-                  const t = v.currentTime || 0;
-                  const existe = cortes.some(c => Math.abs(c - t) < 0.3);
-                  if (existe) return;
-                  setCortes(prev => [...prev, t].sort((a, b) => a - b));
-                }}
-              style={{ background: '#ef4444', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-            >
-              Corte
-            </button>
-            </div>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Cortes ({cortes.length})
-            </span>
-            <button
-              onClick={exportarCortes}
-              title="Guardar cortes en archivo"
-              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-            >
-              Exportar
-            </button>
-            <label
-              title="Recuperar cortes desde archivo"
-              style={{ background: '#f97316', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.75rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-            >
-              Importar
-              <input
-                type="file"
-                accept=".json,application/json"
-                style={{ display: 'none' }}
-                onChange={(e) => { importarCortes(e.target.files && e.target.files[0]); e.target.value = ''; }}
-              />
-            </label>
-          </div>
-          {cortes.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.85rem' }}>
-              Sin cortes. Márcalos en Presentación activando el modo corte y pinchando en la línea de tiempo.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', maxWidth: '800px' }}>
-              {(() => {
-                const ord = [...cortes].sort((a, b) => b - a);
-                return ord.map((ct, i) => (
-                <div key={`corte-${i}`} onClick={() => { if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
-                  <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
-                  <span style={{ color: '#ef4444', fontWeight: 900, fontSize: '0.85rem', fontFamily: 'var(--font-mono, monospace)', minWidth: '70px' }}>{formatoTiempo(ct)}</span>
-                  <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                    P{ord.length - i}: {formatoTiempo(ct)} — {formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}
-                  </span>
-                  <input
-                    value={nombreCortes[String(ct)] ?? ''}
-                    onChange={(e) => { const v = e.target.value; setNombreCortes(prev => ({ ...prev, [String(ct)]: v })); }}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder="Nombre"
-                    style={{ flex: 1, minWidth: '100px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: Math.max(1, (prev[String(ct)] ?? 15) - 1) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
-                    <span style={{ color: '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
-                    <button onClick={(e) => { e.stopPropagation(); setDuracionCortes(prev => ({ ...prev, [String(ct)]: (prev[String(ct)] ?? 15) + 1 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
-                    <button onClick={async (e) => {
-                      e.stopPropagation();
-                      const src = videoUrlCortes || videoUrl;
-                      if (!src) { setAviso('Carga primero un vídeo para generar el clip'); return; }
-                      const dur = duracionCortes[String(ct)] ?? 15;
-                      const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - i}`;
-                      setGenerandoClip(ct);
-                      setProgresoClips(prev => ({ ...prev, [String(ct)]: 0 }));
-                      const t0Clip = Date.now();
-                      const intervaloClip = setInterval(() => {
-                        const pct = Math.min(99, Math.round(((Date.now() - t0Clip) / 1000 / Math.max(1, dur)) * 100));
-                        setProgresoClips(prev => ({ ...prev, [String(ct)]: pct }));
-                      }, 250);
-                      try {
-                        const blob = await generarClipCorte(src, Math.max(0, ct), dur);
-                        const url = URL.createObjectURL(blob);
-                        if (videoUrl && videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(videoUrl); } catch (_) {} }
-                        setArchivo({ name: `${nombre}.webm` });
-                        setNombreVideo(nombre);
-                        setVideoUrl(url);
-                        setProgreso(0);
-                        corteCargadoRef.current = Math.max(0, ct);
-                        clipOrigenRef.current = Math.max(0, ct);
-                        setHoja('Presentación');
-                      } catch (err) {
-                        console.error('Error generando el clip:', err);
-                        setAviso('No se pudo generar el clip: ' + ((err && err.message) || err));
-                      } finally {
-                        clearInterval(intervaloClip);
-                        setProgresoClips(prev => { const copia = { ...prev }; delete copia[String(ct)]; return copia; });
-                        setGenerandoClip(null);
-                      }
-                    }} title="Generar el clip y cargarlo en Presentación" disabled={generandoClip === ct} style={{ background: generandoClip === ct ? '#475569' : '#0ea5e9', color: '#fff', fontWeight: 800, fontSize: '0.65rem', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', cursor: generandoClip === ct ? 'wait' : 'pointer', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{generandoClip === ct ? `${progresoClips[String(ct)] ?? 0}%` : 'Presentación'}</button>
-                  </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); }}
-                      title={`Eliminar corte en ${formatoTiempo(ct)}`}
-                      style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
-                    >
-                      ×
-                    </button>
-                    {(() => {
-                      const lista = listaFotosCorte(ct);
-                      if (lista.length === 0) return null;
-                      return (
-                        <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
-                          {lista.map((f, fi) => {
-                            const capId = idDeFoto(f);
-                            const viva = capId != null ? capturas.find(c => c.id === capId) : null;
-                            const srcFoto = viva
-                              ? (viva.imagenEditada || viva.dataUrl)
-                              : (f && typeof f === 'object' ? f.dataUrl : null);
-                            if (!srcFoto) return null;
-                            if (!viva && (!f || typeof f !== 'object' || !Array.isArray(f.figuras) || f.figuras.length === 0)) return null;
-                            return (
-                              <div key={capId ?? fi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                              <img src={srcFoto} alt="Foto editada" title="Abrir foto para modificar"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (viva) {
-                                    setCapturaSeleccionada(viva);
-                                    setFiguras(normalizarFiguras(viva.figuras));
-                                  } else if (f && typeof f === 'object') {
-                                    const restaurada = { id: f.capturaId ?? Date.now(), dataUrl: f.baseDataUrl || f.dataUrl, videoUrl: null, duracion: 4, figuras: normalizarFiguras(f.figuras), tiempo: ct, insertarEn: null };
-                                    setCapturas(prev => prev.some(c => c.id === restaurada.id) ? prev : [...prev, restaurada]);
-                                    setCapturaSeleccionada(restaurada);
-                                    setFiguras(restaurada.figuras);
-                                  } else {
-                                    return;
-                                  }
-                                  setFiguraSeleccionada(null);
-                                  setCapturaGuardada(null);
-                                  setImgDim(null);
-                                  setHoja('Edición');
-                                }}
-                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #38bdf8', cursor: 'pointer', flexShrink: 0 }} />
-                              {viva && viva.videoUrl && (
-                                <span title="Instante del vídeo animado" style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#22c55e' }}>
-                                  {formatoTiempo(viva.insertarEn ?? viva.tiempo ?? ct)}
-                                </span>
-                              )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
+                <video
+                  ref={videoRefCortes}
+                  src={videoUrlCortes}
+                  muted
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
+                  style={{ width: '100%', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2rem', alignItems: 'center' }}>
+                  <button
+                    onClick={() => {
+                      const v = videoRefCortes.current;
+                      if (!v) return;
+                      const t = v.currentTime || 0;
+                      const existe = cortes.some(c => Math.abs(c - t) < 0.3);
+                      if (existe) return;
+                      setCortes(prev => [...prev, t].sort((a, b) => a - b));
+                    }}
+                  style={{ background: '#ef4444', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Corte
+                  </button>
+                  {cortes.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <select value={corteSelMontaje} onChange={(e) => setCorteSelMontaje(e.target.value)} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.6rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', outline: 'none' }}>
+                        <option value="todos">Todos</option>
+                        {[...cortes].sort((a, b) => b - a).map((ct, idx) => {
+                          const num = [...cortes].sort((a, b) => b - a).length - idx;
+                          return <option key={ct} value={ct}>{num}</option>;
+                        })}
+                      </select>
+                      <button onClick={() => {
+                        const ord = [...cortes].sort((a, b) => b - a);
+                        const cortesAEnviar = corteSelMontaje === 'todos' ? cortes : [Number(corteSelMontaje)];
+                        const nuevas = cortesAEnviar.map((ct) => {
+                          const dur = duracionCortes[String(ct)] ?? 15;
+                          const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
+                          const ini = Math.max(0, ct);
+                          const fin = ini + dur;
+                          const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
+                          if (existente) return null;
+                          return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
+                        }).filter(Boolean);
+                        if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
+                        setFilasMontaje(prev => [...prev, ...nuevas]);
+                        setHoja('Montaje');
+                      }} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
+                        Montaje
+                      </button>
+                    </div>
+                  )}
                 </div>
-                ));
-              })()}
+              </div>
+              {cortes.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '0 0 auto', width: '380px', maxHeight: '60vh', overflowY: 'auto' }}>
+                  {(() => {
+                    const ord = [...cortes].sort((a, b) => b - a);
+                    return ord.map((ct, i) => (
+                    <div key={`corte-${i}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
+                      <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
+                      <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
+                        <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
+                      </span>
+                      <input
+                        value={nombreCortes[String(ct)] ?? ''}
+                        onChange={(e) => { const v = e.target.value; setNombreCortes(prev => ({ ...prev, [String(ct)]: v })); }}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Nombre"
+                        style={{ flex: 1, minWidth: '80px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = Math.max(1, dur - 1); setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = Math.max(0, ct - 1); if (nuevo === ct || cortes.includes(nuevo)) return; const nk = String(nuevo); const nd = (ct + dur) - nuevo; setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Retroceder el inicio del corte 1s (fin fijo)" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                        <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '32px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
+                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = dur + 1; setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = ct + 1; const nd = (ct + dur) - nuevo; if (nd < 1 || cortes.includes(nuevo)) return; const nk = String(nuevo); setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Avanzar el inicio del corte 1s (fin fijo)" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                      </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); setFilasMontaje(prev => prev.filter(f => f.inicio != null && Math.abs(f.inicio - ct) > 0.01)); }}
+                          title={`Eliminar corte en ${formatoTiempo(ct)}`}
+                          style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
+                        >
+                          ×
+                        </button>
+                    </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2320,7 +3576,35 @@ function TratamientoApp({ videoInicial }) {
                 </svg>
               </button>
               <button
-                onClick={guardarCaptura}
+                onClick={async () => {
+                  const r = await guardarCaptura();
+                  if (!r || !r.videoUrl) return;
+                  const base = videoUrlCortes || videoUrl;
+                  const t = Math.max(0, r.tiempo ?? 0);
+                  deseaPlayPreviewRef.current = true;
+                  setFasePreview('base');
+                  prevTPreviewRef.current = null;
+                  limpiarTimerAnim();
+                  animMostradasRef.current.clear(); animActualRef.current = null;
+                  if (base) {
+                    const linea = filasMontaje.find(f => f.inicio != null && f.fin != null && t >= f.inicio && t <= f.fin);
+                    const ini = linea ? linea.inicio : t;
+                    const fin = linea ? linea.fin : t + 4;
+                    const conceptoLinea = (linea && linea.concepto) || '';
+                    const previas = (capturas || [])
+                      .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+                      .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4, id: c.id }));
+                    const nuevaAnim = { src: r.videoUrl, en: t, dur: r.duracionAnim || 4, id: r.id };
+                    const ixR = previas.findIndex(a => String(a.id) === String(r.id));
+                    if (ixR >= 0) previas[ixR] = nuevaAnim; else previas.push(nuevaAnim);
+                    previas.sort((a, b) => a.en - b.en);
+                    setPreviewMontaje({ src: base, inicio: ini, fin, anims: previas, concepto: conceptoLinea });
+                    try { localStorage.setItem('preview_anim', JSON.stringify({ inicio: ini, fin, concepto: conceptoLinea, anims: previas.map(a => ({ capturaId: a.id, en: a.en, dur: a.dur })) })); } catch (_) {}
+                  } else {
+                    setPreviewMontaje({ src: r.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY });
+                  }
+                  setHoja('Montaje');
+                }}
                 disabled={exportando}
                 style={{ background: '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: exportando ? 'wait' : 'pointer', opacity: exportando ? 0.6 : 1 }}
               >
@@ -3207,63 +4491,6 @@ function TratamientoApp({ videoInicial }) {
                     </svg>
                   )}
                 </div>
-                {capturaGuardada && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
-                    <div style={{ position: 'relative', display: 'inline-block' }}>
-                      {capturaGuardada.videoUrl ? (
-                        <video
-                          src={capturaGuardada.videoUrl}
-                          muted
-                          controls
-                          playsInline
-                          onLoadedMetadata={(e) => setCapturaDuracion(e.currentTarget.duration || 0)}
-                          onClick={(e) => {
-                            const v = e.currentTarget;
-                            if (v.paused) v.play(); else v.pause();
-                          }}
-                          style={{ width: '320px', borderRadius: '8px', border: '2px solid #16a34a', background: '#000000', cursor: 'pointer' }}
-                        />
-                      ) : (
-                        <img
-                          src={capturaGuardada.dataUrl}
-                          alt="Captura guardada"
-                          style={{ width: '160px', borderRadius: '8px', border: '2px solid #16a34a' }}
-                        />
-                      )}
-                      <button
-                        onClick={() => {
-                          setCapturas(prev => prev.filter(x => x.id !== capturaGuardada.id));
-                          setCapturaGuardada(null);
-                        }}
-                        title="Borrar el video modificado"
-                        style={{ position: 'absolute', top: '4px', right: '4px', width: '24px', height: '24px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '1rem', lineHeight: '24px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    {capturaDuracion != null && (
-                      <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.75rem', color: '#94a3b8' }}>
-                        Duración: {formatoTiempo(capturaDuracion)}
-                      </span>
-                    )}
-                    {capturaGuardada.videoUrl && (
-                      <button
-                        onClick={() => {
-                          const a = document.createElement('a');
-                          a.href = capturaGuardada.videoUrl;
-                          a.download = 'animacion.webm';
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                        }}
-                        style={{ background: '#16a34a', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Descargar
-                      </button>
-                    )}
-                  </div>
-                )}
                 <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.8rem', color: '#94a3b8' }}>
                     Captura {formatoTiempo(capturaSeleccionada.tiempo)}
                   </span>
@@ -3288,14 +4515,13 @@ function TratamientoApp({ videoInicial }) {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataUrl = reader.result;
+                  const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '', duracion: 4 };
                   setFilasMontaje(prev => {
-                    const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '' };
-                    if (filaSeleccionada != null) {
-                      const copy = [...prev];
-                      copy.splice(filaSeleccionada, 0, nueva);
-                      return copy;
-                    }
-                    return [...prev, nueva];
+                    const ix = prev.findIndex(f => lineasSelMontaje[f.id]);
+                    if (ix < 0) return [...prev, nueva];
+                    const copy = [...prev];
+                    copy.splice(ix, 0, nueva);
+                    return copy;
                   });
                 };
                 reader.readAsDataURL(file);
@@ -3304,154 +4530,371 @@ function TratamientoApp({ videoInicial }) {
             />
             <button onClick={() => imagenInputRef.current?.click()} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Imagen</button>
             <button
-              onClick={() => {
-                setFilasMontaje(prev => {
-                  if (prev.length < 2) return prev;
-                  const resultado = [];
-                  for (let i = 0; i < prev.length; i++) {
-                    resultado.push(prev[i]);
-                    const esUltimo = i === prev.length - 1;
-                    if (!esUltimo && prev[i].tipo !== 'transicion' && prev[i + 1].tipo !== 'transicion') {
-                      resultado.push({ id: Date.now() + i, tipo: 'transicion', videoUrl: null, imagenUrl: null, concepto: 'Crossfade 2s', duracion: 2 });
-                    }
-                  }
-                  return resultado;
-                });
-              }}
+              onClick={() => setShowTransiciones(true)}
               style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}
             >Transiciones</button>
+            {showTransiciones && (
+              <div onClick={() => setShowTransiciones(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+                <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '360px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                  <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Transiciones</div>
+                  {[
+                    { id: 'crossfade', nombre: 'Fundido cruzado' },
+                    { id: 'negro', nombre: 'Fundido a negro' },
+                    { id: 'flash', nombre: 'Flash blanco' },
+                    { id: 'slide-left', nombre: 'Deslizar izquierda' },
+                    { id: 'slide-right', nombre: 'Deslizar derecha' },
+                    { id: 'zoom-in', nombre: 'Zoom entrada' },
+                    { id: 'wipe', nombre: 'Barrido' },
+                  ].map(m => (
+                    <div key={m.id} onClick={() => { setModeloTransSel(m.id); insertarTransicion(m.id, durTrans[m.id], false, false); }} title="Aplicar esta transición" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: modeloTransSel === m.id ? 'rgba(250,204,21,0.85)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem', cursor: 'pointer' }}>
+                      <span style={{ flex: 1, color: modeloTransSel === m.id ? '#0f172a' : '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif' }}>{m.nombre}</span>
+                      <button onClick={(e) => { e.stopPropagation(); setDurTrans(p => ({ ...p, [m.id]: Math.max(0.3, Math.round((p[m.id] - 0.5) * 10) / 10) })); }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                      <span style={{ color: modeloTransSel === m.id ? '#0f172a' : '#22c55e', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '44px', textAlign: 'center' }}>{durTrans[m.id]}s</span>
+                      <button onClick={(e) => { e.stopPropagation(); setDurTrans(p => ({ ...p, [m.id]: Math.round((p[m.id] + 0.5) * 10) / 10 })); }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.7rem' }}>
+                    <div
+                      onClick={() => {
+                        const v = !todasTrans;
+                        setTodasTrans(v);
+                        if (v) insertarTransicion('crossfade', durTrans.crossfade, true, false);
+                        else setFilasMontaje(prev => prev.filter(f => f.tipo !== 'transicion'));
+                      }}
+                      title="Transiciones en todas las líneas"
+                      style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: todasTrans ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
+                  </div>
+                  <button onClick={() => setShowTransiciones(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cerrar</button>
+                </div>
+              </div>
+            )}
+            {showModalDescarga && (() => {
+              const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
+              return (
+                <div onClick={() => setShowModalDescarga(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+                  <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '380px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                    <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Descargar</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>{marcadas.length} {marcadas.length === 1 ? 'linea marcada' : 'lineas marcadas'}</div>
+                    <button
+                      onClick={async () => {
+                        setShowModalDescarga(false);
+                        for (let i = 0; i < marcadas.length; i++) {
+                          const nombre = (marcadas[i].concepto || '').trim() || `video_${i + 1}`;
+                          await descargarLineas([marcadas[i]], nombre);
+                        }
+                      }}
+                      disabled={descargandoMontaje}
+                      style={{ background: '#22c55e', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
+                    >
+                      Descargar cada uno por separado
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowModalDescarga(false);
+                        await descargarLineas(marcadas);
+                      }}
+                      disabled={descargandoMontaje}
+                      style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
+                    >
+                      Descargar todo junto
+                    </button>
+                    <button onClick={() => setShowModalDescarga(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              );
+            })()}
             <button
-              onClick={() => descargarMontaje()}
+              onClick={() => {
+                const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
+                if (!marcadas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+                setShowModalDescarga(true);
+              }}
               disabled={descargandoMontaje}
               style={{ background: descargandoMontaje ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: descargandoMontaje ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
               {descargandoMontaje && <span style={{ fontFamily: 'monospace' }}>{progresoDescarga}%</span>}
               Descargar
             </button>
-            {descargandoMontaje && (
-              <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ flex: 1, height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${progresoDescarga}%`, height: '100%', background: '#22c55e', borderRadius: '3px', transition: 'width 0.3s' }} />
-                </div>
-              </div>
-            )}
+            <button
+              onClick={() => exportarMontaje()}
+              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Exportar
+            </button>
+            <button
+              onClick={async () => {
+                if (serverOn) { await comprobarServidor(); return; }
+                setAviso('Iniciando servidor de recorte...');
+                try {
+                  const r = await fetch('/iniciar-servidor');
+                  if (!r.ok) { setAviso('Solo disponible en localhost'); return; }
+                  const d = await r.json().catch(() => ({}));
+                  if (d && d.ok) setAviso(d.ya ? 'Servidor ya en marcha (puerto 3001)' : 'Servidor iniciado (puerto 3001)');
+                  else setAviso('No se pudo iniciar el servidor' + (d && d.error ? ': ' + d.error : ''));
+                } catch (e) {
+                  setAviso('Solo disponible en localhost');
+                }
+                await comprobarServidor();
+              }}
+              title={serverOn ? 'Servidor conectado (pulsar para re-comprobar)' : 'Servidor desconectado (pulsar para iniciar)'}
+              style={{ background: serverOn ? '#16a34a' : '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: serverOn ? '#4ade80' : '#ef4444', display: 'inline-block' }} />
+              Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
+            </button>
+            <button
+              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
+            >
+              Limpiar
+            </button>
           </div>
-          <div style={{ width: '100%', maxWidth: '900px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
-              <thead>
-                <tr style={{ background: 'rgba(14,165,233,0.15)' }}>
-                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '50px' }}>#</th>
-                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '300px' }}>Video</th>
-                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8' }}>Concepto</th>
-                  <th style={{ border: '1px solid #334155', padding: '0.6rem 1rem', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#94a3b8', width: '80px' }}>Mover</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filasMontaje.length > 0 ? filasMontaje.map((fila, i) => (
-                  <tr
-                    key={fila.id}
-                    draggable
-                    onClick={() => setFilaSeleccionada(filaSeleccionada === i ? null : i)}
-                    onDragStart={() => setFilaArrastrando(i)}
-                    onDragOver={(e) => { e.preventDefault(); }}
-                    onDrop={() => {
-                      if (filaArrastrando === null || filaArrastrando === i) return;
-                      setFilasMontaje(prev => {
-                        const copy = [...prev];
-                        const [moved] = copy.splice(filaArrastrando, 1);
-                        copy.splice(i, 0, moved);
-                        return copy;
-                      });
-                      setFilaArrastrando(null);
-                    }}
-                    onDragEnd={() => setFilaArrastrando(null)}
-                    style={{ background: filaSeleccionada === i ? 'rgba(56,189,248,0.25)' : filaArrastrando === i ? 'rgba(14,165,233,0.3)' : (i % 2 === 0 ? 'rgba(30,41,59,0.5)' : 'rgba(15,23,42,0.5)'), cursor: 'grab', opacity: filaArrastrando === i ? 0.5 : 1 }}
-                  >
-                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>{i + 1}</td>
-                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      {fila.tipo === 'transicion' ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '250px', margin: '0 auto' }}>
-                          <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #38bdf8, transparent)' }} />
-                          <span style={{ color: '#38bdf8', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>Crossfade · 2s</span>
-                          <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, transparent, #38bdf8, transparent)' }} />
-                        </div>
-                      ) : (
-                        <div style={{ position: 'relative', display: 'inline-block' }}>
-                          {fila.tipo === 'imagen' && fila.imagenUrl ? (
-                            <img
-                              src={fila.imagenUrl}
-                              alt={`Imagen ${i + 1}`}
-                              style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155' }}
-                            />
-                          ) : fila.videoUrl ? (
-                            <video
-                              src={fila.videoUrl}
-                              muted
-                              controls
-                              playsInline
-                              style={{ width: '250px', borderRadius: '6px', background: '#000000' }}
-                            />
-                          ) : (
-                            <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Sin video</span>
+          <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
+          <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div
+                onClick={() => setLineasSelMontaje(prev => {
+                  const todas = filasMontaje.length > 0 && filasMontaje.every(f => prev[f.id]);
+                  if (todas) return {};
+                  const o = {};
+                  filasMontaje.forEach(f => { o[f.id] = true; });
+                  return o;
+                })}
+                title="Seleccionar todas las líneas"
+                style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: (filasMontaje.length > 0 && filasMontaje.every(f => lineasSelMontaje[f.id])) ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
+            </div>
+            {filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
+              <div key={fila.id} draggable
+                onClick={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setFilaSelMontaje(prev => prev === fila.id ? null : fila.id); }}
+                onMouseDown={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setLineaArrastre(i); }}
+                onMouseUp={() => { if (!lineaArrastrandoRef.current) setLineaArrastre(null); }}
+                onDragStart={() => { lineaArrastrandoRef.current = true; setLineaArrastre(i); }}
+                onDragOver={(e) => { e.preventDefault(); }}
+                onDrop={() => {
+                  lineaArrastrandoRef.current = false;
+                  if (lineaArrastre === null || lineaArrastre === i) { setLineaArrastre(null); return; }
+                  const idMovida = filasMontaje[lineaArrastre] ? filasMontaje[lineaArrastre].id : null;
+                  setFilasMontaje(prev => {
+                    const copy = [...prev];
+                    const [moved] = copy.splice(lineaArrastre, 1);
+                    copy.splice(i, 0, moved);
+                    return copy;
+                  });
+                  if (idMovida != null) setLineasSelMontaje(prev => { const c = { ...prev }; delete c[idMovida]; return c; });
+                  setLineaArrastre(null);
+                }}
+                onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
+                title="Arrastra para mover la fila (clic para seleccionar)"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: (fila.tipo === 'imagen' || fila.tipo === 'transicion') ? 'auto' : 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
+                {fila.tipo !== 'transicion' && <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
+                <div
+                  data-sq="1"
+                  onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
+                  title="Seleccionar línea"
+                  style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: lineasSelMontaje[fila.id] ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
+                />
+                {(() => {
+                  const listaEd = capsEditadasDeLinea(fila);
+                  if (listaEd.length === 0) return null;
+                  return (
+                    <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                      {listaEd.map((capEd) => (
+                        <div key={capEd.id} style={{ position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                          <div style={{ position: 'relative' }}>
+                          <img src={capEd.dataUrl} alt="Imagen editada" title="Abrir en Edición" draggable={false}
+                            onClick={() => { setCapturaSeleccionada(capEd); setFiguras(normalizarFiguras(capEd.figuras)); setFiguraSeleccionada(null); setCapturaGuardada(null); setImgDim(null); setHoja('Edición'); }}
+                            style={{ width: '80px', borderRadius: '4px', border: '1px solid #38bdf8', cursor: 'pointer', display: 'block' }} />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCapturas(prev => {
+                                const t = prev.find(c => c.id === capEd.id);
+                                if (t && t.videoUrl) return prev.map(c => c.id === capEd.id ? { ...c, dataUrl: null, baseDataUrl: null, imagenEditada: null } : c);
+                                return prev.filter(c => c.id !== capEd.id);
+                              });
+                            }}
+                            title="Borrar foto"
+                            style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', background: '#dc2626', border: 'none', borderRadius: '5px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', lineHeight: '18px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
+                          >×</button>
+                          </div>
+                          {capEd.tiempo != null && (
+                            <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#94a3b8' }}>{formatoTiempo(capEd.tiempo)}</span>
                           )}
-                          {fila.concepto && (
-                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '4px 6px', background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', textAlign: 'center', borderRadius: '6px 6px 0 0', pointerEvents: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {fila.concepto}
-                            </div>
-                          )}
                         </div>
-                      )}
-                    </td>
-                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem' }}>
-                      <input
-                        value={fila.concepto}
-                        onChange={(e) => {
-                          setFilasMontaje(prev => prev.map((f, idx) => idx === i ? { ...f, concepto: e.target.value } : f));
-                        }}
-                        placeholder="Escribe el concepto..."
-                        style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.5rem 0.75rem', color: '#e2e8f0', fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
-                        <button
-                          onClick={() => {
-                            if (i === 0) return;
-                            setFilasMontaje(prev => {
-                              const copy = [...prev];
-                              [copy[i - 1], copy[i]] = [copy[i], copy[i - 1]];
-                              return copy;
-                            });
-                          }}
-                          disabled={i === 0}
-                          style={{ background: 'transparent', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? '#475569' : '#94a3b8', fontSize: '1rem', padding: '0.2rem' }}
-                          title="Subir"
-                        >▲</button>
-                        <button
-                          onClick={() => {
-                            if (i === filasMontaje.length - 1) return;
-                            setFilasMontaje(prev => {
-                              const copy = [...prev];
-                              [copy[i], copy[i + 1]] = [copy[i + 1], copy[i]];
-                              return copy;
-                            });
-                          }}
-                          disabled={i === filasMontaje.length - 1}
-                          style={{ background: 'transparent', border: 'none', cursor: i === filasMontaje.length - 1 ? 'default' : 'pointer', color: i === filasMontaje.length - 1 ? '#475569' : '#94a3b8', fontSize: '1rem', padding: '0.2rem' }}
-                          title="Bajar"
-                        >▼</button>
-                      </div>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={4} style={{ border: '1px solid #334155', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                      No hay filas. Haz clic en "Agregar" para añadir una.
-                    </td>
-                  </tr>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {fila.inicio != null && fila.fin != null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
+                      <span onClick={() => { setSelPeriodoMontaje(p => ({ ...p, [fila.id]: p[fila.id] === 'ini' ? null : 'ini' })); abrirPreviewLinea(fila, fila.inicio, false); }} title="Seleccionar inicio" style={{ cursor: 'pointer', color: selPeriodoMontaje[fila.id] === 'ini' ? '#ef4444' : '#ffffff', textDecoration: selPeriodoMontaje[fila.id] === 'ini' ? 'underline' : 'none' }}>{formatoTiempo(fila.inicio)}</span>
+                      —
+                      <span onClick={() => { setSelPeriodoMontaje(p => ({ ...p, [fila.id]: p[fila.id] === 'fin' ? null : 'fin' })); abrirPreviewLinea(fila, fila.fin, false); }} title="Seleccionar fin" style={{ cursor: 'pointer', color: selPeriodoMontaje[fila.id] === 'fin' ? '#ef4444' : '#ffffff', textDecoration: selPeriodoMontaje[fila.id] === 'fin' ? 'underline' : 'none' }}>{formatoTiempo(fila.fin)}</span>
+                    </span>
+                    <button onClick={(e) => {
+                      e.stopPropagation();
+                      const esIni = selPeriodoMontaje[fila.id] === 'ini';
+                      if (esIni) {
+                        const nuevo = Math.max(0, fila.inicio - 1);
+                        const dur = fila.fin - nuevo;
+                        const oldKey = String(fila.inicio);
+                        const cortesIdx = cortes.indexOf(fila.inicio);
+                        if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
+                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
+                      } else {
+                        const dur = Math.max(1, (fila.duracion ?? (fila.fin - fila.inicio)) - 1);
+                        const newFin = fila.inicio + dur;
+                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, fin: newFin, duracion: dur }));
+                        setDuracionCortes(prev => ({ ...prev, [String(fila.inicio)]: dur }));
+                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = newFin; } catch (_) {} } });
+                      }
+                    }} style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                    <button onClick={(e) => {
+                      e.stopPropagation();
+                      const esIni = selPeriodoMontaje[fila.id] === 'ini';
+                      if (esIni) {
+                        const nuevo = fila.inicio + 1;
+                        if (nuevo >= fila.fin) return;
+                        const dur = fila.fin - nuevo;
+                        const oldKey = String(fila.inicio);
+                        const cortesIdx = cortes.indexOf(fila.inicio);
+                        if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
+                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
+                      } else {
+                        const dur = (fila.duracion ?? (fila.fin - fila.inicio)) + 1;
+                        const newFin = fila.inicio + dur;
+                        setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, fin: newFin, duracion: dur }));
+                        setDuracionCortes(prev => ({ ...prev, [String(fila.inicio)]: dur }));
+                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = newFin; } catch (_) {} } });
+                      }
+                    }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                  </div>
                 )}
-              </tbody>
-            </table>
+                {fila.tipo !== 'imagen' && fila.tipo !== 'transicion' && (
+                <input
+                  value={fila.concepto || ''}
+                  onChange={(e) => { setFilasMontaje(prev => prev.map((f) => f.id === fila.id ? { ...f, concepto: e.target.value } : f)); }}
+                  placeholder="Escribe nombre o concepto..."
+                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', outline: 'none', width: '220px' }}
+                />
+                )}
+                {fila.tipo === 'transicion' && (
+                  <span style={{ color: '#000000', fontWeight: 800, fontSize: '0.85rem', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>{fila.concepto || 'Transición'}</span>
+                )}
+                {fila.imagenUrl ? (
+                  <img src={fila.imagenUrl} alt={`Imagen ${i + 1}`} draggable={false} style={{ width: '80px', borderRadius: '4px', border: '1px solid #334155', flexShrink: 0 }} />
+                ) : fila.videoUrl ? (
+                  <video src={fila.videoUrl} muted controls playsInline style={{ width: '200px', borderRadius: '6px', background: '#000000', flexShrink: 0 }} />
+                ) : null}
+                {fila.inicio != null && fila.fin != null && (
+                  <button
+                    onClick={() => {
+                      prevTPreviewRef.current = null;
+                      limpiarTimerAnim();
+                      animMostradasRef.current.clear(); animActualRef.current = null;
+                      if (fila.videoUrl) {
+                        deseaPlayPreviewRef.current = true;
+                        setFasePreview('base');
+                        setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: fila.concepto || '', anims: [] });
+                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {} } });
+                        return;
+                      }
+                      const src = videoUrlCortes || videoUrl;
+                      if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
+                      abrirPreviewLinea(fila);
+                    }}
+                    title="Ver fragmento entre inicio y fin"
+                    style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                  >▶</button>
+                )}
+                {fila.tipo !== 'imagen' && fila.tipo !== 'transicion' && (
+                <button
+                  onClick={() => {
+                    const v = previewVideoRef.current;
+                    if (!v || !v.videoWidth) { setAviso('Abre primero el fragmento con el botón play'); return; }
+                    const c = document.createElement('canvas');
+                    c.width = v.videoWidth;
+                    c.height = v.videoHeight;
+                    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+                    const nueva = { id: Date.now(), dataUrl: c.toDataURL('image/png'), tiempo: v.currentTime };
+                    setFiguras([]);
+                    setFiguraSeleccionada(null);
+                    setCapturaSeleccionada(nueva);
+                    setCapturaGuardada(null);
+                    setImgDim(null);
+                    setHoja('Edición');
+                  }}
+                  title="Enviar instantánea a Edición"
+                  style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                >📷</button>
+                )}
+                <button
+                  onClick={() => {
+                    if (fila.videoUrl && fila.videoUrl.startsWith('blob:')) { try { URL.revokeObjectURL(fila.videoUrl); } catch (_) {} }
+                    setFilasMontaje(prev => prev.filter((f) => f.id !== fila.id));
+                  }}
+                  title="Eliminar línea"
+                  style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                >×</button>
+              </div>
+            ))}
+          {lineaArrastre !== null && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={() => {
+                lineaArrastrandoRef.current = false;
+                if (lineaArrastre === null) return;
+                const idMovida = filasMontaje[lineaArrastre] ? filasMontaje[lineaArrastre].id : null;
+                setFilasMontaje(prev => {
+                  const copy = [...prev];
+                  const [moved] = copy.splice(lineaArrastre, 1);
+                  copy.push(moved);
+                  return copy;
+                });
+                if (idMovida != null) setLineasSelMontaje(prev => { const c = { ...prev }; delete c[idMovida]; return c; });
+                setLineaArrastre(null);
+              }}
+              title="Soltar aquí para poner al final"
+              style={{ marginTop: '0.6rem', minHeight: '44px', border: '1px dashed #38bdf8', borderRadius: '8px' }}
+            ></div>
+          )}
+          </div>
+          {previewMontaje && (
+            <div style={{ flex: '1 1 auto', background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', position: 'sticky', top: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.6rem', minHeight: '26px' }}>
+                  {fasePreview === 'anim' && (
+                  <span style={{ background: '#8b5cf6', color: '#ffffff', fontWeight: 800, fontSize: '0.7rem', padding: '0.2rem 0.6rem', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Animación</span>
+                )}
+                <button onClick={() => { try { localStorage.removeItem('preview_anim'); } catch (_) {} limpiarTimerAnim(); setPreviewMontaje(null); }} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ position: 'relative' }}>
+              <video
+                ref={previewVideoRef}
+                src={fasePreview === 'anim' && animActualRef.current ? animActualRef.current.src : previewMontaje.src}
+                controls
+                playsInline
+                style={{ width: '100%', borderRadius: '8px', background: '#000000', display: 'block' }}
+                onLoadedMetadata={(e) => { const v = e.currentTarget; const anim = (fasePreview === 'anim' && animActualRef.current) ? animActualRef.current : null; const seekTo = retomarEnRef.current ?? (anim ? 0 : Math.max(0, previewMontaje.inicio)); retomarEnRef.current = null; try { v.currentTime = seekTo; } catch (_) {} setPreviewT(seekTo); setPreviewDur(v.duration || 0); prevTPreviewRef.current = seekTo; if (deseaPlayPreviewRef.current) { deseaPlayPreviewRef.current = false; v.play().catch(() => {}); } }}
+                onTimeUpdate={(e) => { const v = e.currentTarget; setPreviewT(v.currentTime); if (fasePreview === 'anim') { const aa = animActualRef.current; prevTPreviewRef.current = ((aa && aa.en) ?? 0) + 0.1; return; } const prev = prevTPreviewRef.current ?? v.currentTime; prevTPreviewRef.current = v.currentTime; const cand = (previewMontaje.anims || []).find(a => a && a.src && !animMostradasRef.current.has(String(a.id ?? a.src)) && prev <= a.en && v.currentTime >= a.en); if (cand) { animMostradasRef.current.add(String(cand.id ?? cand.src)); animActualRef.current = cand; deseaPlayPreviewRef.current = true; setFasePreview('anim'); if (!animTimerRef.current) { const ms = Math.max(1500, ((cand.dur || 4) * 1000) + 800); animTimerRef.current = setTimeout(() => { animTimerRef.current = null; const a2 = animActualRef.current; retomarEnRef.current = ((a2 && a2.en) ?? 0) + 0.1; deseaPlayPreviewRef.current = true; setFasePreview('base'); }, ms); } return; } if (v.currentTime >= previewMontaje.fin) v.pause(); }}
+                onEnded={() => { const a = animActualRef.current; if (fasePreview === 'anim' && a) { limpiarTimerAnim(); retomarEnRef.current = (a.en ?? 0) + 0.1; deseaPlayPreviewRef.current = true; setFasePreview('base'); } }}
+                onPlay={() => setPreviewPlaying(true)}
+                onPause={() => setPreviewPlaying(false)}
+              />
+              {!!previewMontaje.concepto && (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <span style={{ background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontWeight: 800, fontSize: '1rem', fontFamily: 'Inter, sans-serif', padding: '0.25rem 0.9rem', borderRadius: '0 0 8px 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90%' }}>{previewMontaje.concepto}</span>
+                </div>
+              )}
+              </div>
+            </div>
+          )}
           </div>
         </div>
       )}
