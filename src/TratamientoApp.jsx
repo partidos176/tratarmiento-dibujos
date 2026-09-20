@@ -45,6 +45,8 @@ function TratamientoApp({ videoInicial }) {
   const [videoUrl, setVideoUrl] = useState('');
   const [archivoCortes, setArchivoCortes] = useState(null);
   const [videoUrlCortes, setVideoUrlCortes] = useState('');
+  const [tiempoCortes, setTiempoCortes] = useState(0);
+  const [durCortes, setDurCortes] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoja, setHoja] = useState('Cortes');
   const [progreso, setProgreso] = useState(0);
@@ -374,6 +376,20 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     document.addEventListener('visibilitychange', alOcultar);
     return () => document.removeEventListener('visibilitychange', alOcultar);
   }, []);
+  useEffect(() => {
+    if (!videoUrl) return;
+    const onKey = (e) => {
+      if (e.repeat) return;
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const v = videoRef.current;
+      if (!v) return;
+      if (e.key === 'ArrowRight') { try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (_) {} e.preventDefault(); e.stopPropagation(); }
+      else if (e.key === 'ArrowLeft') { try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (_) {} e.preventDefault(); e.stopPropagation(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [videoUrl]);
   useEffect(() => {
     (async () => {
       try {
@@ -3457,7 +3473,7 @@ const bdVideoTargetRef = useRef(null);
           </div>
           {videoUrlCortes && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
+              <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
                 <video
                   ref={videoRefCortes}
                   src={videoUrlCortes}
@@ -3466,9 +3482,34 @@ const bdVideoTargetRef = useRef(null);
                   playsInline
                   preload="metadata"
                   onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
+                  onTimeUpdate={(e) => { setTiempoCortes(e.currentTarget.currentTime || 0); setDurCortes(e.currentTarget.duration || 0); }}
                   style={{ width: '100%', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
-                <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2rem', alignItems: 'center' }}>
+                <div className="barra-cortes" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2rem', alignItems: 'center' }}>
+                  <button
+                    onClick={() => { const el = document.getElementById('cortes-video-wrap'); if (!el) return; if (!document.fullscreenElement) { el.requestFullscreen?.() || el.webkitRequestFullscreen?.(); } else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); } }}
+                    title="Pantalla completa"
+                    style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    FULL
+                  </button>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '1rem', color: '#ffffff', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', whiteSpace: 'nowrap' }}>
+                    {String(Math.floor(tiempoCortes / 60)).padStart(2, '0')}:{String(Math.floor(tiempoCortes % 60)).padStart(2, '0')} / {String(Math.floor(durCortes / 60)).padStart(2, '0')}:{String(Math.floor(durCortes % 60)).padStart(2, '0')}
+                  </span>
+                  <button
+                    onClick={() => { const v = videoRefCortes.current; if (!v) return; try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (_) {} }}
+                    title="Retroceder 5 segundos"
+                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    −5 SEG
+                  </button>
+                  <button
+                    onClick={() => { const v = videoRefCortes.current; if (!v) return; try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (_) {} }}
+                    title="Avanzar 5 segundos"
+                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    +5 SEG
+                  </button>
                   <button
                     onClick={() => {
                       const v = videoRefCortes.current;
@@ -3514,7 +3555,7 @@ const bdVideoTargetRef = useRef(null);
                 </div>
               </div>
               {cortes.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '0 0 auto', width: '380px', maxHeight: '60vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '0 0 auto', width: '380px' }}>
                   {(() => {
                     const ord = [...cortes].sort((a, b) => b - a);
                     return ord.map((ct, i) => (
