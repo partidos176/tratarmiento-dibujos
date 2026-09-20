@@ -1122,6 +1122,18 @@ const bdVideoTargetRef = useRef(null);
     return { mime: fb, ext: 'webm' };
   };
 
+  const fetchConTimeout = async (url, options, ms = 45000) => {
+    const ctl = new AbortController();
+    const to = setTimeout(() => { try { ctl.abort(); } catch (_) {} }, ms);
+    try {
+      return await fetch(url, { ...options, signal: ctl.signal });
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(to);
+    }
+  };
+
   const descargarLineas = async (lineas, nombreCustom) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
@@ -1311,8 +1323,8 @@ const bdVideoTargetRef = useRef(null);
             fd.append('video', blob, `montaje.${ext}`);
             fd.append('trimStart', '0.2');
             fd.append('ext', ext);
-            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-            if (resp.ok) finalBlob = await resp.blob();
+            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp && resp.ok) finalBlob = await resp.blob();
           } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
@@ -1586,8 +1598,8 @@ const bdVideoTargetRef = useRef(null);
             fd.append('video', blob, `clip.${ext}`);
             fd.append('trimStart', '0.2');
             fd.append('ext', ext);
-            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-            if (resp.ok) finalBlob = await resp.blob();
+            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp && resp.ok) finalBlob = await resp.blob();
           } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
@@ -1739,8 +1751,8 @@ const bdVideoTargetRef = useRef(null);
             fd.append('video', blob, `clip.${ext}`);
             fd.append('trimStart', '0.2');
             fd.append('ext', ext);
-            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-            if (resp.ok) finalBlob = await resp.blob();
+            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            if (resp && resp.ok) finalBlob = await resp.blob();
           } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
@@ -2159,8 +2171,8 @@ const bdVideoTargetRef = useRef(null);
               const fd = new FormData();
               fd.append('video', blob, 'montaje.webm');
               fd.append('trimStart', '0.2');
-              const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-              if (resp.ok) {
+              const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+              if (resp && resp.ok) {
                 finalBlob = await resp.blob();
                 trimmed = true;
               }
@@ -4621,9 +4633,11 @@ const bdVideoTargetRef = useRef(null);
                     <button
                       onClick={async () => {
                         setShowModalDescarga(false);
-                        for (let i = 0; i < marcadas.length; i++) {
-                          const nombre = (marcadas[i].concepto || '').trim() || `video_${i + 1}`;
-                          await descargarLineas([marcadas[i]], nombre);
+                        const clips = marcadas.filter(l => l && l.tipo !== 'transicion' && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null)));
+                        if (!clips.length) { setAviso('Nada que descargar'); return; }
+                        for (let i = 0; i < clips.length; i++) {
+                          const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
+                          await descargarLineas([clips[i]], nombre);
                         }
                       }}
                       disabled={descargandoMontaje}
