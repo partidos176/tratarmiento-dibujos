@@ -83,6 +83,7 @@ function TratamientoApp({ videoInicial }) {
   const [progresoExport, setProgresoExport] = useState(0);
   const [nombreVideo, setNombreVideo] = useState('');
   const [progresoVideo, setProgresoVideo] = useState(0);
+  const [progresoRegen, setProgresoRegen] = useState(null);
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
   const [modoPolilinea, setModoPolilinea] = useState(false);
   const [puntosPolilinea, setPuntosPolilinea] = useState([]);
@@ -2022,6 +2023,48 @@ const bdVideoTargetRef = useRef(null);
     }
   };
 
+  const regenerarVideosAnim = async () => {
+    const lista = (capturas || []).filter(c => c && !c.videoUrl && Array.isArray(c.figuras) && c.figuras.length > 0 && (c.baseDataUrl || c.dataUrl));
+    if (!lista.length) { setAviso('No hay animaciones pendientes de generar'); return; }
+    if (exportando) { setAviso('Ocupado, espera a que termine'); return; }
+    setExportando(true);
+    setProgresoRegen(0);
+    let ok = 0;
+    const fallos = [];
+    try {
+      for (let i = 0; i < lista.length; i++) {
+        const c = lista[i];
+        const v = Math.round((i / lista.length) * 100);
+        setProgresoVideo(v);
+        setProgresoRegen(v);
+        try {
+          const fondo = c.baseDataUrl || c.dataUrl;
+          const im = await new Promise((res, rej) => { const x = new Image(); x.onload = () => res(x); x.onerror = rej; x.src = fondo; });
+          const w = im.naturalWidth || 1280;
+          const h = im.naturalHeight || 720;
+          const figs = normalizarFiguras(c.figuras || []);
+          const figurasFn = (t) => {
+            const p = Math.min(1, Math.max(0, (t - 200) / 3600));
+            const e = 1 - Math.pow(1 - p, 3);
+            return figs.map(f => ({ ...f, crecimiento: e })).map(f => svgFigura(f, { w, h })).join('');
+          };
+          const gv = await generarVideo(figurasFn, fondo, w, h, (p) => { const vv = Math.round(((i + p / 100) / lista.length) * 100); setProgresoVideo(vv); setProgresoRegen(vv); });
+          if (gv && gv.url) {
+            try { videoDataUrlCacheRef.current.set(gv.url, await videoBlobADataUrl(gv.url)); } catch (_) {}
+            const dur = gv.duracion || 4;
+            setCapturas(prev => prev.map(x => (x && x.id === c.id) ? { ...x, videoUrl: gv.url, duracionAnim: dur } : x));
+            ok++;
+          } else { fallos.push(String(c.id)); }
+        } catch (_) { fallos.push(String(c.id)); }
+      }
+    } finally {
+      setExportando(false);
+      setProgresoVideo(0);
+      setProgresoRegen(null);
+    }
+    setAviso(`Vídeos regenerados: ${ok}/${lista.length}` + (fallos.length ? '. Fallos: ' + fallos.join(', ') : ''));
+  };
+
   const descargarMontaje = async () => {
     const items = filasMontaje;
     const mediaItems = items.filter(f => f.tipo !== 'transicion');
@@ -2693,7 +2736,9 @@ const bdVideoTargetRef = useRef(null);
         finally { URL.revokeObjectURL(url); }
       }
       cuadros.push(imgCuadro);
+      if (imgCuadro) { try { imgCuadro.decode && await imgCuadro.decode().catch(() => {}); } catch (_) {} }
       if (onProgress) onProgress(Math.round((i / totalFrames) * 50));
+      await new Promise(r => setTimeout(r, 0));
     }
     const canvas = document.createElement('canvas');
     canvas.width = w;
@@ -4671,6 +4716,14 @@ const bdVideoTargetRef = useRef(null);
             >
               {descargandoMontaje && <span style={{ fontFamily: 'monospace' }}>{progresoDescarga}%</span>}
               Descargar
+            </button>
+            <button
+              onClick={() => regenerarVideosAnim()}
+              disabled={progresoRegen !== null}
+              title="Generar los vídeos de animación que falten"
+              style={{ background: '#8b5cf6', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: progresoRegen !== null ? 'wait' : 'pointer', opacity: progresoRegen !== null ? 0.7 : 1 }}
+            >
+              {progresoRegen !== null ? `Generando ${progresoRegen}%` : 'Regenerar vídeos'}
             </button>
             <button
               onClick={() => exportarMontaje()}
