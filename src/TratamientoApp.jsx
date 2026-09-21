@@ -4611,7 +4611,7 @@ const bdVideoTargetRef = useRef(null);
                       onClick={() => {
                         const v = !todasTrans;
                         setTodasTrans(v);
-                        if (v) insertarTransicion('crossfade', durTrans.crossfade, true, false);
+                        if (v) { const mod = modeloTransSel || 'crossfade'; insertarTransicion(mod, durTrans[mod] ?? durTrans.crossfade, true, false); }
                         else setFilasMontaje(prev => prev.filter(f => f.tipo !== 'transicion'));
                       }}
                       title="Transiciones en todas las líneas"
