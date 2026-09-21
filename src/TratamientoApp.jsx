@@ -1354,7 +1354,6 @@ const bdVideoTargetRef = useRef(null);
           if (!elx || elx.tagName === 'IMG') return;
           try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
           try { elx.play().catch(() => {}); } catch (_) {}
-          try { elx.ontimeupdate = () => tick(); } catch (_) {}
         };
         const detener = (elx) => {
           if (!elx || elx.tagName === 'IMG') return;
