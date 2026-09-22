@@ -1289,20 +1289,26 @@ const bdVideoTargetRef = useRef(null);
         let terminado = false;
         let currentSeg = 0;
         let segElapsed = 0;
-        rec.onstop = async () => {
-          const blob = new Blob(chunks, { type: mime });
-          let finalBlob = blob;
+rec.onstop = async () => {
+          let finalBlob;
           try {
-            const fd = new FormData();
-            fd.append('video', blob, `montaje.${ext}`);
-            fd.append('trimStart', '0.2');
-            fd.append('ext', ext);
-            const ctrl = new AbortController();
-            const tId = setTimeout(() => ctrl.abort(), 5000);
-            const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd, signal: ctrl.signal });
-            clearTimeout(tId);
-            if (resp.ok) finalBlob = await resp.blob();
-          } catch (_) {}
+            const blob = new Blob(chunks, { type: mime });
+            finalBlob = blob;
+            try {
+              const fd = new FormData();
+              fd.append('video', blob, `montaje.${ext}`);
+              fd.append('trimStart', '0.2');
+              fd.append('ext', ext);
+              const ctrl = new AbortController();
+              const tId = setTimeout(() => ctrl.abort(), 2000);
+              const resp = await fetch('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd, signal: ctrl.signal });
+              clearTimeout(tId);
+              if (resp.ok) finalBlob = await resp.blob();
+            } catch (_) {}
+          } catch (_) {
+            finalBlob = new Blob(chunks, { type: mime });
+          }
+          setProgresoDescarga(100);
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
           a.href = url;
@@ -1319,7 +1325,25 @@ const bdVideoTargetRef = useRef(null);
           try { rec.stop(); } catch (_) {}
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
-        };
+// Fallback: si rec.onstop no dispara en 3s, forzar descarga
+        setTimeout(() => {
+          if (rec.state === 'inactive') {
+            const blob = new Blob(chunks, { type: mime });
+            setProgresoDescarga(100);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nombreArchivo;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            resolve();
+            setDescargandoMontaje(false);
+            setProgresoDescarga(0);
+          }
+        }, 3000);
+};
 rec.start(250);
         let enTick = false;
         let segT0Wall = 0;
@@ -1327,6 +1351,26 @@ rec.start(250);
         let segVideoLista = true;
         let segSeekToken = 0;
         let lastFrameTime = performance.now();
+        let tickHandle = null;
+        let isVisible = !document.hidden;
+        const onVisChange = () => { isVisible = !document.hidden; scheduleTick(); };
+        document.addEventListener('visibilitychange', onVisChange);
+        const hasVideoFrameCB = typeof HTMLVideoElement.prototype.requestVideoFrameCallback === 'function';
+        const mainVideo = base; // primer vídeo base para requestVideoFrameCallback
+        const scheduleTick = () => {
+          if (tickHandle) return;
+          if (hasVideoFrameCB && mainVideo && !mainVideo.paused && !mainVideo.ended) {
+            tickHandle = mainVideo.requestVideoFrameCallback((now) => {
+              tickHandle = null;
+              if (!terminado) tick(now);
+            });
+          } else if (isVisible) {
+            tickHandle = requestAnimationFrame((now) => { tickHandle = null; if (!terminado) tick(now); });
+          } else {
+            // En background: setTimeout (throttled a ~1s pero al menos avanza)
+            tickHandle = setTimeout(() => { tickHandle = null; if (!terminado) tick(performance.now()); }, 33);
+          }
+        };
         const ponerEnMarcha = (elx, t0) => {
           if (!elx || elx.tagName === 'IMG') return;
           try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
@@ -1472,12 +1516,12 @@ rec.start(250);
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
             if (prog !== lastProgRef.current) { lastProgRef.current = prog; setProgresoDescarga(prog); }
-            requestAnimationFrame(tick);
+            scheduleTick();
           } finally {
             enTick = false;
           }
-        };
-        requestAnimationFrame(tick);
+};
+        scheduleTick();
       });
     } catch (e) {
       console.error('Error al descargar líneas', e);
@@ -1485,6 +1529,12 @@ rec.start(250);
       try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     } finally {
+      document.removeEventListener('visibilitychange', onVisChange);
+      if (tickHandle) {
+        if (hasVideoFrameCB && mainVideo) { try { mainVideo.cancelVideoFrameCallback(tickHandle); } catch (_) {} }
+        else if (typeof tickHandle === 'number') { clearTimeout(tickHandle); }
+        else { cancelAnimationFrame(tickHandle); }
+      }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
     }
@@ -1921,12 +1971,19 @@ rec.start(250);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
           resolve();
         };
-        const terminar = () => {
+const terminar = () => {
           if (terminado) return;
           terminado = true;
           try { rec.stop(); } catch (_) {}
-          els.forEach(v => { try { v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
+          // Fallback: si rec.onstop no dispara en 500ms, forzar limpieza
+          setTimeout(() => {
+            if (rec.state === 'inactive') {
+              setDescargandoMontaje(false);
+              setProgresoDescarga(0);
+            }
+          }, 500);
         };
         rec.start(250);
         const loop = () => {
