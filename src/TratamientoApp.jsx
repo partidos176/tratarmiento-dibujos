@@ -1320,17 +1320,17 @@ const bdVideoTargetRef = useRef(null);
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
         };
-        rec.start(250);
+rec.start(250);
         let enTick = false;
         let segT0Wall = 0;
         let completado = 0;
         let segVideoLista = true;
         let segSeekToken = 0;
+        let lastFrameTime = performance.now();
         const ponerEnMarcha = (elx, t0) => {
           if (!elx || elx.tagName === 'IMG') return;
           try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
           try { elx.play().catch(() => {}); } catch (_) {}
-          try { elx.ontimeupdate = () => tick(); } catch (_) {}
         };
         const detener = (elx) => {
           if (!elx || elx.tagName === 'IMG') return;
@@ -1356,6 +1356,9 @@ const bdVideoTargetRef = useRef(null);
             const seg = segsOk[currentSeg];
             const esImagen = seg.tipo === 'imagen';
             const segDur = Math.max(0.1, seg.hasta - seg.desde);
+            const now = performance.now();
+            const dt = (now - lastFrameTime) / 1000;
+            lastFrameTime = now;
             if (segElapsed === 0) {
               segT0Wall = Date.now();
               if (seg.kind) {
@@ -1376,12 +1379,12 @@ const bdVideoTargetRef = useRef(null);
                   try { elx.addEventListener('seeked', () => { if (tk === segSeekToken) segVideoLista = true; }, { once: true }); } catch (_) { segVideoLista = true; }
                 }
               }
-              segElapsed = 1 / 30;
+              segElapsed = dt;
             } else {
-              segElapsed += 1 / 30;
+              segElapsed += dt;
             }
             if (seg.kind) {
-              const t = Math.min((Date.now() - segT0Wall) / 1000 / segDur, 1);
+              const t = Math.min(segElapsed / segDur, 1);
               ctx.clearRect(0, 0, w, h);
               const dib = (elx, al) => {
                 if (!elx) return;
@@ -1402,13 +1405,10 @@ const bdVideoTargetRef = useRef(null);
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, w, h);
               } else if (seg.kind === 'slide-left') {
-                // A sale por la izquierda, B entra por la derecha (B encima).
-                // t=0: A puro; t=1: B puro (como el resto de modelos).
                 ctx.globalAlpha = 1;
                 try { ctx.drawImage(seg.elA, -w * t, 0, w, h); } catch (_) {}
                 try { ctx.drawImage(seg.elB, w * (1 - t), 0, w, h); } catch (_) {}
               } else if (seg.kind === 'slide-right') {
-                // A sale por la derecha, B entra por la izquierda (B encima).
                 ctx.globalAlpha = 1;
                 try { ctx.drawImage(seg.elA, w * t, 0, w, h); } catch (_) {}
                 try { ctx.drawImage(seg.elB, -w * (1 - t), 0, w, h); } catch (_) {}
@@ -1434,7 +1434,7 @@ const bdVideoTargetRef = useRef(null);
                 dib(seg.elB, t);
               }
               ctx.globalAlpha = 1;
-              if ((Date.now() - segT0Wall) >= segDur * 1000) {
+              if (segElapsed >= segDur) {
                 const vistos = new Set();
                 for (const elx of [seg.elA, seg.elB]) {
                   if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
@@ -1443,9 +1443,6 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              // Si el seek aún no terminó (elemento compartido entre cortes), NO dibujar:
-              // el canvas conserva el último frame de la transición (vídeo 2 puro).
-              // Dibujar el elemento sin seekear mostraría frames del vídeo 1 con el 2 ya iniciado.
               if (segVideoLista) {
                 try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
               }
@@ -1462,7 +1459,7 @@ const bdVideoTargetRef = useRef(null);
               }
               let fin = false;
               if (seg.esAnim || esImagen) {
-                fin = (Date.now() - segT0Wall) >= segDur * 1000;
+                fin = segElapsed >= segDur;
               } else {
                 try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
                 if (!fin) fin = (Date.now() - segT0Wall) >= (segDur + 3) * 1000;
@@ -1475,12 +1472,12 @@ const bdVideoTargetRef = useRef(null);
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
             if (prog !== lastProgRef.current) { lastProgRef.current = prog; setProgresoDescarga(prog); }
-            setTimeout(tick, 1000 / 30);
+            requestAnimationFrame(tick);
           } finally {
             enTick = false;
           }
         };
-        tick();
+        requestAnimationFrame(tick);
       });
     } catch (e) {
       console.error('Error al descargar líneas', e);
