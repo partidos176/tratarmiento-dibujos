@@ -121,6 +121,9 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
   const [progresoDescarga, setProgresoDescarga] = useState(0);
+  const [ultimoVideo, setUltimoVideo] = useState(null);
+  const [optimizando, setOptimizando] = useState(false);
+  const [progresoOpt, setProgresoOpt] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [showModalDescarga, setShowModalDescarga] = useState(false);
   const [corteSelMontaje, setCorteSelMontaje] = useState('todos');
@@ -1289,6 +1292,7 @@ const bdVideoTargetRef = useRef(null);
         let terminado = false;
         let currentSeg = 0;
         let segElapsed = 0;
+        let descargaHecha = false;
 rec.onstop = async () => {
           let finalBlob;
           try {
@@ -1308,6 +1312,7 @@ rec.onstop = async () => {
           } catch (_) {
             finalBlob = new Blob(chunks, { type: mime });
           }
+          try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           setProgresoDescarga(100);
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
@@ -1317,17 +1322,19 @@ rec.onstop = async () => {
           a.click();
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
+          descargaHecha = true;
           resolve();
         };
         const terminar = () => {
           if (terminado) return;
           terminado = true;
+          stopTicks();
           try { rec.stop(); } catch (_) {}
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
 // Fallback: si rec.onstop no dispara en 3s, forzar descarga
         setTimeout(() => {
-          if (rec.state === 'inactive') {
+          if (!descargaHecha && rec.state === 'inactive') {
             const blob = new Blob(chunks, { type: mime });
             setProgresoDescarga(100);
             const url = URL.createObjectURL(blob);
@@ -1351,25 +1358,15 @@ rec.start(250);
         let segVideoLista = true;
         let segSeekToken = 0;
         let lastFrameTime = performance.now();
+        // Cadencia fija a 30fps, igual que captureStream(30): mezclar
+        // requestVideoFrameCallback/rAF/setTimeout producía tirones.
         let tickHandle = null;
-        let isVisible = !document.hidden;
-        const onVisChange = () => { isVisible = !document.hidden; scheduleTick(); };
-        document.addEventListener('visibilitychange', onVisChange);
-        const hasVideoFrameCB = typeof HTMLVideoElement.prototype.requestVideoFrameCallback === 'function';
-        const mainVideo = base; // primer vídeo base para requestVideoFrameCallback
         const scheduleTick = () => {
-          if (tickHandle) return;
-          if (hasVideoFrameCB && mainVideo && !mainVideo.paused && !mainVideo.ended) {
-            tickHandle = mainVideo.requestVideoFrameCallback((now) => {
-              tickHandle = null;
-              if (!terminado) tick(now);
-            });
-          } else if (isVisible) {
-            tickHandle = requestAnimationFrame((now) => { tickHandle = null; if (!terminado) tick(now); });
-          } else {
-            // En background: setTimeout (throttled a ~1s pero al menos avanza)
-            tickHandle = setTimeout(() => { tickHandle = null; if (!terminado) tick(performance.now()); }, 33);
-          }
+          if (tickHandle || terminado) return;
+          tickHandle = setInterval(() => { if (!terminado) tick(performance.now()); }, 1000 / 30);
+        };
+        const stopTicks = () => {
+          if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
         };
         const ponerEnMarcha = (elx, t0) => {
           if (!elx || elx.tagName === 'IMG') return;
@@ -1403,6 +1400,7 @@ rec.start(250);
             const now = performance.now();
             const dt = (now - lastFrameTime) / 1000;
             lastFrameTime = now;
+            const dtC = Math.min(Math.max(dt, 0), 0.1); // recorta saltos tras pausas
             if (segElapsed === 0) {
               segT0Wall = Date.now();
               if (seg.kind) {
@@ -1423,9 +1421,9 @@ rec.start(250);
                   try { elx.addEventListener('seeked', () => { if (tk === segSeekToken) segVideoLista = true; }, { once: true }); } catch (_) { segVideoLista = true; }
                 }
               }
-              segElapsed = dt;
+              segElapsed = dtC;
             } else {
-              segElapsed += dt;
+              segElapsed += dtC;
             }
             if (seg.kind) {
               const t = Math.min(segElapsed / segDur, 1);
@@ -1529,14 +1527,75 @@ rec.start(250);
       try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     } finally {
-      document.removeEventListener('visibilitychange', onVisChange);
-      if (tickHandle) {
-        if (hasVideoFrameCB && mainVideo) { try { mainVideo.cancelVideoFrameCallback(tickHandle); } catch (_) {} }
-        else if (typeof tickHandle === 'number') { clearTimeout(tickHandle); }
-        else { cancelAnimationFrame(tickHandle); }
-      }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
+    }
+  };
+
+  const optimizarUltimoVideo = async (item) => {
+    if (!item || optimizando) return;
+    if (!isFFmpegSupported()) { setAviso('Este navegador no soporta optimización'); return; }
+    setOptimizando(true);
+    setProgresoOpt(0);
+    let ffmpeg = null;
+    let logHandler = null;
+    try {
+      ffmpeg = await loadFFmpeg();
+      const { fetchFile } = await import('@ffmpeg/util');
+      const dur = await new Promise((res) => {
+        let done = false;
+        const fin = (v) => { if (done) return; done = true; res(v); };
+        try {
+          const url = URL.createObjectURL(item.blob);
+          const v = document.createElement('video');
+          v.preload = 'metadata';
+          v.onloadedmetadata = () => { const d = v.duration; try { URL.revokeObjectURL(url); } catch (_) {} fin(Number.isFinite(d) && d > 0 ? d : 0); };
+          v.onerror = () => { try { URL.revokeObjectURL(url); } catch (_) {} fin(0); };
+          v.src = url;
+          setTimeout(() => fin(0), 5000);
+        } catch (_) { fin(0); }
+      });
+      logHandler = ({ message }) => {
+        try {
+          const m = String(message || '').match(/time=(\d+):(\d+):([\d.]+)/);
+          if (m && dur > 0) {
+            const s = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+            setProgresoOpt(Math.min(99, Math.round((s / dur) * 100)));
+          }
+        } catch (_) {}
+      };
+      try { ffmpeg.on('log', logHandler); } catch (_) {}
+      const inName = `opt_in.${item.ext}`;
+      const outName = `opt_out.${item.ext}`;
+      await ffmpeg.writeFile(inName, new Uint8Array(await fetchFile(item.blob)));
+      setProgresoOpt(2);
+      if (item.ext === 'mp4') {
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outName]);
+      } else {
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '8M', '-g', '30', '-pix_fmt', 'yuv420p', outName]);
+      }
+      const data = await ffmpeg.readFile(outName);
+      try { await ffmpeg.deleteFile(inName); } catch (_) {}
+      try { await ffmpeg.deleteFile(outName); } catch (_) {}
+      const outBlob = new Blob([data.buffer], { type: item.mime });
+      const base = String(item.nombre || 'video').replace(/\.[^.]+$/, '');
+      const url = URL.createObjectURL(outBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${base}_opt.${item.ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setProgresoOpt(100);
+      setAviso('Vídeo optimizado');
+    } catch (e) {
+      console.error('Error al optimizar', e);
+      setAviso('No se pudo optimizar: ' + ((e && e.message) || e));
+    } finally {
+      if (ffmpeg && logHandler) { try { ffmpeg.off('log', logHandler); } catch (_) {} }
+      setOptimizando(false);
+      setTimeout(() => setProgresoOpt(0), 1500);
     }
   };
 
@@ -5044,6 +5103,15 @@ const terminar = () => {
             >
               {descargandoMontaje && <span style={{ fontFamily: 'monospace' }}>{progresoDescarga}%</span>}
               Descargar
+            </button>
+            <button
+              onClick={() => optimizarUltimoVideo(ultimoVideo)}
+              disabled={optimizando || descargandoMontaje || !ultimoVideo}
+              title={ultimoVideo ? `Optimizar ${ultimoVideo.nombre}` : 'Descarga primero un vídeo'}
+              style={{ background: (!ultimoVideo || optimizando) ? '#334155' : '#7c3aed', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (optimizando || descargandoMontaje || !ultimoVideo) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {optimizando && <span style={{ fontFamily: 'monospace' }}>{progresoOpt}%</span>}
+              Optimizar
             </button>
             <button
               onClick={() => exportarMontaje()}
