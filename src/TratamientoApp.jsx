@@ -76,6 +76,7 @@ function TratamientoApp({ videoInicial }) {
   };
   useEffect(() => {
     comprobarServidor();
+    try { loadFFmpeg().catch(() => {}); } catch (_) {}
     const iv = setInterval(comprobarServidor, 10000);
     return () => clearInterval(iv);
   }, []);
@@ -1126,18 +1127,9 @@ const bdVideoTargetRef = useRef(null);
     const lastProgRef = { current: -1 };
     try {
       const baseSrc = videoUrlCortes || videoUrl;
-      const w = 1280;
-      const h = 720;
-      canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
-      document.body.appendChild(canvas);
-      const ctx = canvas.getContext('2d');
       const { mime, ext } = mimeDescarga();
       if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
       const chunks = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const mkVid = async (src) => {
         const vid = document.createElement('video');
         vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
@@ -1158,6 +1150,15 @@ const bdVideoTargetRef = useRef(null);
       };
       let base = null;
       if (baseSrc) base = await mkVid(baseSrc);
+      const w = 1280, h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const bps = (w * h >= 1920 * 1080) ? 30000000 : (w * h >= 1280 * 720) ? 16000000 : 10000000;
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bps });
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const segs = [];
       const rangos = [];
       for (const linea of validas) {
@@ -1322,6 +1323,7 @@ rec.onstop = async () => {
           a.click();
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
+          try { setAviso(''); } catch (_) {}
           descargaHecha = true;
           resolve();
         };
@@ -5045,7 +5047,11 @@ const terminar = () => {
                       onClick={() => {
                         const v = !todasTrans;
                         setTodasTrans(v);
-                        if (v) insertarTransicion('crossfade', durTrans.crossfade, true, false);
+                        if (v) {
+                          const modelo = modeloTransSel || 'crossfade';
+                          setModeloTransSel(modelo);
+                          insertarTransicion(modelo, durTrans[modelo], true, false);
+                        }
                         else setFilasMontaje(prev => prev.filter(f => f.tipo !== 'transicion'));
                       }}
                       title="Transiciones en todas las líneas"
