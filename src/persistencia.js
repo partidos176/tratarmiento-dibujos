@@ -1,5 +1,5 @@
 const DB_NAME = 'tratamiento-dibujos';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const openDB = () => new Promise((resolve, reject) => {
   const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -8,6 +8,7 @@ const openDB = () => new Promise((resolve, reject) => {
     if (!db.objectStoreNames.contains('videos')) db.createObjectStore('videos');
     if (!db.objectStoreNames.contains('imagenes')) db.createObjectStore('imagenes');
     if (!db.objectStoreNames.contains('capturas')) db.createObjectStore('capturas');
+    if (!db.objectStoreNames.contains('sesion')) db.createObjectStore('sesion');
   };
   req.onsuccess = () => resolve(req.result);
   req.onerror = () => reject(req.error);
@@ -113,8 +114,13 @@ export const guardarSesion = async (filasMontaje, capturas) => {
       caps.push(cap);
     }
 
-    localStorage.setItem('fm_sesion', JSON.stringify(fm));
-    localStorage.setItem('cap_sesion', JSON.stringify(caps));
+    // La sesión vive en IndexedDB (sin límite de ~5MB del localStorage).
+    await dbPut('sesion', 'actual', JSON.stringify({ fm, caps }));
+    // Copia de respaldo en localStorage (puede fallar por cuota: no rompe nada)
+    try {
+      localStorage.setItem('fm_sesion', JSON.stringify(fm));
+      localStorage.setItem('cap_sesion', JSON.stringify(caps));
+    } catch (_) {}
   } catch (e) {
     console.error('Error al guardar sesion', e);
   }
@@ -122,10 +128,28 @@ export const guardarSesion = async (filasMontaje, capturas) => {
 
 export const cargarSesion = async () => {
   try {
-    const fmRaw = localStorage.getItem('fm_sesion');
-    const capRaw = localStorage.getItem('cap_sesion');
-    const fm = fmRaw ? JSON.parse(fmRaw) : [];
-    const caps = capRaw ? JSON.parse(capRaw) : [];
+    let fm = [];
+    let caps = [];
+    let desdeIDB = false;
+    try {
+      const raw = await dbGet('sesion', 'actual');
+      if (typeof raw === 'string' && raw) {
+        const obj = JSON.parse(raw);
+        fm = Array.isArray(obj.fm) ? obj.fm : [];
+        caps = Array.isArray(obj.caps) ? obj.caps : [];
+        desdeIDB = true;
+      }
+    } catch (_) {}
+    if (!desdeIDB) {
+      const fmRaw = localStorage.getItem('fm_sesion');
+      const capRaw = localStorage.getItem('cap_sesion');
+      fm = fmRaw ? JSON.parse(fmRaw) : [];
+      caps = capRaw ? JSON.parse(capRaw) : [];
+      if (fm.length || caps.length) {
+        // Migración: la copia antigua de localStorage pasa a IndexedDB
+        try { await dbPut('sesion', 'actual', JSON.stringify({ fm, caps })); } catch (_) {}
+      }
+    }
 
     for (const f of fm) {
       if (f.videoUrlKey) {
@@ -158,6 +182,7 @@ export const cargarSesion = async () => {
 export const limpiarSesion = () => {
   localStorage.removeItem('fm_sesion');
   localStorage.removeItem('cap_sesion');
+  dbDelete('sesion', 'actual').catch(() => {});
 };
 
 export const guardarVideosBD = async (lista) => {

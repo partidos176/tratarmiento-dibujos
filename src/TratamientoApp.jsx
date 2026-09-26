@@ -635,6 +635,109 @@ const bdVideoTargetRef = useRef(null);
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
+  // Copiar la sesión entre orígenes distintos (localhost <-> web):
+  // el almacenamiento es por dominio, así que se pasa por un archivo JSON.
+  const aDataUrl = async (url) => {
+    if (!url || typeof url !== 'string') return null;
+    if (url.startsWith('data:')) return url;
+    if (url.startsWith('blob:')) {
+      if (videoDataUrlCacheRef.current.has(url)) return videoDataUrlCacheRef.current.get(url);
+      const r = await videoBlobADataUrl(url);
+      if (r) videoDataUrlCacheRef.current.set(url, r);
+      return r;
+    }
+    return null;
+  };
+
+  const exportarSesion = async () => {
+    try {
+      setAviso('Exportando sesión…');
+      const fm = [];
+      for (const f of (filasMontaje || [])) {
+        const row = { ...f };
+        if (row.videoUrl && (row.videoUrl.startsWith('blob:') || row.videoUrl.startsWith('data:'))) {
+          row.videoDataUrl = await aDataUrl(row.videoUrl) || row.videoDataUrl || null;
+          row.videoUrl = null;
+        }
+        if (row.imagenUrl && (row.imagenUrl.startsWith('blob:') || row.imagenUrl.startsWith('data:'))) {
+          row.imagenDataUrl = await aDataUrl(row.imagenUrl) || row.imagenDataUrl || null;
+          row.imagenUrl = null;
+        }
+        fm.push(row);
+      }
+      const caps = [];
+      for (const c of (capturas || [])) {
+        const row = { ...c };
+        if (row.videoUrl && (row.videoUrl.startsWith('blob:') || row.videoUrl.startsWith('data:'))) {
+          row.videoDataUrl = await aDataUrl(row.videoUrl) || row.videoDataUrl || null;
+          row.videoUrl = null;
+        }
+        caps.push(row);
+      }
+      const payload = { app: 'tratamiento-dibujos-sesion', version: 1, savedAt: Date.now(), filasMontaje: fm, capturas: caps };
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sesion_tratamiento_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setAviso(`Sesión exportada: ${fm.length} líneas y ${caps.length} capturas`);
+    } catch (e) {
+      setAviso('Error al exportar la sesión: ' + (e && e.message ? e.message : e));
+    }
+  };
+
+  const importarSesionArchivo = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!data || data.app !== 'tratamiento-dibujos-sesion' || !Array.isArray(data.filasMontaje)) {
+        setAviso('Archivo de sesión no válido');
+        return;
+      }
+      const aBlob = async (u) => {
+        if (!u || typeof u !== 'string') return null;
+        if (u.startsWith('blob:') || u.startsWith('http')) return u;
+        if (u.startsWith('data:')) {
+          try {
+            const b = await (await fetch(u)).blob();
+            if (!b || b.size === 0) return null;
+            return URL.createObjectURL(b);
+          } catch (_) { return null; }
+        }
+        return null;
+      };
+      const fm = [];
+      for (const f of data.filasMontaje) {
+        const row = { ...f };
+        row.videoUrl = await aBlob(row.videoUrl || row.videoDataUrl);
+        row.imagenUrl = await aBlob(row.imagenUrl || row.imagenDataUrl);
+        delete row.videoDataUrl;
+        delete row.imagenDataUrl;
+        fm.push(row);
+      }
+      const caps = [];
+      for (const c of (data.capturas || [])) {
+        const row = { ...c };
+        row.videoUrl = await aBlob(row.videoUrl || row.videoDataUrl);
+        delete row.videoDataUrl;
+        caps.push(row);
+      }
+      setFilasMontaje(fm.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : (fm.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length) }));
+      setCapturas(caps);
+      setLineasSelMontaje({});
+      setPreviewMontaje(null);
+      setAviso(`Sesión importada: ${fm.length} líneas y ${caps.length} capturas`);
+    } catch (err) {
+      setAviso('Error al importar la sesión: ' + (err && err.message ? err.message : err));
+    }
+  };
+
   const hojas = ['Base de datos', 'Cortes', 'Edición', 'Montaje'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
@@ -5221,6 +5324,20 @@ const terminar = () => {
             >
               Exportar
             </button>
+            <button
+              onClick={() => exportarSesion()}
+              title="Descargar la sesión actual (líneas, capturas y vídeos) como JSON"
+              style={{ background: '#6366f1', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Exportar sesión
+            </button>
+            <label
+              title="Cargar una sesión exportada desde otro origen (localhost o web)"
+              style={{ background: '#9333ea', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+            >
+              Importar sesión
+              <input type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={importarSesionArchivo} />
+            </label>
             <button
               onClick={async () => {
                 if (serverOn) { await comprobarServidor(); return; }
