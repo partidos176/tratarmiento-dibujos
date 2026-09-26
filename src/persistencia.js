@@ -1,5 +1,5 @@
 const DB_NAME = 'tratamiento-dibujos';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const openDB = () => new Promise((resolve, reject) => {
   const req = indexedDB.open(DB_NAME, DB_VERSION);

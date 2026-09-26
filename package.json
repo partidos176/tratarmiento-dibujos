@@ -10,6 +10,8 @@
     "deploy": "npm run build && firebase deploy --only hosting"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "firebase": "^12.17.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

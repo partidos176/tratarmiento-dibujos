@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './persistencia';
+import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
+import { fetchFile } from '@ffmpeg/util';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -76,6 +78,7 @@ function TratamientoApp({ videoInicial }) {
   };
   useEffect(() => {
     comprobarServidor();
+    try { loadFFmpeg().catch(() => {}); } catch (_) {}
     const iv = setInterval(comprobarServidor, 10000);
     return () => clearInterval(iv);
   }, []);
@@ -122,6 +125,9 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [filaSeleccionada, setFilaSeleccionada] = useState(null);
   const [descargandoMontaje, setDescargandoMontaje] = useState(false);
   const [progresoDescarga, setProgresoDescarga] = useState(0);
+  const [ultimoVideo, setUltimoVideo] = useState(null);
+  const [optimizando, setOptimizando] = useState(false);
+  const [progresoOpt, setProgresoOpt] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [showModalDescarga, setShowModalDescarga] = useState(false);
   const [corteSelMontaje, setCorteSelMontaje] = useState('todos');
@@ -621,7 +627,7 @@ const bdVideoTargetRef = useRef(null);
         }
       }
       capsListasRef.current = true;
-    });
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1150,18 +1156,9 @@ const bdVideoTargetRef = useRef(null);
     const lastProgRef = { current: -1 };
     try {
       const baseSrc = videoUrlCortes || videoUrl;
-      const w = 1280;
-      const h = 720;
-      canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
-      document.body.appendChild(canvas);
-      const ctx = canvas.getContext('2d');
       const { mime, ext } = mimeDescarga();
       if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 10000000 });
       const chunks = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const mkVid = async (src) => {
         const vid = document.createElement('video');
         vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
@@ -1182,6 +1179,15 @@ const bdVideoTargetRef = useRef(null);
       };
       let base = null;
       if (baseSrc) base = await mkVid(baseSrc);
+      const w = 1280, h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const bps = (w * h >= 1920 * 1080) ? 30000000 : (w * h >= 1280 * 720) ? 16000000 : 10000000;
+      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bps });
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       const segs = [];
       const rangos = [];
       for (const linea of validas) {
@@ -1316,17 +1322,25 @@ const bdVideoTargetRef = useRef(null);
         let terminado = false;
         let currentSeg = 0;
         let segElapsed = 0;
-        rec.onstop = async () => {
-          const blob = new Blob(chunks, { type: mime });
-          let finalBlob = blob;
+        let descargaHecha = false;
+rec.onstop = async () => {
+          let finalBlob;
           try {
-            const fd = new FormData();
-            fd.append('video', blob, `montaje.${ext}`);
-            fd.append('trimStart', '0.2');
-            fd.append('ext', ext);
-            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
-            if (resp && resp.ok) finalBlob = await resp.blob();
-          } catch (_) {}
+            const blob = new Blob(chunks, { type: mime });
+            finalBlob = blob;
+            try {
+              const fd = new FormData();
+              fd.append('video', blob, `montaje.${ext}`);
+              fd.append('trimStart', '0.2');
+              fd.append('ext', ext);
+              const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
+              if (resp && resp.ok) finalBlob = await resp.blob();
+            } catch (_) {}
+          } catch (_) {
+            finalBlob = new Blob(chunks, { type: mime });
+          }
+          try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
+          setProgresoDescarga(100);
           const url = URL.createObjectURL(finalBlob);
           const a = document.createElement('a');
           a.href = url;
@@ -1335,21 +1349,53 @@ const bdVideoTargetRef = useRef(null);
           a.click();
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
+          try { setAviso(''); } catch (_) {}
+          descargaHecha = true;
           resolve();
         };
         const terminar = () => {
           if (terminado) return;
           terminado = true;
+          stopTicks();
           try { rec.stop(); } catch (_) {}
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
-        };
-        rec.start(250);
+// Fallback: si rec.onstop no dispara en 3s, forzar descarga
+        setTimeout(() => {
+          if (!descargaHecha && rec.state === 'inactive') {
+            const blob = new Blob(chunks, { type: mime });
+            setProgresoDescarga(100);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nombreArchivo;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            resolve();
+            setDescargandoMontaje(false);
+            setProgresoDescarga(0);
+          }
+        }, 3000);
+};
+rec.start(250);
         let enTick = false;
         let segT0Wall = 0;
         let completado = 0;
         let segVideoLista = true;
         let segSeekToken = 0;
+        let lastFrameTime = performance.now();
+        // Cadencia fija a 30fps, igual que captureStream(30): mezclar
+        // requestVideoFrameCallback/rAF/setTimeout producía tirones.
+        let tickHandle = null;
+        const scheduleTick = () => {
+          if (tickHandle || terminado) return;
+          tickHandle = setInterval(() => { if (!terminado) tick(performance.now()); }, 1000 / 30);
+        };
+        const stopTicks = () => {
+          if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
+        };
         const ponerEnMarcha = (elx, t0) => {
           if (!elx || elx.tagName === 'IMG') return;
           try { elx.currentTime = Math.max(0, t0 || 0); } catch (_) {}
@@ -1379,6 +1425,10 @@ const bdVideoTargetRef = useRef(null);
             const seg = segsOk[currentSeg];
             const esImagen = seg.tipo === 'imagen';
             const segDur = Math.max(0.1, seg.hasta - seg.desde);
+            const now = performance.now();
+            const dt = (now - lastFrameTime) / 1000;
+            lastFrameTime = now;
+            const dtC = Math.min(Math.max(dt, 0), 0.1); // recorta saltos tras pausas
             if (segElapsed === 0) {
               segT0Wall = Date.now();
               if (seg.kind) {
@@ -1399,12 +1449,12 @@ const bdVideoTargetRef = useRef(null);
                   try { elx.addEventListener('seeked', () => { if (tk === segSeekToken) segVideoLista = true; }, { once: true }); } catch (_) { segVideoLista = true; }
                 }
               }
-              segElapsed = 1 / 30;
+              segElapsed = dtC;
             } else {
-              segElapsed += 1 / 30;
+              segElapsed += dtC;
             }
             if (seg.kind) {
-              const t = Math.min((Date.now() - segT0Wall) / 1000 / segDur, 1);
+              const t = Math.min(segElapsed / segDur, 1);
               ctx.clearRect(0, 0, w, h);
               const dib = (elx, al) => {
                 if (!elx) return;
@@ -1425,13 +1475,10 @@ const bdVideoTargetRef = useRef(null);
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, w, h);
               } else if (seg.kind === 'slide-left') {
-                // A sale por la izquierda, B entra por la derecha (B encima).
-                // t=0: A puro; t=1: B puro (como el resto de modelos).
                 ctx.globalAlpha = 1;
                 try { ctx.drawImage(seg.elA, -w * t, 0, w, h); } catch (_) {}
                 try { ctx.drawImage(seg.elB, w * (1 - t), 0, w, h); } catch (_) {}
               } else if (seg.kind === 'slide-right') {
-                // A sale por la derecha, B entra por la izquierda (B encima).
                 ctx.globalAlpha = 1;
                 try { ctx.drawImage(seg.elA, w * t, 0, w, h); } catch (_) {}
                 try { ctx.drawImage(seg.elB, -w * (1 - t), 0, w, h); } catch (_) {}
@@ -1457,7 +1504,7 @@ const bdVideoTargetRef = useRef(null);
                 dib(seg.elB, t);
               }
               ctx.globalAlpha = 1;
-              if ((Date.now() - segT0Wall) >= segDur * 1000) {
+              if (segElapsed >= segDur) {
                 const vistos = new Set();
                 for (const elx of [seg.elA, seg.elB]) {
                   if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
@@ -1466,9 +1513,6 @@ const bdVideoTargetRef = useRef(null);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              // Si el seek aún no terminó (elemento compartido entre cortes), NO dibujar:
-              // el canvas conserva el último frame de la transición (vídeo 2 puro).
-              // Dibujar el elemento sin seekear mostraría frames del vídeo 1 con el 2 ya iniciado.
               if (segVideoLista) {
                 try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
               }
@@ -1485,7 +1529,7 @@ const bdVideoTargetRef = useRef(null);
               }
               let fin = false;
               if (seg.esAnim || esImagen) {
-                fin = (Date.now() - segT0Wall) >= segDur * 1000;
+                fin = segElapsed >= segDur;
               } else {
                 try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
                 if (!fin) fin = (Date.now() - segT0Wall) >= (segDur + 3) * 1000;
@@ -1498,12 +1542,12 @@ const bdVideoTargetRef = useRef(null);
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
             if (prog !== lastProgRef.current) { lastProgRef.current = prog; setProgresoDescarga(prog); }
-            setTimeout(tick, 1000 / 30);
+            scheduleTick();
           } finally {
             enTick = false;
           }
-        };
-        tick();
+};
+        scheduleTick();
       });
     } catch (e) {
       console.error('Error al descargar líneas', e);
@@ -1513,6 +1557,406 @@ const bdVideoTargetRef = useRef(null);
     } finally {
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
+    }
+  };
+
+  const optimizarUltimoVideo = async (item) => {
+    if (!item || optimizando) return;
+    if (!isFFmpegSupported()) { setAviso('Este navegador no soporta optimización'); return; }
+    setOptimizando(true);
+    setProgresoOpt(0);
+    let ffmpeg = null;
+    let logHandler = null;
+    try {
+      ffmpeg = await loadFFmpeg();
+      const { fetchFile } = await import('@ffmpeg/util');
+      const dur = await new Promise((res) => {
+        let done = false;
+        const fin = (v) => { if (done) return; done = true; res(v); };
+        try {
+          const url = URL.createObjectURL(item.blob);
+          const v = document.createElement('video');
+          v.preload = 'metadata';
+          v.onloadedmetadata = () => { const d = v.duration; try { URL.revokeObjectURL(url); } catch (_) {} fin(Number.isFinite(d) && d > 0 ? d : 0); };
+          v.onerror = () => { try { URL.revokeObjectURL(url); } catch (_) {} fin(0); };
+          v.src = url;
+          setTimeout(() => fin(0), 5000);
+        } catch (_) { fin(0); }
+      });
+      logHandler = ({ message }) => {
+        try {
+          const m = String(message || '').match(/time=(\d+):(\d+):([\d.]+)/);
+          if (m && dur > 0) {
+            const s = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+            setProgresoOpt(Math.min(99, Math.round((s / dur) * 100)));
+          }
+        } catch (_) {}
+      };
+      try { ffmpeg.on('log', logHandler); } catch (_) {}
+      const inName = `opt_in.${item.ext}`;
+      const outName = `opt_out.${item.ext}`;
+      await ffmpeg.writeFile(inName, new Uint8Array(await fetchFile(item.blob)));
+      setProgresoOpt(2);
+      if (item.ext === 'mp4') {
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outName]);
+      } else {
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '8M', '-g', '30', '-pix_fmt', 'yuv420p', outName]);
+      }
+      const data = await ffmpeg.readFile(outName);
+      try { await ffmpeg.deleteFile(inName); } catch (_) {}
+      try { await ffmpeg.deleteFile(outName); } catch (_) {}
+      const outBlob = new Blob([data.buffer], { type: item.mime });
+      const base = String(item.nombre || 'video').replace(/\.[^.]+$/, '');
+      const url = URL.createObjectURL(outBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${base}_opt.${item.ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setProgresoOpt(100);
+      setAviso('Vídeo optimizado');
+    } catch (e) {
+      console.error('Error al optimizar', e);
+      setAviso('No se pudo optimizar: ' + ((e && e.message) || e));
+    } finally {
+      if (ffmpeg && logHandler) { try { ffmpeg.off('log', logHandler); } catch (_) {} }
+      setOptimizando(false);
+      setTimeout(() => setProgresoOpt(0), 1500);
+    }
+  };
+
+  const descargarLineasFFmpeg = async (lineas, nombreCustom) => {
+    const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
+    if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc && validas.some(l => l.inicio != null && l.fin != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
+    if (!isFFmpegSupported()) { return descargarLineas(lineas, nombreCustom); }
+    const { ext } = mimeDescarga();
+    const nombreBase = nombreCustom || (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
+    const nombreArchivo = `${nombreBase}.${ext}`;
+    const tieneAnimaciones = validas.some(l => {
+      if (!l || l.inicio == null || l.fin == null) return false;
+      return (capturas || []).some(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= l.inicio && c.tiempo <= l.fin);
+    });
+    const tieneTransiciones = validas.some(l => l && l.tipo === 'transicion');
+    const tieneImagenes = validas.some(l => l && l.tipo === 'imagen' && l.imagenUrl);
+    const tieneVideosExternos = validas.some(l => l && l.videoUrl);
+    const esTrimsimple = validas.length === 1 && !tieneAnimaciones && !tieneTransiciones && !tieneImagenes && !tieneVideosExternos && baseSrc;
+    const todosTrimsSimple = !tieneAnimaciones && !tieneTransiciones && !tieneImagenes && !tieneVideosExternos && baseSrc && validas.every(l => l.inicio != null && l.fin != null);
+    if (todosTrimsSimple) {
+      const ffmpeg = await loadFFmpeg();
+      const { fetchFile: ffFetchFile } = await import('@ffmpeg/util');
+      const resp = await fetch(baseSrc);
+      const videoBlob = await resp.blob();
+      const inputName = `input.${ext === 'mp4' ? 'mp4' : 'webm'}`;
+      await ffmpeg.writeFile(inputName, new Uint8Array(await ffFetchFile(videoBlob)));
+      let count = 0;
+      for (const linea of validas) {
+        if (linea.inicio == null || linea.fin == null) continue;
+        count++;
+        setDescargandoMontaje(true);
+        setProgresoDescarga(Math.round((count / validas.length) * 100));
+        try {
+          const ini = Math.max(0, linea.inicio);
+          const fin = Math.max(ini + 0.5, linea.fin);
+          const dur = fin - ini;
+          const outName = `out_${count}.${ext}`;
+          await ffmpeg.exec([
+            '-ss', String(ini),
+            '-i', inputName,
+            '-t', String(dur),
+            '-c', 'copy',
+            '-avoid_negative_ts', 'make_zero',
+            outName
+          ]);
+          const data = await ffmpeg.readFile(outName);
+          try { await ffmpeg.deleteFile(outName); } catch (_) {}
+          const finalBlob = new Blob([data.buffer], { type: ext === 'mp4' ? 'video/mp4' : 'video/webm' });
+          const url = URL.createObjectURL(finalBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          const n = linea.concepto || linea.nombre || `clip_${count}`;
+            a.download = `${n.replace(/[^\w\-]+/gi, '_')}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            await new Promise(r => setTimeout(r, 800));
+            URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error(`Error en clip ${count}:`, e);
+        }
+      }
+      try { await ffmpeg.deleteFile(inputName); } catch (_) {}
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+      return;
+    }
+    if (esTrimsimple) {
+      const linea = validas[0];
+      if (linea.inicio != null && linea.fin != null) {
+        setDescargandoMontaje(true);
+        setProgresoDescarga(10);
+        try {
+          const ffmpeg = await loadFFmpeg();
+          const { fetchFile } = await import('@ffmpeg/util');
+          const resp = await fetch(baseSrc);
+          const videoBlob = await resp.blob();
+          setProgresoDescarga(30);
+          const inputName = `input.${ext === 'mp4' ? 'mp4' : 'webm'}`;
+          const outputName = `output.${ext}`;
+          await ffmpeg.writeFile(inputName, new Uint8Array(await fetchFile(videoBlob)));
+          setProgresoDescarga(50);
+          const ini = Math.max(0, linea.inicio);
+          const fin = Math.max(ini + 0.5, linea.fin);
+          const dur = fin - ini;
+          await ffmpeg.exec([
+            '-ss', String(ini),
+            '-i', inputName,
+            '-t', String(dur),
+            '-c', 'copy',
+            '-avoid_negative_ts', 'make_zero',
+            outputName
+          ]);
+          setProgresoDescarga(80);
+          const data = await ffmpeg.readFile(outputName);
+          try { await ffmpeg.deleteFile(inputName); } catch (_) {}
+          try { await ffmpeg.deleteFile(outputName); } catch (_) {}
+          const finalBlob = new Blob([data.buffer], { type: ext === 'mp4' ? 'video/mp4' : 'video/webm' });
+          const url = URL.createObjectURL(finalBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = nombreArchivo;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          setProgresoDescarga(100);
+          return;
+        } catch (e) {
+          console.error('Error en trim rápido:', e);
+          setAviso('Error en trim rápido, intentando método FFmpeg frame...');
+        }
+      }
+    }
+    setDescargandoMontaje(true);
+    setProgresoDescarga(0);
+    let canvas = null;
+    const els = [];
+    try {
+      const ffmpeg = await loadFFmpeg();
+      const w = 1280;
+      const h = 720;
+      canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const mkVid = async (src) => {
+        const vid = document.createElement('video');
+        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(vid);
+        els.push(vid);
+        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+        return vid;
+      };
+      const mkImg = async (u) => {
+        const im = document.createElement('img');
+        im.crossOrigin = 'anonymous';
+        im.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+        document.body.appendChild(im);
+        els.push(im);
+        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = u; });
+        return im;
+      };
+      let base = null;
+      if (baseSrc) base = await mkVid(baseSrc);
+      const segs = [];
+      const rangos = [];
+      for (const linea of validas) {
+        rangos.push([segs.length, segs.length]);
+        if (linea.tipo === 'transicion') continue;
+        const nombre = linea.concepto || '';
+        if (linea.tipo === 'imagen' && linea.imagenUrl) {
+          const im = await mkImg(linea.imagenUrl);
+          segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
+        } else if (linea.videoUrl) {
+          const v = await mkVid(linea.videoUrl);
+          let d = 5;
+          try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
+          segs.push({ el: v, src: linea.videoUrl, desde: 0, hasta: d, nombre });
+        } else if (linea.inicio != null && linea.fin != null && base) {
+          const ini = Math.max(0, linea.inicio);
+          const fin = Math.max(ini + 0.5, linea.fin);
+          const anims = (capturas || [])
+            .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+            .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
+            .sort((a, b) => a.en - b.en);
+          let cursor = ini;
+          for (const a of anims) {
+            if (!(a.en > cursor && a.en < fin)) continue;
+            segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre });
+            const av = await mkVid(a.src);
+            segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
+            cursor = a.en;
+          }
+          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: fin, nombre });
+        }
+        rangos[rangos.length - 1][1] = segs.length;
+      }
+      const segsOk = segs.filter(s => s.hasta > s.desde);
+      if (!segsOk.length) { setAviso('Nada que descargar'); return; }
+      const totalDur = segsOk.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
+      const totalFrames = Math.ceil(totalDur * 30);
+      const frames = [];
+      const seekVideo = (el, t) => new Promise((res) => {
+        if (!el || el.tagName === 'IMG') { res(); return; }
+        try {
+          el.onseeked = () => res();
+          el.currentTime = Math.max(0, t);
+          setTimeout(res, 1500);
+        } catch (_) { res(); }
+      });
+      const playVideo = (el) => { try { el.play().catch(() => {}); } catch (_) {} };
+      const pauseVideo = (el) => { try { el.pause(); } catch (_) {} };
+      let globalFrame = 0;
+      for (const seg of segsOk) {
+        const segDur = Math.max(0, seg.hasta - seg.desde);
+        const segFrames = Math.ceil(segDur * 30);
+        if (seg.kind || seg.esAnim || seg.tipo === 'imagen') {
+          if (seg.kind) {
+            const elA = seg.elA;
+            const elB = seg.elB;
+            if (elA && elA.tagName !== 'IMG') { await seekVideo(elA, seg.aDesde || 0); playVideo(elA); }
+            if (elB && elB.tagName !== 'IMG') { await seekVideo(elB, seg.bDesde || 0); playVideo(elB); }
+          } else if (seg.esAnim) {
+            if (seg.el && seg.el.tagName !== 'IMG') { await seekVideo(seg.el, seg.desde); playVideo(seg.el); }
+          }
+          for (let f = 0; f < segFrames; f++) {
+            const t = segFrames > 0 ? f / segFrames : 0;
+            ctx.clearRect(0, 0, w, h);
+            if (seg.kind) {
+              const elA = seg.elA;
+              const elB = seg.elB;
+              if (seg.kind === 'crossfade' || seg.kind === 'negro') {
+                ctx.globalAlpha = 1;
+                if (t < 0.5 && elA) { try { ctx.drawImage(elA, 0, 0, w, h); } catch (_) {} ctx.globalAlpha = t * 2; }
+                if (t >= 0.5 && elB) { try { ctx.drawImage(elB, 0, 0, w, h); } catch (_) {} }
+              } else if (seg.kind === 'flash') {
+                if (t < 0.5 && elA) { try { ctx.drawImage(elA, 0, 0, w, h); } catch (_) {} }
+                else if (elB) { try { ctx.drawImage(elB, 0, 0, w, h); } catch (_) {} }
+                ctx.globalAlpha = Math.max(0, 1 - Math.abs(2 * t - 1));
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+              } else {
+                ctx.globalAlpha = 1 - t;
+                if (elA) { try { ctx.drawImage(elA, 0, 0, w, h); } catch (_) {} }
+                ctx.globalAlpha = t;
+                if (elB) { try { ctx.drawImage(elB, 0, 0, w, h); } catch (_) {} }
+              }
+              ctx.globalAlpha = 1;
+            } else if (seg.tipo === 'imagen') {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+            } else {
+              ctx.globalAlpha = 1;
+              try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+            }
+            if (seg.nombre) {
+              try {
+                ctx.font = '800 32px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillRect(0, 0, w, 52);
+                ctx.fillStyle = '#facc15';
+                ctx.fillText(seg.nombre, w / 2, 26);
+              } catch (_) {}
+            }
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            frames.push(blob);
+            globalFrame++;
+            const prog = Math.min(99, Math.round((globalFrame / Math.max(1, totalFrames)) * 100));
+            setProgresoDescarga(prog);
+          }
+          if (seg.kind) {
+            [seg.elA, seg.elB].forEach(el => { if (el && el.tagName !== 'IMG') pauseVideo(el); });
+          } else if (seg.el && seg.el.tagName !== 'IMG') {
+            pauseVideo(seg.el);
+          }
+        } else {
+          if (seg.el && seg.el.tagName !== 'IMG') {
+            await seekVideo(seg.el, seg.desde);
+            playVideo(seg.el);
+          }
+          for (let f = 0; f < segFrames; f++) {
+            ctx.clearRect(0, 0, w, h);
+            ctx.globalAlpha = 1;
+            try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+            if (seg.nombre) {
+              try {
+                ctx.font = '800 32px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillRect(0, 0, w, 52);
+                ctx.fillStyle = '#facc15';
+                ctx.fillText(seg.nombre, w / 2, 26);
+              } catch (_) {}
+            }
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            frames.push(blob);
+            globalFrame++;
+            const prog = Math.min(99, Math.round((globalFrame / Math.max(1, totalFrames)) * 100));
+            setProgresoDescarga(prog);
+          }
+          if (seg.el && seg.el.tagName !== 'IMG') pauseVideo(seg.el);
+        }
+      }
+      setProgresoDescarga(95);
+      for (let i = 0; i < frames.length; i++) {
+        const padded = String(i + 1).padStart(5, '0');
+        await ffmpeg.writeFile(`frame_${padded}.png`, new Uint8Array(await fetchFile(frames[i])));
+        if (i % 30 === 0) {
+          const writeProg = 95 + Math.round((i / frames.length) * 2);
+          setProgresoDescarga(writeProg);
+        }
+      }
+      frames.length = 0;
+      setProgresoDescarga(97);
+      const outputName = `output.${ext}`;
+      await ffmpeg.exec([
+        '-framerate', '30',
+        '-i', 'frame_%05d.png',
+        '-c:v', ext === 'mp4' ? 'libx264' : 'libvpx-vp9',
+        '-pix_fmt', 'yuv420p',
+        '-b:v', '8M',
+        outputName
+      ]);
+      setProgresoDescarga(99);
+      const data = await ffmpeg.readFile(outputName);
+      try { await ffmpeg.deleteFile(outputName); } catch (_) {}
+      const finalBlob = new Blob([data.buffer], { type: ext === 'mp4' ? 'video/mp4' : 'video/webm' });
+      const url = URL.createObjectURL(finalBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      console.error('Error al descargar con FFmpeg', e);
+      setAviso('Error con FFmpeg, intentando método clásico...');
+      return descargarLineas(lineas, nombreCustom);
+    } finally {
+      setProgresoDescarga(100);
+      setDescargandoMontaje(false);
+      setProgresoDescarga(0);
+      els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+      try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     }
   };
 
@@ -1598,7 +2042,7 @@ const bdVideoTargetRef = useRef(null);
             fd.append('video', blob, `clip.${ext}`);
             fd.append('trimStart', '0.2');
             fd.append('ext', ext);
-            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
             if (resp && resp.ok) finalBlob = await resp.blob();
           } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
@@ -1611,12 +2055,19 @@ const bdVideoTargetRef = useRef(null);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
           resolve();
         };
-        const terminar = () => {
+const terminar = () => {
           if (terminado) return;
           terminado = true;
           try { rec.stop(); } catch (_) {}
-          els.forEach(v => { try { v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
+          els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
+          // Fallback: si rec.onstop no dispara en 500ms, forzar limpieza
+          setTimeout(() => {
+            if (rec.state === 'inactive') {
+              setDescargandoMontaje(false);
+              setProgresoDescarga(0);
+            }
+          }, 500);
         };
         rec.start(250);
         const loop = () => {
@@ -1751,7 +2202,7 @@ const bdVideoTargetRef = useRef(null);
             fd.append('video', blob, `clip.${ext}`);
             fd.append('trimStart', '0.2');
             fd.append('ext', ext);
-            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+            const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
             if (resp && resp.ok) finalBlob = await resp.blob();
           } catch (_) {}
           const url = URL.createObjectURL(finalBlob);
@@ -2213,7 +2664,7 @@ const bdVideoTargetRef = useRef(null);
               const fd = new FormData();
               fd.append('video', blob, 'montaje.webm');
               fd.append('trimStart', '0.2');
-              const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd });
+              const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
               if (resp && resp.ok) {
                 finalBlob = await resp.blob();
                 trimmed = true;
@@ -2228,14 +2679,21 @@ const bdVideoTargetRef = useRef(null);
           };
         };
 
+        let nextReady = false;
+        let waitingNextEl = null;
+        let lastFrameTime = performance.now();
+
         const loop = () => {
           if (terminado) return;
           if (currentSeg >= segs.length) { terminar(false); return; }
+          const now = performance.now();
+          const dt = (now - lastFrameTime) / 1000;
+          lastFrameTime = now;
           const seg = segs[currentSeg];
-          segElapsed += 1 / 30;
+          segElapsed += dt;
 
           if (seg.tipo === 'transicion') {
-            crossfadeElapsed += 1 / 30;
+            crossfadeElapsed += dt;
             const t = Math.min(crossfadeElapsed / seg.duracion, 1);
             const modelo = seg.modelo || 'crossfade';
             const dibujar = (el, alpha) => {
@@ -2282,8 +2740,16 @@ const bdVideoTargetRef = useRef(null);
               ctx.restore();
             } else {
               ctx.globalAlpha = 1;
-              dibujar(prevEl, 1 - t);
-              dibujar(nextEl, t);
+              const prevOk = prevEl ? (prevEl.tagName === 'IMG' ? prevEl.complete : prevEl.readyState >= 2) : false;
+              const nextOk = nextEl ? (nextEl.tagName === 'IMG' ? nextEl.complete : nextEl.readyState >= 2) : false;
+              if (prevOk && nextOk) {
+                dibujar(prevEl, 1 - t);
+                dibujar(nextEl, t);
+              } else if (prevOk) {
+                dibujar(prevEl, 1);
+              } else if (nextOk) {
+                dibujar(nextEl, 1);
+              }
             }
             ctx.globalAlpha = 1;
             requestFrame();
@@ -2333,10 +2799,23 @@ const bdVideoTargetRef = useRef(null);
                 const nextIdx = currentSeg + 1;
                 if (nextIdx < segs.length && segs[nextIdx].tipo !== 'transicion') {
                   nextEl = segs[nextIdx].el;
-                  if (nextEl.tagName !== 'IMG') {
+                  nextReady = false;
+                  if (nextEl.tagName === 'IMG') {
+                    nextReady = nextEl.complete;
+                  } else {
                     const ini = segs[nextIdx].inicio != null ? Number(segs[nextIdx].inicio) : 0;
-                    try { if (Math.abs(nextEl.currentTime - ini) > 0.05) nextEl.currentTime = ini; } catch (_) {}
+                    try {
+                      if (Math.abs(nextEl.currentTime - ini) > 0.05) nextEl.currentTime = ini;
+                    } catch (_) {}
                     nextEl.play().catch(() => {});
+                    const checkReady = () => { nextReady = true; };
+                    waitingNextEl = checkReady;
+                    if (nextEl.readyState >= 2) {
+                      nextReady = true;
+                    } else {
+                      nextEl.addEventListener('canplay', checkReady, { once: true });
+                      nextEl.addEventListener('loadeddata', checkReady, { once: true });
+                    }
                   }
                 }
                 crossfadeElapsed = 0;
@@ -2349,7 +2828,6 @@ const bdVideoTargetRef = useRef(null);
           if (!terminado) requestAnimationFrame(loop);
         };
 
-        rec.start(250);
         requestAnimationFrame(loop);
       });
       return resultado;
@@ -3411,7 +3889,7 @@ const bdVideoTargetRef = useRef(null);
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                         <span style={{ fontSize: '1.1rem' }}>📁</span>
                         <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', marginLeft: '0.5rem' }}>{a.nombre}</span>
-                        <button onClick={() => setArchivosBD(prev => prev.filter(x => x.id !== a.id))} title="Quitar registro" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                        <button onClick={() => { if (window.confirm('¿Eliminar este registro?')) setArchivosBD(prev => prev.filter(x => x.id !== a.id)); }} title="Quitar registro" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
                       </div>
                     </td>
                     <td style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center' }}>
@@ -3464,7 +3942,7 @@ const bdVideoTargetRef = useRef(null);
                             {selectorCargar()}
                             <button
                               onClick={() => {
-                                setVideosBD(prev => prev.filter(x => x.id !== v.id));
+                                if (window.confirm('¿Eliminar este vídeo?')) setVideosBD(prev => prev.filter(x => x.id !== v.id));
                               }}
                               title="Eliminar vídeo"
                               style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
@@ -4655,7 +5133,11 @@ const bdVideoTargetRef = useRef(null);
                       onClick={() => {
                         const v = !todasTrans;
                         setTodasTrans(v);
-                        if (v) { const mod = modeloTransSel || 'crossfade'; insertarTransicion(mod, durTrans[mod] ?? durTrans.crossfade, true, false); }
+                        if (v) {
+                          const modelo = modeloTransSel || 'crossfade';
+                          setModeloTransSel(modelo);
+                          insertarTransicion(modelo, durTrans[modelo] ?? durTrans.crossfade, true, false);
+                        }
                         else setFilasMontaje(prev => prev.filter(f => f.tipo !== 'transicion'));
                       }}
                       title="Transiciones en todas las líneas"
@@ -4723,6 +5205,15 @@ const bdVideoTargetRef = useRef(null);
               style={{ background: '#8b5cf6', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: progresoRegen !== null ? 'wait' : 'pointer', opacity: progresoRegen !== null ? 0.7 : 1 }}
             >
               {progresoRegen !== null ? `Generando ${progresoRegen}%` : 'Regenerar vídeos'}
+            </button>
+            <button
+              onClick={() => optimizarUltimoVideo(ultimoVideo)}
+              disabled={optimizando || descargandoMontaje || !ultimoVideo}
+              title={ultimoVideo ? `Optimizar ${ultimoVideo.nombre}` : 'Descarga primero un vídeo'}
+              style={{ background: (!ultimoVideo || optimizando) ? '#334155' : '#7c3aed', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (optimizando || descargandoMontaje || !ultimoVideo) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {optimizando && <span style={{ fontFamily: 'monospace' }}>{progresoOpt}%</span>}
+              Optimizar
             </button>
             <button
               onClick={() => exportarMontaje()}
