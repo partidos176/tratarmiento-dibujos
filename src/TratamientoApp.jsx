@@ -2399,11 +2399,9 @@ const terminar = () => {
         }
         const esExportDeCortes = filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'));
         const dc = esExportDeCortes ? (Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {})) : {};
-        let nCortesCargados = 0;
         if (Array.isArray(dc.cortes) && dc.cortes.length) {
           const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
           if (lista.length) {
-            nCortesCargados = lista.length;
             setCortes(lista);
             setFiltroAccionCortes('');
             if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes({ ...dc.duracionCortes });
@@ -2413,14 +2411,6 @@ const terminar = () => {
             if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
           }
         }
-        const partes = [];
-        if (nCortesCargados) partes.push(`${nCortesCargados} cortes`);
-        if (capturasImportadas.length) partes.push(`${capturasImportadas.length} ${capturasImportadas.length === 1 ? 'captura' : 'capturas'}`);
-        setAviso(
-          partes.length
-            ? `Importado: ${partes.join(' y ')}.${!esExportDeCortes && data.cortes ? ' Los cortes no se cargan desde un archivo de Montaje.' : ''}`
-            : 'El archivo no traía cortes ni capturas'
-        );
       } catch (e) {
         console.error('Error al importar montaje', e);
         setAviso('No se pudo importar: ' + ((e && e.message) || e));
