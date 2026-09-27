@@ -93,6 +93,7 @@ function TratamientoApp({ videoInicial }) {
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
+  const [accionCortes, setAccionCortes] = useState({});
   const [filtroAccionCortes, setFiltroAccionCortes] = useState('');
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [cortesEditados, setCortesEditados] = useState({});
@@ -140,6 +141,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     cortes: [...cortes].sort((a, b) => a - b),
     duracionCortes: { ...duracionCortes },
     nombreCortes: { ...nombreCortes },
+    accionCortes: { ...accionCortes },
     cortesEditados: { ...cortesEditados },
     fotoPorCorte: { ...fotoPorCorte }
   });
@@ -185,6 +187,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     setCortes(lista);
     setDuracionCortes(objStr(data.duracionCortes));
     setNombreCortes(objStr(data.nombreCortes));
+    setAccionCortes(objStr(data.accionCortes));
     setCortesEditados(objStr(data.cortesEditados));
     setFotoPorCorte(objStr(data.fotoPorCorte));
     if (Array.isArray(data.fotos)) {
@@ -2331,7 +2334,7 @@ const terminar = () => {
       setFilasMontaje([]);
       setCortes([]);
       setDuracionCortes({});
-      setNombreCortes({});
+      setNombreCortes({}); setAccionCortes({});
       setFiltroAccionCortes('');
       setLineasSelMontaje({});
       setPreviewMontaje(null);
@@ -2346,28 +2349,14 @@ const terminar = () => {
         const data = JSON.parse(reader.result);
         const filas = Array.isArray(data) ? data : data.filas;
         if (!Array.isArray(filas)) { setAviso('Archivo no válido'); return; }
-        const restauradas = await Promise.all(filas.map(async (f) => {
-          const copia = { ...f };
-          if (f.videoDataUrl) { copia.videoUrl = await dataUrlAVideoBlobUrl(f.videoDataUrl); delete copia.videoDataUrl; }
-          if (f.imagenDataUrl) { copia.imagenUrl = f.imagenDataUrl; delete copia.imagenDataUrl; }
-          return copia;
-        }));
-        setFilasMontaje(prev => {
-          const ids = new Set();
-          const filtradas = restauradas.filter(f => {
-            if (!f || ids.has(f.id)) return false;
-            ids.add(f.id);
-            return true;
-          });
-          let numCorte = 0;
-          return filtradas.map(f => {
-            if (f.tipo === 'transicion') return f;
-            numCorte++;
-            return f.numCorte != null ? f : { ...f, numCorte };
-          });
-        });
+        const ids = new Set();
+        const nFilas = filas.filter(f => {
+          if (!f || ids.has(f.id)) return false;
+          ids.add(f.id);
+          return true;
+        }).length;
         setArchivosBD(prev => {
-          const reg = { id: Date.now(), nombre: file.name, nFilas: restauradas.length };
+          const reg = { id: Date.now(), nombre: file.name, nFilas };
           const ix = prev.findIndex(x => x.nombre === file.name);
           if (ix >= 0) { const copy = [...prev]; copy[ix] = reg; return copy; }
           return [...prev, reg];
@@ -2416,6 +2405,8 @@ const terminar = () => {
             setFiltroAccionCortes('');
             if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes({ ...dc.duracionCortes });
             if (dc.nombreCortes && typeof dc.nombreCortes === 'object') setNombreCortes({ ...dc.nombreCortes });
+            if (dc.accionCortes && typeof dc.accionCortes === 'object') setAccionCortes({ ...dc.accionCortes });
+            else setAccionCortes({});
             if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
           }
         }
@@ -3844,21 +3835,13 @@ const terminar = () => {
         </div>
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-          <div style={{ width: '100%', maxWidth: '800px', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>IMPORTAR MONTAJE:</span>
-              <input
-                ref={bdFileRef}
-                type="file"
-                accept=".json,application/json"
-                style={{ display: 'none' }}
-                onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
-              />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#0ea5e9' }}>
-                Seleccionar .json
-              </span>
-            </label>
-          </div>
+          <input
+            ref={bdFileRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
+          />
           <div style={{ width: '100%', maxWidth: '800px' }}>
             <input
               ref={bdVideoRef}
@@ -3985,7 +3968,7 @@ const terminar = () => {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>ARCHIVO:</span>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>CARGAR VIDEO:</span>
               <input
                 type="file"
                 accept="video/*"
@@ -4103,7 +4086,11 @@ const terminar = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '0 0 auto', width: '380px' }}>
                   {(() => {
                     const ord = [...cortes].sort((a, b) => b - a);
-                    const accionDeCorte = (ct) => String(nombreCortes[String(ct)] || '').split('(')[0].trim();
+                    const accionDeCorte = (ct) => {
+                      const k = String(ct);
+                      if (accionCortes[k]) return String(accionCortes[k]).trim();
+                      return String(nombreCortes[k] || '').split('(')[0].trim();
+                    };
                     const accionesCortes = [...new Set(ord.map(accionDeCorte).filter(Boolean))].sort();
                     const visibles = filtroAccionCortes ? ord.filter((ct) => accionDeCorte(ct) === filtroAccionCortes) : ord;
                     return (
@@ -4136,15 +4123,15 @@ const terminar = () => {
                         onChange={(e) => { const v = e.target.value; setNombreCortes(prev => ({ ...prev, [String(ct)]: v })); }}
                         onClick={(e) => e.stopPropagation()}
                         placeholder="Nombre"
-                        style={{ flex: 1, minWidth: '80px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
+                        style={{ flex: 1, minWidth: '130px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.35rem 0.65rem', color: '#e2e8f0', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', outline: 'none' }}
                       />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = Math.max(1, dur - 1); setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = Math.max(0, ct - 1); if (nuevo === ct || cortes.includes(nuevo)) return; const nk = String(nuevo); const nd = (ct + dur) - nuevo; setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Retroceder el inicio del corte 1s (fin fijo)" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = Math.max(1, dur - 1); setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = Math.max(0, ct - 1); if (nuevo === ct || cortes.includes(nuevo)) return; const nk = String(nuevo); const nd = (ct + dur) - nuevo; setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Retroceder el inicio del corte 1s (fin fijo)" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>-</button>
                         <span style={{ color: '#ffffff', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, fontSize: '0.75rem', minWidth: '32px', textAlign: 'center' }}>{duracionCortes[String(ct)] ?? 15}s</span>
-                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = dur + 1; setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = ct + 1; const nd = (ct + dur) - nuevo; if (nd < 1 || cortes.includes(nuevo)) return; const nk = String(nuevo); setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Avanzar el inicio del corte 1s (fin fijo)" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+                        <button onClick={(e) => { e.stopPropagation(); const k = String(ct); const dur = duracionCortes[k] ?? 15; if (selPeriodo === `${k}-fin`) { const nd = dur + 1; setDuracionCortes(prev => ({ ...prev, [k]: nd })); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct + nd); return; } const nuevo = ct + 1; const nd = (ct + dur) - nuevo; if (nd < 1 || cortes.includes(nuevo)) return; const nk = String(nuevo); setCortes(prev => prev.map((x) => x === ct ? nuevo : x)); setSelPeriodo(`${nuevo}-ini`); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; c[nk] = nd; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (k in c) { c[nk] = c[k]; delete c[k]; } return c; }); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, nuevo); }} title="Avanzar el inicio del corte 1s (fin fijo)" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
                       </div>
                         <button
-                          onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); setFilasMontaje(prev => prev.filter(f => f.inicio != null && Math.abs(f.inicio - ct) > 0.01)); }}
+                          onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setAccionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); setFilasMontaje(prev => prev.filter(f => f.inicio != null && Math.abs(f.inicio - ct) > 0.01)); }}
                           title={`Eliminar corte en ${formatoTiempo(ct)}`}
                           style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
                         >
@@ -5279,7 +5266,7 @@ const terminar = () => {
               Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
             <button
-              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); setFiltroAccionCortes(''); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
+              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); setAccionCortes({}); setFiltroAccionCortes(''); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
               style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
               Limpiar
@@ -5378,7 +5365,7 @@ const terminar = () => {
                         const dur = fila.fin - nuevo;
                         const oldKey = String(fila.inicio);
                         const cortesIdx = cortes.indexOf(fila.inicio);
-                        if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                        if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
                         setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
                       } else {
@@ -5398,7 +5385,7 @@ const terminar = () => {
                         const dur = fila.fin - nuevo;
                         const oldKey = String(fila.inicio);
                         const cortesIdx = cortes.indexOf(fila.inicio);
-                        if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                        if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
                         setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
                       } else {
