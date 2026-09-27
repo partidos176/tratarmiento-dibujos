@@ -2348,7 +2348,7 @@ const terminar = () => {
       try {
         const data = JSON.parse(reader.result);
         const filas = Array.isArray(data) ? data : data.filas;
-        if (!Array.isArray(filas)) { setAviso('Archivo no válido'); return; }
+        if (!Array.isArray(filas)) return;
         const ids = new Set();
         const nFilas = filas.filter(f => {
           if (!f || ids.has(f.id)) return false;
@@ -2413,7 +2413,6 @@ const terminar = () => {
         }
       } catch (e) {
         console.error('Error al importar montaje', e);
-        setAviso('No se pudo importar: ' + ((e && e.message) || e));
       }
     };
     reader.readAsText(file);
