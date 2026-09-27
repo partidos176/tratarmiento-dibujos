@@ -4015,23 +4015,6 @@ const terminar = () => {
                 ELIMINAR
               </button>
             )}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>CORTES JSON:</span>
-              <input
-                type="file"
-                accept=".json,application/json"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files && e.target.files[0];
-                  if (!file) return;
-                  importarCortes(file);
-                  e.target.value = '';
-                }}
-              />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#22c55e', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Importar .json
-              </span>
-            </label>
           </div>
           {videoUrlCortes && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
