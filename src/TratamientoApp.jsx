@@ -2397,7 +2397,8 @@ const terminar = () => {
             return [...map.values()];
           });
         }
-        const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
+        const esExportDeCortes = filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'));
+        const dc = esExportDeCortes ? (Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {})) : {};
         if (Array.isArray(dc.cortes) && dc.cortes.length) {
           const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
           if (lista.length) {
