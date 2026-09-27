@@ -93,6 +93,7 @@ function TratamientoApp({ videoInicial }) {
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
+  const [filtroAccionCortes, setFiltroAccionCortes] = useState('');
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
@@ -2331,6 +2332,7 @@ const terminar = () => {
       setCortes([]);
       setDuracionCortes({});
       setNombreCortes({});
+      setFiltroAccionCortes('');
       setLineasSelMontaje({});
       setPreviewMontaje(null);
     }
@@ -2411,6 +2413,7 @@ const terminar = () => {
           const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
           if (lista.length) {
             setCortes(lista);
+            setFiltroAccionCortes('');
             if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes({ ...dc.duracionCortes });
             if (dc.nombreCortes && typeof dc.nombreCortes === 'object') setNombreCortes({ ...dc.nombreCortes });
             if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
@@ -3841,14 +3844,22 @@ const terminar = () => {
         </div>
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+          <div style={{ width: '100%', maxWidth: '800px', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>IMPORTAR MONTAJE:</span>
+              <input
+                ref={bdFileRef}
+                type="file"
+                accept=".json,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
+              />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#0ea5e9' }}>
+                Seleccionar .json
+              </span>
+            </label>
+          </div>
           <div style={{ width: '100%', maxWidth: '800px' }}>
-            <input
-              ref={bdFileRef}
-              type="file"
-              accept=".json,application/json"
-              style={{ display: 'none' }}
-              onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
-            />
             <input
               ref={bdVideoRef}
               type="file"
@@ -3972,7 +3983,7 @@ const terminar = () => {
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>ARCHIVO:</span>
               <input
@@ -4004,6 +4015,23 @@ const terminar = () => {
                 ELIMINAR
               </button>
             )}
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>CORTES JSON:</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (!file) return;
+                  importarCortes(file);
+                  e.target.value = '';
+                }}
+              />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#22c55e', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Importar .json
+              </span>
+            </label>
           </div>
           {videoUrlCortes && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
@@ -4092,8 +4120,30 @@ const terminar = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '0 0 auto', width: '380px' }}>
                   {(() => {
                     const ord = [...cortes].sort((a, b) => b - a);
-                    return ord.map((ct, i) => (
-                    <div key={`corte-${i}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
+                    const accionDeCorte = (ct) => String(nombreCortes[String(ct)] || '').split('(')[0].trim();
+                    const accionesCortes = [...new Set(ord.map(accionDeCorte).filter(Boolean))].sort();
+                    const visibles = filtroAccionCortes ? ord.filter((ct) => accionDeCorte(ct) === filtroAccionCortes) : ord;
+                    return (
+                    <>
+                    <select
+                      value={filtroAccionCortes}
+                      onChange={(e) => setFiltroAccionCortes(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Filtrar los cortes por tipo de acción"
+                      style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', outline: 'none', width: '100%' }}
+                    >
+                      <option value="">TODAS LAS ACCIONES ({ord.length})</option>
+                      {accionesCortes.map((a) => (
+                        <option key={a} value={a}>{a} ({ord.filter((ct) => accionDeCorte(ct) === a).length})</option>
+                      ))}
+                    </select>
+                    {visibles.length === 0 && (
+                      <span style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '0.2rem 0.4rem' }}>Ningún corte con esa acción</span>
+                    )}
+                    {visibles.map((ct) => {
+                    const i = ord.indexOf(ct);
+                    return (
+                    <div key={`corte-${ct}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
                       <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{ord.length - i}</span>
                       <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
                         <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
@@ -4118,7 +4168,10 @@ const terminar = () => {
                           ×
                         </button>
                     </div>
-                    ));
+                    );
+                    })}
+                    </>
+                    );
                   })()}
                 </div>
               )}
@@ -5243,7 +5296,7 @@ const terminar = () => {
               Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
             <button
-              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
+              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); setFiltroAccionCortes(''); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
               style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
               Limpiar
