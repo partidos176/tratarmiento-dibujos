@@ -98,6 +98,23 @@ function TratamientoApp({ videoInicial }) {
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [corteNumAzul, setCorteNumAzul] = useState({});
   const toggleCorteNumAzul = (k) => setCorteNumAzul(prev => { const c = { ...prev }; if (c[k]) delete c[k]; else c[k] = true; return c; });
+  // Construye la fila de Montaje de un corte. Devuelve null si ya está en la hoja.
+  const filaMontajeDeCorte = (ct) => {
+    const ord = [...cortes].sort((a, b) => b - a);
+    const dur = duracionCortes[String(ct)] ?? 15;
+    const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
+    const ini = Math.max(0, ct);
+    const fin = ini + dur;
+    if (filasMontaje.some(f => f.inicio === ini && f.fin === fin)) return null;
+    return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
+  };
+  // Pasa una lista de cortes a la hoja Montaje y cambia a esa hoja.
+  const pasarCortesAMontaje = (lista) => {
+    const nuevas = lista.map(filaMontajeDeCorte).filter(Boolean);
+    if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
+    setFilasMontaje(prev => [...prev, ...nuevas]);
+    setHoja('Montaje');
+  };
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
@@ -134,7 +151,6 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [progresoOpt, setProgresoOpt] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [showModalDescarga, setShowModalDescarga] = useState(false);
-  const [corteSelMontaje, setCorteSelMontaje] = useState('todos');
   const [todasTrans, setTodasTrans] = useState(false);
   const [modeloTransSel, setModeloTransSel] = useState(null);
   const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5, 'slide-left': 1, 'slide-right': 1, 'zoom-in': 1, wipe: 1 });
@@ -4055,29 +4071,7 @@ const terminar = () => {
                   </button>
                   {cortes.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <select value={corteSelMontaje} onChange={(e) => setCorteSelMontaje(e.target.value)} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.6rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', outline: 'none' }}>
-                        <option value="todos">Todos</option>
-                        {[...cortes].sort((a, b) => b - a).map((ct, idx) => {
-                          const num = [...cortes].sort((a, b) => b - a).length - idx;
-                          return <option key={ct} value={ct}>{num}</option>;
-                        })}
-                      </select>
-                      <button onClick={() => {
-                        const ord = [...cortes].sort((a, b) => b - a);
-                        const cortesAEnviar = corteSelMontaje === 'todos' ? cortes : [Number(corteSelMontaje)];
-                        const nuevas = cortesAEnviar.map((ct) => {
-                          const dur = duracionCortes[String(ct)] ?? 15;
-                          const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
-                          const ini = Math.max(0, ct);
-                          const fin = ini + dur;
-                          const existente = filasMontaje.find(f => f.inicio === ini && f.fin === fin);
-                          if (existente) return null;
-                          return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
-                        }).filter(Boolean);
-                        if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
-                        setFilasMontaje(prev => [...prev, ...nuevas]);
-                        setHoja('Montaje');
-                      }} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
+                      <button onClick={() => pasarCortesAMontaje(cortes)} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
                         Montaje
                       </button>
                     </div>
@@ -4117,8 +4111,13 @@ const terminar = () => {
                     return (
                     <div key={`corte-${ct}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
                       <span
-                        onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul('c' + ct); }}
-                        title={corteNumAzul['c' + ct] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (corteNumAzul['c' + ct]) { toggleCorteNumAzul('c' + ct); return; }
+                          toggleCorteNumAzul('c' + ct);
+                          pasarCortesAMontaje([ct]);
+                        }}
+                        title={corteNumAzul['c' + ct] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte y Pasarlo a Montaje'}
                         style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['c' + ct] ? '#38bdf8' : 'transparent', color: corteNumAzul['c' + ct] ? '#0f172a' : '#e2e8f0' }}
                       >{ord.length - i}</span>
                       <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
