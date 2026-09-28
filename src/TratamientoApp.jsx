@@ -96,6 +96,8 @@ function TratamientoApp({ videoInicial }) {
   const [accionCortes, setAccionCortes] = useState({});
   const [filtroAccionCortes, setFiltroAccionCortes] = useState('');
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
+  const [corteNumAzul, setCorteNumAzul] = useState({});
+  const toggleCorteNumAzul = (k) => setCorteNumAzul(prev => { const c = { ...prev }; if (c[k]) delete c[k]; else c[k] = true; return c; });
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
   const [generandoClip, setGenerandoClip] = useState(null);
@@ -4114,7 +4116,11 @@ const terminar = () => {
                     const i = ord.indexOf(ct);
                     return (
                     <div key={`corte-${ct}`} onClick={() => { setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir a este punto del vídeo" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', cursor: 'pointer', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
-                      <span style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '0.8rem', minWidth: '18px', textAlign: 'center', flexShrink: 0 }}>{ord.length - i}</span>
+                      <span
+                        onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul('c' + ct); }}
+                        title={corteNumAzul['c' + ct] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'}
+                        style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['c' + ct] ? '#38bdf8' : 'transparent', color: corteNumAzul['c' + ct] ? '#0f172a' : '#e2e8f0' }}
+                      >{ord.length - i}</span>
                       <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
                         <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
                       </span>
@@ -5311,7 +5317,7 @@ const terminar = () => {
                 onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
                 title="Arrastra para mover la fila (clic para seleccionar)"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: (fila.tipo === 'imagen' || fila.tipo === 'transicion') ? 'auto' : 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
-                {fila.tipo !== 'transicion' && <span style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '0.8rem', minWidth: '18px', textAlign: 'center', flexShrink: 0 }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
+                {fila.tipo !== 'transicion' && <span onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul('m' + fila.id); }} title={corteNumAzul['m' + fila.id] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'} style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['m' + fila.id] ? '#38bdf8' : 'transparent', color: corteNumAzul['m' + fila.id] ? '#0f172a' : '#e2e8f0' }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
                 <div
                   data-sq="1"
                   onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
