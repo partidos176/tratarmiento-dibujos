@@ -1162,9 +1162,10 @@ const bdVideoTargetRef = useRef(null);
     }
   };
 
-  // Con 'optimizarDespues' genera ademas la version optimizada del video
-  // recien descargado, sin pasar por el estado ultimoVideo.
-  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false) => {
+  // 'optimizarDespues' genera ademas la version optimizada del video recien
+  // grabado. 'soloOptimizado' evita descargarlo sin optimizar, de modo que
+  // el unico archivo que sale es el optimizado.
+  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
@@ -1364,14 +1365,16 @@ rec.onstop = async () => {
           }
           try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           setProgresoDescarga(100);
-          const url = URL.createObjectURL(finalBlob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = nombreArchivo;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 5000);
+          if (!soloOptimizado) {
+            const url = URL.createObjectURL(finalBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nombreArchivo;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+          }
           try { setAviso(''); } catch (_) {}
           if (optimizarDespues) {
             try { await optimizarUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
@@ -1387,18 +1390,24 @@ rec.onstop = async () => {
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
 // Fallback: si rec.onstop no dispara en 3s, forzar descarga
-        setTimeout(() => {
+        setTimeout(async () => {
           if (!descargaHecha && rec.state === 'inactive') {
             const blob = new Blob(chunks, { type: mime });
             setProgresoDescarga(100);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = nombreArchivo;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            if (!soloOptimizado) {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = nombreArchivo;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(url), 5000);
+            }
+            if (optimizarDespues) {
+              try { await optimizarUltimoVideo({ blob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
+            }
+            descargaHecha = true;
             resolve();
             setDescargandoMontaje(false);
             setProgresoDescarga(0);
@@ -5231,12 +5240,12 @@ const terminar = () => {
                     <button
                       onClick={async () => {
                         setShowModalDescarga(false);
-                        await descargarLineas(marcadas, null, true);
+                        await descargarLineas(marcadas, null, true, true);
                       }}
                       disabled={descargandoMontaje}
                       style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
                     >
-                      Descargar todo junto
+                      Descargar todo junto (optimizado)
                     </button>
                     <button onClick={() => setShowModalDescarga(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cancelar</button>
                   </div>
