@@ -2429,23 +2429,29 @@ const terminar = () => {
             if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
           }
         }
-        // Restaura las filas de la hoja Montaje. El export guarda los medios
-        // como data URL (videoDataUrl / imagenDataUrl) y anula videoUrl /
-        // imagenUrl, asi que hay que volver a convertirlos a URL utilizables.
-        const filasRestauradas = [];
-        for (const f of filasUnicas) {
-          const copia = { ...f };
-          if (!copia.videoUrl && copia.videoDataUrl) {
-            const url = await dataUrlAVideoBlobUrl(copia.videoDataUrl);
-            if (url) { videoDataUrlCacheRef.current.set(url, copia.videoDataUrl); copia.videoUrl = url; }
-            delete copia.videoDataUrl;
+        // Un export de cortes (por ejemplo *_para_tratamiento_bd.json, generado
+        // desde la app analisis) trae las filas con 'accion': son la lista de
+        // cortes, no lineas de Montaje. Solo un export de montaje las restaura.
+        const esExportDeMontaje = data.app === 'tratamiento-dibujos-montaje' || (!data.app && !esExportDeCortes);
+        if (esExportDeMontaje) {
+          // El export guarda los medios como data URL (videoDataUrl /
+          // imagenDataUrl) y anula videoUrl / imagenUrl, asi que hay que
+          // volver a convertirlos a URL utilizables.
+          const filasRestauradas = [];
+          for (const f of filasUnicas) {
+            const copia = { ...f };
+            if (!copia.videoUrl && copia.videoDataUrl) {
+              const url = await dataUrlAVideoBlobUrl(copia.videoDataUrl);
+              if (url) { videoDataUrlCacheRef.current.set(url, copia.videoDataUrl); copia.videoUrl = url; }
+              delete copia.videoDataUrl;
+            }
+            if (!copia.imagenUrl && copia.imagenDataUrl) { copia.imagenUrl = copia.imagenDataUrl; delete copia.imagenDataUrl; }
+            filasRestauradas.push(copia);
           }
-          if (!copia.imagenUrl && copia.imagenDataUrl) { copia.imagenUrl = copia.imagenDataUrl; delete copia.imagenDataUrl; }
-          filasRestauradas.push(copia);
+          setFilasMontaje(filasRestauradas.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : filasRestauradas.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length }));
+          setLineasSelMontaje({});
+          setPreviewMontaje(null);
         }
-        setFilasMontaje(filasRestauradas.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : filasRestauradas.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length }));
-        setLineasSelMontaje({});
-        setPreviewMontaje(null);
       } catch (e) {
         console.error('Error al importar montaje', e);
       }
