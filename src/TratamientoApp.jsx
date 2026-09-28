@@ -108,13 +108,11 @@ function TratamientoApp({ videoInicial }) {
     if (filasMontaje.some(f => f.inicio === ini && f.fin === fin)) return null;
     return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
   };
-  // Pasa una lista de cortes a la hoja Montaje. 'navegar' decide si además
-  // se cambia a esa hoja (el botón Montaje sí; marcar el número, no).
-  const pasarCortesAMontaje = (lista, navegar = true) => {
+  // Pasa una lista de cortes a la hoja Montaje, sin cambiar de hoja.
+  const pasarCortesAMontaje = (lista) => {
     const nuevas = lista.map(filaMontajeDeCorte).filter(Boolean);
     if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
     setFilasMontaje(prev => [...prev, ...nuevas]);
-    if (navegar) setHoja('Montaje');
   };
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
@@ -4070,13 +4068,6 @@ const terminar = () => {
                   >
                     Corte
                   </button>
-                  {cortes.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <button onClick={() => pasarCortesAMontaje(cortes)} style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}>
-                        Montaje
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
               {cortes.length > 0 && (
@@ -4116,7 +4107,7 @@ const terminar = () => {
                           e.stopPropagation();
                           if (corteNumAzul['c' + ct]) { toggleCorteNumAzul('c' + ct); return; }
                           toggleCorteNumAzul('c' + ct);
-                          pasarCortesAMontaje([ct], false);
+                          pasarCortesAMontaje([ct]);
                         }}
                         title={corteNumAzul['c' + ct] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte y Pasarlo a Montaje'}
                         style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['c' + ct] ? '#38bdf8' : 'transparent', color: corteNumAzul['c' + ct] ? '#0f172a' : '#e2e8f0' }}
