@@ -1351,11 +1351,41 @@ const bdVideoTargetRef = useRef(null);
   // 'optimizarDespues' genera ademas la version optimizada del video recien
   // grabado. 'soloOptimizado' evita descargarlo sin optimizar, de modo que
   // el unico archivo que sale es el optimizado.
+  // Escritura directa a disco. Sin esto, un montage largo se guarda entero en
+  // memoria (unos 660 MB para 10 minutos) y la pestana se cae. Escribiendo cada
+  // trozo segun llega, la memoria se queda en un trozo y nada mas.
+  // Devuelve null si el navegador no lo soporta, y entonces se usa la via
+  // normal con Blob.
+  const pedirFicheroEnDisco = async (nombreSugerido, ext) => {
+    try {
+      if (typeof window === 'undefined' || typeof window.showSaveFilePicker !== 'function') return null;
+      const handle = await window.showSaveFilePicker({
+        suggestedName: nombreSugerido,
+        types: [{ description: 'Video', accept: { 'video/*': ['.' + ext] } }],
+      });
+      const stream = await handle.createWritable();
+      let cadena = Promise.resolve();
+      let error = null;
+      return {
+        escribir: (datos) => {
+          cadena = cadena.then(() => stream.write(datos)).catch((e) => { error = error || e; });
+        },
+        cerrar: async () => {
+          await cadena;
+          await stream.close();
+          if (error) throw error;
+        },
+      };
+    } catch (e) {
+      return null;
+    }
+  };
+
   // 'reindexar' recodifica el resultado antes de descargarlo, con un fotograma
   // clave cada segundo, que es lo que hace que se pueda avanzar rapido en
   // reproductores que no aguantan decodificar 3 s de 720p de golpe. Si no se
   // puede (fichero muy grande, sin ffmpeg o error), se entrega el crudo igual.
-  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null, reindexar = false) => {
+  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null, reindexar = false, destinoDisco = null) => {
     // Diagnostico de tiempos de esta descarga. Es un objeto mutable del ambito
     // de la funcion porque el informe se compone en rec.onstop, que se dispara
     // despues de que el bucle de grabacion termine: un useState no serviria,
@@ -1391,6 +1421,8 @@ const bdVideoTargetRef = useRef(null);
     let totalDur = 0;
     let elapsedTotal = 0;
     let tGrabaDesde = 0;
+    let bytesGrabados = 0;
+    let bpsSolicitado = 0;
     const lastProgRef = { current: -1 };
     try {
       const baseSrc = videoUrlCortes || videoUrl;
@@ -1440,8 +1472,18 @@ const bdVideoTargetRef = useRef(null);
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
       const bps = (w * h >= 1920 * 1080) ? 30000000 : (w * h >= 1280 * 720) ? 16000000 : 10000000;
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bps });
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      bpsSolicitado = bps;
+      // 25 fps en vez de 30: el origen es de 1080p y hay que descargarlo de
+      // memoria, escalarlo a 720p, dibujarlo y codificarlo 30 veces por
+      // segundo. A 30 el navegador no da abasto y el fotograma sale a bloques.
+      // En un video de analisis el salto de 30 a 25 no se aprecia.
+      rec = new MediaRecorder(canvas.captureStream(25), { mimeType: mime, videoBitsPerSecond: bps });
+      rec.ondataavailable = (e) => {
+        if (!e.data.size) return;
+        bytesGrabados += e.data.size;
+        if (destinoDisco) destinoDisco.escribir(e.data);
+        else chunks.push(e.data);
+      };
       const prep = await prepararSegmentos({ validas, mkVid, mkImg, els, base, baseSrc, capturas, nombreCustom, videosBD, archivoCortes, archivo });
       if (!prep) { setAviso('Nada que descargar'); return; }
       const segsOk = prep.segsOk;
@@ -1491,51 +1533,58 @@ rec.onstop = async () => {
           // despues el fallback de 3s lo creeria "no descargado" y volveria a
           // exportar el video entero una segunda vez.
           descargaHecha = true;
-          let finalBlob;
-          try {
-            const blob = new Blob(chunks, { type: mime });
-            finalBlob = blob;
+          let finalBlob = null;
+          if (destinoDisco) {
+            // El video ya esta escrito en disco trozo a trozo: no hay nada que
+            // ensamblar en memoria, que es justo lo que reventaba la pestana.
+            try { await destinoDisco.cerrar(); } catch (e) { console.error('Error al escribir el fichero', e); }
+            finalBlob = null;
+          } else {
             try {
-              if (await trimDisponible()) {
-                const fd = new FormData();
-                fd.append('video', blob, `montaje.${ext}`);
-                fd.append('trimStart', '0.2');
-                fd.append('ext', ext);
-                const tTrim = performance.now();
-                const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
-                if (resp && resp.ok) { finalBlob = await resp.blob(); diag.trimOk = true; }
-                diag.trimMs = Math.round(performance.now() - tTrim);
-              }
-            } catch (_) {}
-          } catch (_) {
-            finalBlob = new Blob(chunks, { type: mime });
+              const blob = new Blob(chunks, { type: mime });
+              finalBlob = blob;
+              try {
+                if (await trimDisponible()) {
+                  const fd = new FormData();
+                  fd.append('video', blob, `montaje.${ext}`);
+                  fd.append('trimStart', '0.2');
+                  fd.append('ext', ext);
+                  const tTrim = performance.now();
+                  const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
+                  if (resp && resp.ok) { finalBlob = await resp.blob(); diag.trimOk = true; }
+                  diag.trimMs = Math.round(performance.now() - tTrim);
+                }
+              } catch (_) {}
+            } catch (_) {
+              finalBlob = new Blob(chunks, { type: mime });
+            }
+            // Reindexar antes de descargar: una clave por segundo para que el
+            // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
+            // siempre se reproduce aunque tarde mas en saltar.
+            //
+            // Si el servidor ya ha recortado (/api/trim-webm responde ok) NO se
+            // reindexa: ese endpoint ya reindexa en nativo con -g 30 y
+            // +faststart, asi que hacerlo aqui con ffmpeg.wasm es un recodificado
+            // completo del archivo entero que no aporta nada y cuesta la fase mas
+            // cara de la descarga. Con el servidor off, o si el trim falla, se
+            // sigue reindexando en WASM como hasta ahora.
+            if (reindexar && !diag.trimOk) {
+              const tRi = performance.now();
+              try {
+                const ri = await reindexarParaSalto(finalBlob, ext, mime);
+                if (ri) finalBlob = ri;
+              } catch (_) {}
+              diag.reindexMs = Math.round(performance.now() - tRi);
+            }
+            try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
+            // Informe con el desglose de fases. Se compone aqui porque el trim y el
+            // reindexado ocurren despues del bucle: mostrarlo antes daria un total
+            // incompleto.
+            publicarInforme();
+            try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
-          // Reindexar antes de descargar: una clave por segundo para que el
-          // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
-          // siempre se reproduce aunque tarde mas en saltar.
-          //
-          // Si el servidor ya ha recortado (/api/trim-webm responde ok) NO se
-          // reindexa: ese endpoint ya reindexa en nativo con -g 30 y
-          // +faststart, asi que hacerlo aqui con ffmpeg.wasm es un recodificado
-          // completo del archivo entero que no aporta nada y cuesta la fase mas
-          // cara de la descarga. Con el servidor off, o si el trim falla, se
-          // sigue reindexando en WASM como hasta ahora.
-          if (reindexar && !diag.trimOk) {
-            const tRi = performance.now();
-            try {
-              const ri = await reindexarParaSalto(finalBlob, ext, mime);
-              if (ri) finalBlob = ri;
-            } catch (_) {}
-            diag.reindexMs = Math.round(performance.now() - tRi);
-          }
-          try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
-          // Informe con el desglose de fases. Se compone aqui porque el trim y el
-          // reindexado ocurren despues del bucle: mostrarlo antes daria un total
-          // incompleto.
-          publicarInforme();
-          try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           setProgresoDescarga(100);
-          if (!soloOptimizado) {
+          if (!soloOptimizado && !destinoDisco) {
             const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             a.href = url;
@@ -1561,6 +1610,17 @@ rec.onstop = async () => {
 // Fallback: si rec.onstop no dispara en 3s, forzar descarga
         setTimeout(async () => {
           if (!descargaHecha && rec.state === 'inactive') {
+            if (destinoDisco) {
+              // Con escritura a disco no hay nada que ensamblar: se cierra el
+              // fichero y listo, sin jugarse la memoria con un Blob de 600 MB.
+              try { await destinoDisco.cerrar(); } catch (_) {}
+              descargaHecha = true;
+              setProgresoDescarga(100);
+              resolve();
+              setDescargandoMontaje(false);
+              setProgresoDescarga(0);
+              return;
+            }
             const blob = new Blob(chunks, { type: mime });
             setProgresoDescarga(100);
             if (!soloOptimizado) {
@@ -1590,12 +1650,12 @@ rec.start(250);
         let segVideoLista = true;
         let segSeekToken = 0;
         let lastFrameTime = performance.now();
-        // Cadencia fija a 30fps, igual que captureStream(30): mezclar
+        // Cadencia fija a 25fps, igual que captureStream(25): mezclar
         // requestVideoFrameCallback/rAF/setTimeout producía tirones.
         let tickHandle = null;
         const scheduleTick = () => {
           if (tickHandle || terminado) return;
-          tickHandle = setInterval(() => { if (!terminado) tick(performance.now()); }, 1000 / 30);
+          tickHandle = setInterval(() => { if (!terminado) tick(performance.now()); }, 1000 / 25);
         };
         const stopTicks = () => {
           if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
@@ -1797,9 +1857,15 @@ rec.start(250);
         const real = (performance.now() - tGrabaDesde) / 1000;
         const f = totalDur / real;
         diag.grabacionMs = Math.round(real * 1000);
+        // Tamano de verdad del fichero y bitrate real: lo pedido no siempre es
+        // lo entregado, y saber cuanto entrega el navegador explica el pixeleo.
+        const bytes = bytesGrabados;
+        const mbps = bytes > 0 && real > 0 ? ((bytes * 8) / real / 1e6) : 0;
         diag.textoBase = 'Montaje de ' + Math.round(totalDur) + ' s grabado en ' + real.toFixed(0) + ' s reales'
           + (f < 0.9 ? ' (x' + f.toFixed(2) + ', se va ' + Math.round(100 / f) + '% mas de tiempo).'
-            : (f > 1.05 ? ' (x' + f.toFixed(2) + ', mas rapido que el reloj).' : ' (x' + f.toFixed(2) + ').'));
+            : (f > 1.05 ? ' (x' + f.toFixed(2) + ', mas rapido que el reloj).' : ' (x' + f.toFixed(2) + ').'))
+          + ' | ' + Math.round(bytes / 1048576) + ' MB a ' + mbps.toFixed(1) + ' Mbps, pedido ' + (bpsSolicitado / 1e6).toFixed(0)
+          + ' | ' + (mimeDescarga().ext === 'mp4' ? 'MP4/H.264' : 'WebM/VP9');
         publicarInforme();
       }
       setDescargandoMontaje(false);
@@ -1895,8 +1961,8 @@ rec.start(250);
     }
   };
 
-  const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null) => {
-    await descargarLineas(lineas, nombre, false, false, basePreargada, true);
+  const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null, destinoDisco = null) => {
+    await descargarLineas(lineas, nombre, false, false, basePreargada, true, destinoDisco);
   };
 
   // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
@@ -5624,7 +5690,19 @@ const terminar = () => {
                     <button
                       onClick={async () => {
                         setShowModalDescarga(false);
-                        await descargarDesdeMontaje(marcadas, null);
+                        // Se pide destino ANTES de empezar. Si el navegador lo
+                        // soporta, el montage se escribe en disco segun se
+                        // graba y no se guarda entero en memoria. Si no, se cae
+                        // a la via de siempre.
+                        const nombreSugerido = (() => {
+                          try {
+                            const n = (videosBD && videosBD[0] && videosBD[0].nombre) ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : '';
+                            const m = n || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : '') || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : '') || 'montaje';
+                            return m;
+                          } catch (_) { return 'montaje'; }
+                        })();
+                        const destino = await pedirFicheroEnDisco(nombreSugerido, mimeDescarga().ext);
+                        await descargarDesdeMontaje(marcadas, null, null, destino);
                       }}
                       disabled={descargandoMontaje}
                       style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
