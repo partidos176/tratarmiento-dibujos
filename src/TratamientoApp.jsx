@@ -169,11 +169,13 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [ultimoVideo, setUltimoVideo] = useState(null);
   const [optimizando, setOptimizando] = useState(false);
   const [progresoOpt, setProgresoOpt] = useState(0);
-  // Una sola barra de 0 a 100: la grabacion ocupa la primera mitad y la
-  // optimizacion la segunda. Asi no parece una segunda descarga.
+  // Si la exportacion actual tiene segunda fase (optimizar con ffmpeg) la barra
+  // se reparte: grabacion 0-50 y optimizacion 50-100. Sin segunda fase ocupa la
+  // barra entera.
+  const [optimaEnDosFases, setOptimaEnDosFases] = useState(false);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
-    : Math.round((progresoDescarga || 0) / 2));
+    : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [todasTrans, setTodasTrans] = useState(false);
   const [showModalDescarga, setShowModalDescarga] = useState(false);
@@ -1188,6 +1190,117 @@ const bdVideoTargetRef = useRef(null);
     }
   };
 
+  // Construye la lista de segmentos del montage (cortes, animaciones,
+  // imagenes y transiciones). Extrayenda a proposito: la logica de transiciones
+  // es la parte con mas casos raros de la app y no conviene duplicarla.
+  const prepararSegmentos = async (o) => {
+    const { validas, mkVid, mkImg, els, base, baseSrc, capturas } = o;
+    const segs = [];
+    const rangos = [];
+    let totalDur = 0;
+    for (const linea of validas) {
+      rangos.push([segs.length, segs.length]);
+      if (linea.tipo === 'transicion') continue;
+      const nombre = linea.concepto || '';
+      if (linea.tipo === 'imagen' && linea.imagenUrl) {
+        const im = await mkImg(linea.imagenUrl);
+        segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
+        totalDur += 4;
+      } else if (linea.videoUrl) {
+        const v = await mkVid(linea.videoUrl);
+        let d = 5;
+        try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
+        segs.push({ el: v, src: linea.videoUrl, desde: 0, hasta: d, nombre });
+        totalDur += d;
+      } else if (linea.inicio != null && linea.fin != null && base) {
+        const ini = Math.max(0, linea.inicio);
+        const fin = Math.max(ini + 0.5, linea.fin);
+        const anims = (capturas || [])
+          .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+          .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
+          .sort((a, b) => a.en - b.en);
+        let cursor = ini;
+        for (const a of anims) {
+          if (!(a.en > cursor && a.en < fin)) continue;
+          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre });
+          totalDur += a.en - cursor;
+          const av = await mkVid(a.src);
+          segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
+          totalDur += a.dur;
+          cursor = a.en;
+        }
+        segs.push({ el: base, src: baseSrc, desde: cursor, hasta: fin, nombre });
+        totalDur += fin - cursor;
+      }
+      rangos[rangos.length - 1][1] = segs.length;
+    }
+    const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
+    const clonesListos = [];
+    for (let tk = validas.length - 1; tk >= 0; tk--) {
+      const tl = validas[tk];
+      if (!tl || tl.tipo !== 'transicion') continue;
+      let ia = -1;
+      for (let s = rangos[tk][0] - 1; s >= 0; s--) { if (segs[s] && !segs[s].kind) { ia = s; break; } }
+      let ib = -1;
+      for (let s = rangos[tk][1]; s < segs.length; s++) { if (segs[s] && !segs[s].kind) { ib = s; break; } }
+      if (ia < 0 || ib < 0 || ia === ib) continue;
+      const A = segs[ia];
+      const B = segs[ib];
+      let d = Math.max(0.3, tl.duracion || 2);
+      d = Math.min(d, A.hasta - A.desde, B.hasta - B.desde);
+      if (!(d >= 0.2) || !(A.hasta > A.desde) || !(B.hasta > B.desde)) continue;
+      if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
+      if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
+      let elB = B.el;
+      // elB arranca d/2 antes del inicio recortado (= head real de B): así la
+      // transición muestra contenido legítimo y B continúa con solo d/2 de
+      // solape dissolve en vez de repetir d segundos (frames cruzados).
+      const bDesdeVal = esVideoSeg(B) ? Math.max(0, B.desde - d / 2) : 0;
+      if (esVideoSeg(B) && B.src) {
+        try {
+          const clon = document.createElement('video');
+          clon.muted = true; clon.playsInline = true; clon.preload = 'auto'; clon.src = B.src;
+          clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+          document.body.appendChild(clon);
+          els.push(clon);
+          elB = clon;
+          // Pre-cargar metadata y pre-posicionar el clon. Sin esto, el seek al
+          // iniciar la transición falla en silencio (sin metadata) y el clon
+          // reproduce desde 0: frames del inicio del vídeo entre cortes.
+          clonesListos.push(new Promise((res) => {
+            let done = false;
+            const fin = () => {
+              if (done) return; done = true;
+              try { clon.currentTime = Math.max(0, bDesdeVal); } catch (_) {}
+              try { clon.pause(); } catch (_) {}
+              res();
+            };
+            try {
+              if (clon.readyState >= 1) { fin(); return; }
+              clon.onloadedmetadata = fin;
+              clon.onerror = fin;
+            } catch (_) { fin(); return; }
+            setTimeout(fin, 2500);
+          }));
+        } catch (_) {}
+      }
+      segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
+      // B continúa donde termina el clon (b0+d): sin salto atrás ni repetición
+      // del head ya mostrado en la transición. Duración total -d/2 por transición.
+      if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
+    }
+    totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
+    const segsOk = segs.filter(s => s.hasta > s.desde);
+    if (!segsOk.length) return null;
+    await Promise.all(clonesListos);
+    const nombreBase = o.nombreCustom
+      || (o.videosBD && o.videosBD.length > 0 && o.videosBD[0].nombre ? String(o.videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
+      || (o.archivoCortes && o.archivoCortes.name ? String(o.archivoCortes.name).replace(/\.[^.]+$/, '') : null)
+      || (o.archivo && o.archivo.name ? String(o.archivo.name).replace(/\.[^.]+$/, '') : null)
+      || 'montaje';
+    return { segsOk, totalDur, nombreBase };
+  };
+
   // 'optimizarDespues' genera ademas la version optimizada del video recien
   // grabado. 'soloOptimizado' evita descargarlo sin optimizar, de modo que
   // el unico archivo que sale es el optimizado.
@@ -1197,6 +1310,7 @@ const bdVideoTargetRef = useRef(null);
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
     setDescargandoMontaje(true);
+    setOptimaEnDosFases(!!optimizarDespues);
     setProgresoDescarga(0);
     let canvas = null;
     let rec = null;
@@ -1238,105 +1352,12 @@ const bdVideoTargetRef = useRef(null);
       const bps = (w * h >= 1920 * 1080) ? 30000000 : (w * h >= 1280 * 720) ? 16000000 : 10000000;
       rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bps });
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      const segs = [];
-      const rangos = [];
-      for (const linea of validas) {
-        rangos.push([segs.length, segs.length]);
-        if (linea.tipo === 'transicion') continue;
-        const nombre = linea.concepto || '';
-        if (linea.tipo === 'imagen' && linea.imagenUrl) {
-          const im = await mkImg(linea.imagenUrl);
-          segs.push({ el: im, tipo: 'imagen', desde: 0, hasta: 4, nombre });
-          totalDur += 4;
-        } else if (linea.videoUrl) {
-          const v = await mkVid(linea.videoUrl);
-          let d = 5;
-          try { if (v.duration && Number.isFinite(v.duration)) d = v.duration; } catch (_) {}
-          segs.push({ el: v, src: linea.videoUrl, desde: 0, hasta: d, nombre });
-          totalDur += d;
-        } else if (linea.inicio != null && linea.fin != null && base) {
-          const ini = Math.max(0, linea.inicio);
-          const fin = Math.max(ini + 0.5, linea.fin);
-          const anims = (capturas || [])
-            .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
-            .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
-            .sort((a, b) => a.en - b.en);
-          let cursor = ini;
-          for (const a of anims) {
-            if (!(a.en > cursor && a.en < fin)) continue;
-            segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre });
-            totalDur += a.en - cursor;
-            const av = await mkVid(a.src);
-            segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
-            totalDur += a.dur;
-            cursor = a.en;
-          }
-          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: fin, nombre });
-          totalDur += fin - cursor;
-        }
-        rangos[rangos.length - 1][1] = segs.length;
-      }
-      const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
-      const clonesListos = [];
-      for (let tk = validas.length - 1; tk >= 0; tk--) {
-        const tl = validas[tk];
-        if (!tl || tl.tipo !== 'transicion') continue;
-        let ia = -1;
-        for (let s = rangos[tk][0] - 1; s >= 0; s--) { if (segs[s] && !segs[s].kind) { ia = s; break; } }
-        let ib = -1;
-        for (let s = rangos[tk][1]; s < segs.length; s++) { if (segs[s] && !segs[s].kind) { ib = s; break; } }
-        if (ia < 0 || ib < 0 || ia === ib) continue;
-        const A = segs[ia];
-        const B = segs[ib];
-        let d = Math.max(0.3, tl.duracion || 2);
-        d = Math.min(d, A.hasta - A.desde, B.hasta - B.desde);
-        if (!(d >= 0.2) || !(A.hasta > A.desde) || !(B.hasta > B.desde)) continue;
-        if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
-        if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
-        let elB = B.el;
-        // elB arranca d/2 antes del inicio recortado (= head real de B): así la
-        // transición muestra contenido legítimo y B continúa con solo d/2 de
-        // solape dissolve en vez de repetir d segundos (frames cruzados).
-        const bDesdeVal = esVideoSeg(B) ? Math.max(0, B.desde - d / 2) : 0;
-        if (esVideoSeg(B) && B.src) {
-          try {
-            const clon = document.createElement('video');
-            clon.muted = true; clon.playsInline = true; clon.preload = 'auto'; clon.src = B.src;
-            clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
-            document.body.appendChild(clon);
-            els.push(clon);
-            elB = clon;
-            // Pre-cargar metadata y pre-posicionar el clon. Sin esto, el seek al
-            // iniciar la transición falla en silencio (sin metadata) y el clon
-            // reproduce desde 0: frames del inicio del vídeo entre cortes.
-            clonesListos.push(new Promise((res) => {
-              let done = false;
-              const fin = () => {
-                if (done) return; done = true;
-                try { clon.currentTime = Math.max(0, bDesdeVal); } catch (_) {}
-                try { clon.pause(); } catch (_) {}
-                res();
-              };
-              try {
-                if (clon.readyState >= 1) { fin(); return; }
-                clon.onloadedmetadata = fin;
-                clon.onerror = fin;
-              } catch (_) { fin(); return; }
-              setTimeout(fin, 2500);
-            }));
-          } catch (_) {}
-        }
-        segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
-        // B continúa donde termina el clon (b0+d): sin salto atrás ni repetición
-        // del head ya mostrado en la transición. Duración total -d/2 por transición.
-        if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
-      }
-      totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
-      const segsOk = segs.filter(s => s.hasta > s.desde);
-      if (!segsOk.length) { setAviso('Nada que descargar'); return; }
-      const nombreBase = nombreCustom || (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : null) || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'montaje';
+      const prep = await prepararSegmentos({ validas, mkVid, mkImg, els, base, baseSrc, capturas, nombreCustom, videosBD, archivoCortes, archivo });
+      if (!prep) { setAviso('Nada que descargar'); return; }
+      const segsOk = prep.segsOk;
+      totalDur = prep.totalDur;
+      const nombreBase = prep.nombreBase;
       const nombreArchivo = `${nombreBase}.${ext}`;
-      await Promise.all(clonesListos);
       // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
       // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
       // primer vídeo seekea y se dibuja). Con el frame ya pintado, el primer
@@ -1625,13 +1646,63 @@ rec.start(250);
     }
   };
 
+  // Descarga desde la hoja Montaje. Va por la grabacion en tiempo real y sin
+
+  // la pasada de ffmpeg: el original se graba a 16 Mbps, asi que re-codificarlo
+  // a VP9 de 8 Mbps empeoraba el archivo y ademas costaba una vuelta completa
+  // de codificacion. Esa pasada era ademas la que reventaba la pestana con
+  // los montajes largos por falta de memoria en el core de 32 bits.
+  //
+  // Se descarto la exportacion con WebCodecs: cronometro 0.6x, es decir mas
+  // lenta que la grabacion normal, porque buscar frame a frame obliga al
+  // navegador a decodificar 30-60 frames por cada frame de salida.
+  const descargarDesdeMontaje = async (lineas, nombre) => {
+    await descargarLineas(lineas, nombre, false, false);
+  };
+
+  // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
+  // cada entrada se copia dos veces en memoria: primero FileReader y luego
+  // writeFile. A partir de este tamano la lectura suele reventar con
+  // "File could not be read! Code=-1" y se pierde el trabajo entero, asi que
+  // para archivos grandes se entrega el crudo en vez de esperar y fallar.
+  const LIMITE_OPT_MB = 300;
+
+  const descargarBlob = (blob, nombre) => {
+    try {
+      if (!blob) return false;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombre || 'video';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
   const optimizarUltimoVideo = async (item) => {
     if (!item || optimizando) return;
+    if (!item.blob) { setAviso('No hay vídeo que optimizar'); return; }
     if (!isFFmpegSupported()) { setAviso('Este navegador no soporta optimización'); return; }
+    const base = String(item.nombre || 'video').replace(/\.[^.]+$/, '');
+    const tamMB = Math.round((item.blob.size || 0) / 1048576);
+    if (tamMB > LIMITE_OPT_MB) {
+      if (descargarBlob(item.blob, item.nombre)) {
+        setAviso('Vídeo de ' + tamMB + ' MB: demasiado grande para optimizar, se descarga sin optimizar');
+      } else {
+        setAviso('No se pudo descargar el vídeo');
+      }
+      return;
+    }
     setOptimizando(true);
     setProgresoOpt(0);
     let ffmpeg = null;
     let logHandler = null;
+    let descargado = false;
     try {
       ffmpeg = await loadFFmpeg();
       const { fetchFile } = await import('@ffmpeg/util');
@@ -1671,22 +1742,17 @@ rec.start(250);
       try { await ffmpeg.deleteFile(inName); } catch (_) {}
       try { await ffmpeg.deleteFile(outName); } catch (_) {}
       const outBlob = new Blob([data.buffer], { type: item.mime });
-      const base = String(item.nombre || 'video').replace(/\.[^.]+$/, '');
-      const url = URL.createObjectURL(outBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${base}_opt.${item.ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      descargado = descargarBlob(outBlob, `${base}_opt.${item.ext}`);
       setProgresoOpt(100);
       // Sin aviso modal de 'Vídeo optimizado': el navegador ya confirma la
       // descarga y el modal tapaba la pantalla al terminar.
       try { setAviso(''); } catch (_) {}
     } catch (e) {
       console.error('Error al optimizar', e);
-      setAviso('No se pudo optimizar: ' + ((e && e.message) || e));
+      // El crudo no se tira nunca. Si ffmpeg falla, se entrega el original tal
+      // cual: esperar un rato largo y quedarse sin archivo es lo peor de todo.
+      if (!descargado) descargarBlob(item.blob, item.nombre);
+      setAviso('No se pudo optimizar, se descarga el vídeo original');
     } finally {
       if (ffmpeg && logHandler) { try { ffmpeg.off('log', logHandler); } catch (_) {} }
       setOptimizando(false);
@@ -5265,7 +5331,7 @@ const terminar = () => {
                         if (!clips.length) { setAviso('Nada que descargar'); return; }
                         for (let i = 0; i < clips.length; i++) {
                           const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
-                          await descargarLineas([clips[i]], nombre, true, true);
+                          await descargarDesdeMontaje([clips[i]], nombre);
                         }
                       }}
                       disabled={descargandoMontaje}
@@ -5276,7 +5342,7 @@ const terminar = () => {
                     <button
                       onClick={async () => {
                         setShowModalDescarga(false);
-                        await descargarLineas(marcadas, null, true, true);
+                        await descargarDesdeMontaje(marcadas, null);
                       }}
                       disabled={descargandoMontaje}
                       style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
@@ -5295,7 +5361,7 @@ const terminar = () => {
                 setShowModalDescarga(true);
               }}
               disabled={descargandoMontaje || optimizando}
-              title="Descargar el montaje de las filas marcadas, con su versión optimizada"
+              title="Descargar el montaje de las filas marcadas"
               style={{ background: (descargandoMontaje || optimizando) ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (descargandoMontaje || optimizando) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
               {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{pctDescargaTotal()}%</span>}
