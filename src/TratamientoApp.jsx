@@ -150,6 +150,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [progresoOpt, setProgresoOpt] = useState(0);
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [todasTrans, setTodasTrans] = useState(false);
+  const [showModalDescarga, setShowModalDescarga] = useState(false);
   const [modeloTransSel, setModeloTransSel] = useState(null);
   const [durTrans, setDurTrans] = useState({ crossfade: 2, negro: 1, flash: 0.5, 'slide-left': 1, 'slide-right': 1, 'zoom-in': 1, wipe: 1 });
 
@@ -1161,7 +1162,9 @@ const bdVideoTargetRef = useRef(null);
     }
   };
 
-  const descargarLineas = async (lineas, nombreCustom) => {
+  // Con 'optimizarDespues' genera ademas la version optimizada del video
+  // recien descargado, sin pasar por el estado ultimoVideo.
+  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
@@ -1370,6 +1373,9 @@ rec.onstop = async () => {
           document.body.removeChild(a);
           setTimeout(() => URL.revokeObjectURL(url), 5000);
           try { setAviso(''); } catch (_) {}
+          if (optimizarDespues) {
+            try { await optimizarUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
+          }
           descargaHecha = true;
           resolve();
         };
@@ -5200,13 +5206,54 @@ const terminar = () => {
             >
               {progresoRegen !== null ? `Generando ${progresoRegen}%` : 'Regenerar vídeos'}
             </button>
+            {showModalDescarga && (() => {
+              const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
+              return (
+                <div onClick={() => setShowModalDescarga(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+                  <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '380px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                    <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Descargar</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>{marcadas.length} {marcadas.length === 1 ? 'linea marcada' : 'lineas marcadas'}</div>
+                    <button
+                      onClick={async () => {
+                        setShowModalDescarga(false);
+                        const clips = marcadas.filter(l => l && l.tipo !== 'transicion' && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null)));
+                        if (!clips.length) { setAviso('Nada que descargar'); return; }
+                        for (let i = 0; i < clips.length; i++) {
+                          const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
+                          await descargarLineas([clips[i]], nombre, true);
+                        }
+                      }}
+                      disabled={descargandoMontaje}
+                      style={{ background: '#22c55e', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
+                    >
+                      Descargar cada uno por separado
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowModalDescarga(false);
+                        await descargarLineas(marcadas, null, true);
+                      }}
+                      disabled={descargandoMontaje}
+                      style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
+                    >
+                      Descargar todo junto
+                    </button>
+                    <button onClick={() => setShowModalDescarga(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              );
+            })()}
             <button
-              onClick={() => optimizarUltimoVideo(ultimoVideo)}
-              disabled={optimizando || descargandoMontaje || !ultimoVideo}
-              title={ultimoVideo ? `Optimizar ${ultimoVideo.nombre}` : 'Descarga primero un vídeo'}
-              style={{ background: (!ultimoVideo || optimizando) ? '#334155' : '#7c3aed', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (optimizando || descargandoMontaje || !ultimoVideo) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              onClick={() => {
+                const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
+                if (!marcadas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
+                setShowModalDescarga(true);
+              }}
+              disabled={descargandoMontaje || optimizando}
+              title="Descargar el montaje de las filas marcadas, con su versión optimizada"
+              style={{ background: (descargandoMontaje || optimizando) ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (descargandoMontaje || optimizando) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
-              {optimizando && <span style={{ fontFamily: 'monospace' }}>{progresoOpt}%</span>}
+              {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{optimizando ? `${progresoOpt}%` : `${progresoDescarga}%`}</span>}
               Descargar
             </button>
             <button
