@@ -1374,6 +1374,11 @@ const bdVideoTargetRef = useRef(null);
         let segElapsed = 0;
         let descargaHecha = false;
 rec.onstop = async () => {
+          // Se marca de inmediato, antes de cualquier await. El recorte contra
+          // localhost:3001 puede tardar hasta 10s, y si el flag se pusiera
+          // despues el fallback de 3s lo creeria "no descargado" y volveria a
+          // exportar el video entero una segunda vez.
+          descargaHecha = true;
           let finalBlob;
           try {
             const blob = new Blob(chunks, { type: mime });
@@ -1402,10 +1407,6 @@ rec.onstop = async () => {
             setTimeout(() => URL.revokeObjectURL(url), 5000);
           }
           try { setAviso(''); } catch (_) {}
-          // Se marca ANTES de optimizar: optimizar tarda segundos y, si no,
-          // el fallback de 3s creeria que no se descargo nada y volveria a
-          // descargar el video sin optimizar.
-          descargaHecha = true;
           if (optimizarDespues) {
             try { await optimizarUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
