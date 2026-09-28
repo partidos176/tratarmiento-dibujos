@@ -108,12 +108,13 @@ function TratamientoApp({ videoInicial }) {
     if (filasMontaje.some(f => f.inicio === ini && f.fin === fin)) return null;
     return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
   };
-  // Pasa una lista de cortes a la hoja Montaje y cambia a esa hoja.
-  const pasarCortesAMontaje = (lista) => {
+  // Pasa una lista de cortes a la hoja Montaje. 'navegar' decide si además
+  // se cambia a esa hoja (el botón Montaje sí; marcar el número, no).
+  const pasarCortesAMontaje = (lista, navegar = true) => {
     const nuevas = lista.map(filaMontajeDeCorte).filter(Boolean);
     if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
     setFilasMontaje(prev => [...prev, ...nuevas]);
-    setHoja('Montaje');
+    if (navegar) setHoja('Montaje');
   };
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
@@ -4115,7 +4116,7 @@ const terminar = () => {
                           e.stopPropagation();
                           if (corteNumAzul['c' + ct]) { toggleCorteNumAzul('c' + ct); return; }
                           toggleCorteNumAzul('c' + ct);
-                          pasarCortesAMontaje([ct]);
+                          pasarCortesAMontaje([ct], false);
                         }}
                         title={corteNumAzul['c' + ct] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte y Pasarlo a Montaje'}
                         style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['c' + ct] ? '#38bdf8' : 'transparent', color: corteNumAzul['c' + ct] ? '#0f172a' : '#e2e8f0' }}
