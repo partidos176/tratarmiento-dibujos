@@ -123,6 +123,23 @@ function TratamientoApp({ videoInicial }) {
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
+  // Las marcas de los numeros no viajan en los archivos, asi que se
+  // reconstruyen a partir de las filas de Montaje: todo corte que este en
+  // la hoja queda con el circulo azul en CORTES y en MONTAJE. Al quitar una
+  // fila, su marca desaparece. Se declara aqui porque la dependencia se
+  // evalua al renderizar y filasMontaje se define mas abajo.
+  useEffect(() => {
+    const marcadas = {};
+    for (const f of (filasMontaje || [])) {
+      if (!f) continue;
+      marcadas[claveNumCorte(f)] = true;
+    }
+    setCorteNumAzul(prev => {
+      const claves = Object.keys(prev);
+      if (claves.length === Object.keys(marcadas).length && claves.every(k => marcadas[k])) return prev;
+      return marcadas;
+    });
+  }, [filasMontaje]);
   const [videosBD, setVideosBD] = useState([]);
   const [selVideoBD, setSelVideoBD] = useState(null);
   const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
