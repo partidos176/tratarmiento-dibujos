@@ -173,6 +173,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   // se reparte: grabacion 0-50 y optimizacion 50-100. Sin segunda fase ocupa la
   // barra entera.
   const [optimaEnDosFases, setOptimaEnDosFases] = useState(false);
+  const [informeDescarga, setInformeDescarga] = useState('');
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -1190,6 +1191,27 @@ const bdVideoTargetRef = useRef(null);
     }
   };
 
+  // El recorte con FFmpeg solo existe en local (server.js en el 3001). En
+  // produccion localhost no responde, asi que cada descarga esperaba los 10s
+  // de margen enteras para nada. Se sondea una vez y se cachea el resultado; si
+  // falla se reintenta cada minuto por si el servidor se levanta mas tarde.
+  // Cualquier respuesta HTTP (aunque sea un 404) demuestra que hay algo
+  // escuchando en el puerto.
+  const trimOkRef = useRef(null);
+  const trimTsRef = useRef(0);
+  const trimDisponible = async () => {
+    if (trimOkRef.current === true) return true;
+    if (trimOkRef.current === false && Date.now() - trimTsRef.current < 60000) return false;
+    trimTsRef.current = Date.now();
+    try {
+      const r = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'GET' }, 1500);
+      trimOkRef.current = r !== null;
+    } catch (_) {
+      trimOkRef.current = false;
+    }
+    return trimOkRef.current === true;
+  };
+
   // Construye la lista de segmentos del montage (cortes, animaciones,
   // imagenes y transiciones). Extrayenda a proposito: la logica de transiciones
   // es la parte con mas casos raros de la app y no conviene duplicarla.
@@ -1304,7 +1326,7 @@ const bdVideoTargetRef = useRef(null);
   // 'optimizarDespues' genera ademas la version optimizada del video recien
   // grabado. 'soloOptimizado' evita descargarlo sin optimizar, de modo que
   // el unico archivo que sale es el optimizado.
-  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false) => {
+  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
@@ -1317,6 +1339,7 @@ const bdVideoTargetRef = useRef(null);
     const els = [];
     let totalDur = 0;
     let elapsedTotal = 0;
+    let tGrabaDesde = 0;
     const lastProgRef = { current: -1 };
     try {
       const baseSrc = videoUrlCortes || videoUrl;
@@ -1342,7 +1365,11 @@ const bdVideoTargetRef = useRef(null);
         return im;
       };
       let base = null;
-      if (baseSrc) base = await mkVid(baseSrc);
+      // 'basePreargada' evita releer el video de partida entero en cada clip
+      // cuando se descargan varios por separado. No se mete en 'els' a proposito
+      // para que la limpieza no lo quite.
+      if (basePreargada) base = basePreargada;
+      else if (baseSrc) base = await mkVid(baseSrc);
       const w = 1280, h = 720;
       canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
@@ -1358,6 +1385,7 @@ const bdVideoTargetRef = useRef(null);
       totalDur = prep.totalDur;
       const nombreBase = prep.nombreBase;
       const nombreArchivo = `${nombreBase}.${ext}`;
+      tGrabaDesde = performance.now();
       // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
       // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
       // primer vídeo seekea y se dibuja). Con el frame ya pintado, el primer
@@ -1405,12 +1433,14 @@ rec.onstop = async () => {
             const blob = new Blob(chunks, { type: mime });
             finalBlob = blob;
             try {
-              const fd = new FormData();
-              fd.append('video', blob, `montaje.${ext}`);
-              fd.append('trimStart', '0.2');
-              fd.append('ext', ext);
-              const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
-              if (resp && resp.ok) finalBlob = await resp.blob();
+              if (await trimDisponible()) {
+                const fd = new FormData();
+                fd.append('video', blob, `montaje.${ext}`);
+                fd.append('trimStart', '0.2');
+                fd.append('ext', ext);
+                const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
+                if (resp && resp.ok) finalBlob = await resp.blob();
+              }
             } catch (_) {}
           } catch (_) {
             finalBlob = new Blob(chunks, { type: mime });
@@ -1617,8 +1647,18 @@ rec.start(250);
               if (seg.esAnim || esImagen) {
                 fin = segElapsed >= segDur;
               } else {
-                try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
-                if (!fin) fin = (Date.now() - segT0Wall) >= (segDur + 3) * 1000;
+                // El reloj es el que manda. Antes el segmento solo acababa
+                // cuando el video de origen llegaba a su final, y si se quedaba
+                // cargando (fichero grande, cortes con saltos) se esperaban
+                // hasta 3 s de mas POR SEGMENTO. Como la grabacion va por reloj,
+                // el corte tiene que hacerse cuando toca, no cuando el origen
+                // llegue: asi el tiempo total es la duracion del montaje.
+                const pasado = (Date.now() - segT0Wall) / 1000;
+                if (pasado >= segDur - 0.02) {
+                  fin = true;
+                } else {
+                  try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
+                }
               }
               if (fin) {
                 if (!esImagen) detener(seg.el);
@@ -1641,6 +1681,18 @@ rec.start(250);
       try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     } finally {
+      // Tiempo real de la grabacion frente a la duracion del montaje. Si el
+      // segundo es mucho mayor, el origen se para por el camino y ahi es donde
+      // se va el tiempo.
+      if (tGrabaDesde > 0 && totalDur > 0.5) {
+        const real = (performance.now() - tGrabaDesde) / 1000;
+        const f = totalDur / real;
+        setInformeDescarga(
+          'Montaje de ' + Math.round(totalDur) + ' s grabado en ' + real.toFixed(0) + ' s reales'
+          + (f < 0.9 ? ' (x' + f.toFixed(2) + ', se va ' + Math.round(100 / f) + '% mas de tiempo).'
+            : (f > 1.05 ? ' (x' + f.toFixed(2) + ', mas rapido que el reloj).' : ' (x' + f.toFixed(2) + ').'))
+        );
+      }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
     }
@@ -1656,8 +1708,8 @@ rec.start(250);
   // Se descarto la exportacion con WebCodecs: cronometro 0.6x, es decir mas
   // lenta que la grabacion normal, porque buscar frame a frame obliga al
   // navegador a decodificar 30-60 frames por cada frame de salida.
-  const descargarDesdeMontaje = async (lineas, nombre) => {
-    await descargarLineas(lineas, nombre, false, false);
+  const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null) => {
+    await descargarLineas(lineas, nombre, false, false, basePreargada);
   };
 
   // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
@@ -5329,9 +5381,34 @@ const terminar = () => {
                         setShowModalDescarga(false);
                         const clips = marcadas.filter(l => l && l.tipo !== 'transicion' && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null)));
                         if (!clips.length) { setAviso('Nada que descargar'); return; }
-                        for (let i = 0; i < clips.length; i++) {
-                          const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
-                          await descargarDesdeMontaje([clips[i]], nombre);
+                        // Se prepara el video de partida una vez y se reutiliza
+                        // en todos los clips: releerlo entero por cada corte
+                        // multiplicaba el tiempo de espera por el numero de
+                        // clips marcados.
+                        const baseSrcMontaje = videoUrlCortes || videoUrl;
+                        let baseMontaje = null;
+                        if (baseSrcMontaje) {
+                          baseMontaje = document.createElement('video');
+                          baseMontaje.muted = true; baseMontaje.playsInline = true;
+                          baseMontaje.preload = 'auto'; baseMontaje.src = baseSrcMontaje;
+                          baseMontaje.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+                          document.body.appendChild(baseMontaje);
+                          await new Promise((res) => {
+                            let listo = false;
+                            const fin = () => { if (listo) return; listo = true; res(); };
+                            baseMontaje.onloadedmetadata = fin;
+                            baseMontaje.onerror = fin;
+                            setTimeout(fin, 4000);
+                          });
+                        }
+                        try {
+                          for (let i = 0; i < clips.length; i++) {
+                            const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
+                            await descargarDesdeMontaje([clips[i]], nombre, baseMontaje);
+                          }
+                        } finally {
+                          try { baseMontaje && baseMontaje.pause(); } catch (_) {}
+                          try { if (baseMontaje && baseMontaje.parentNode) document.body.removeChild(baseMontaje); } catch (_) {}
                         }
                       }}
                       disabled={descargandoMontaje}
@@ -5367,6 +5444,11 @@ const terminar = () => {
               {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{pctDescargaTotal()}%</span>}
               Descargar
             </button>
+            {informeDescarga && (
+              <div style={{ marginTop: '0.4rem', color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'Inter, sans-serif', lineHeight: 1.35 }}>
+                {informeDescarga}
+              </div>
+            )}
             <button
               onClick={() => exportarMontaje()}
               style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
