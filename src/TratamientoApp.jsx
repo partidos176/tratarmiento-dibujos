@@ -98,6 +98,10 @@ function TratamientoApp({ videoInicial }) {
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [corteNumAzul, setCorteNumAzul] = useState({});
   const toggleCorteNumAzul = (k) => setCorteNumAzul(prev => { const c = { ...prev }; if (c[k]) delete c[k]; else c[k] = true; return c; });
+  // Un corte se marca con una sola clave, compartida por las hojas CORTES y
+  // MONTAJE, para que el circulo azul se vea igual en las dos. Las filas sin
+  // inicio (imagenes, transiciones) usan su propia clave.
+  const claveNumCorte = (fila) => (fila && fila.inicio != null ? 'c' + fila.inicio : 'm' + (fila && fila.id));
   // Construye la fila de Montaje de un corte. Devuelve null si ya está en la hoja.
   const filaMontajeDeCorte = (ct) => {
     const ord = [...cortes].sort((a, b) => b - a);
@@ -148,6 +152,11 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [ultimoVideo, setUltimoVideo] = useState(null);
   const [optimizando, setOptimizando] = useState(false);
   const [progresoOpt, setProgresoOpt] = useState(0);
+  // Una sola barra de 0 a 100: la grabacion ocupa la primera mitad y la
+  // optimizacion la segunda. Asi no parece una segunda descarga.
+  const pctDescargaTotal = () => (optimizando
+    ? 50 + Math.round((progresoOpt || 0) / 2)
+    : Math.round((progresoDescarga || 0) / 2));
   const [showTransiciones, setShowTransiciones] = useState(false);
   const [todasTrans, setTodasTrans] = useState(false);
   const [showModalDescarga, setShowModalDescarga] = useState(false);
@@ -1376,10 +1385,13 @@ rec.onstop = async () => {
             setTimeout(() => URL.revokeObjectURL(url), 5000);
           }
           try { setAviso(''); } catch (_) {}
+          // Se marca ANTES de optimizar: optimizar tarda segundos y, si no,
+          // el fallback de 3s creeria que no se descargo nada y volveria a
+          // descargar el video sin optimizar.
+          descargaHecha = true;
           if (optimizarDespues) {
             try { await optimizarUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
-          descargaHecha = true;
           resolve();
         };
         const terminar = () => {
@@ -1404,10 +1416,10 @@ rec.onstop = async () => {
               document.body.removeChild(a);
               setTimeout(() => URL.revokeObjectURL(url), 5000);
             }
+            descargaHecha = true;
             if (optimizarDespues) {
               try { await optimizarUltimoVideo({ blob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
             }
-            descargaHecha = true;
             resolve();
             setDescargandoMontaje(false);
             setProgresoDescarga(0);
@@ -1651,7 +1663,9 @@ rec.start(250);
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setProgresoOpt(100);
-      setAviso('Vídeo optimizado');
+      // Sin aviso modal de 'Vídeo optimizado': el navegador ya confirma la
+      // descarga y el modal tapaba la pantalla al terminar.
+      try { setAviso(''); } catch (_) {}
     } catch (e) {
       console.error('Error al optimizar', e);
       setAviso('No se pudo optimizar: ' + ((e && e.message) || e));
@@ -5229,7 +5243,7 @@ const terminar = () => {
                         if (!clips.length) { setAviso('Nada que descargar'); return; }
                         for (let i = 0; i < clips.length; i++) {
                           const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
-                          await descargarLineas([clips[i]], nombre, true);
+                          await descargarLineas([clips[i]], nombre, true, true);
                         }
                       }}
                       disabled={descargandoMontaje}
@@ -5245,7 +5259,7 @@ const terminar = () => {
                       disabled={descargandoMontaje}
                       style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
                     >
-                      Descargar todo junto (optimizado)
+                      Descargar todo junto
                     </button>
                     <button onClick={() => setShowModalDescarga(false)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: 'pointer' }}>Cancelar</button>
                   </div>
@@ -5262,7 +5276,7 @@ const terminar = () => {
               title="Descargar el montaje de las filas marcadas, con su versión optimizada"
               style={{ background: (descargandoMontaje || optimizando) ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (descargandoMontaje || optimizando) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
-              {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{optimizando ? `${progresoOpt}%` : `${progresoDescarga}%`}</span>}
+              {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{pctDescargaTotal()}%</span>}
               Descargar
             </button>
             <button
@@ -5338,7 +5352,7 @@ const terminar = () => {
                 onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
                 title="Arrastra para mover la fila (clic para seleccionar)"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: (fila.tipo === 'imagen' || fila.tipo === 'transicion') ? 'auto' : 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
-                {fila.tipo !== 'transicion' && <span onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul('m' + fila.id); }} title={corteNumAzul['m' + fila.id] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'} style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['m' + fila.id] ? '#38bdf8' : 'transparent', color: corteNumAzul['m' + fila.id] ? '#0f172a' : '#e2e8f0' }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
+                {fila.tipo !== 'transicion' && (() => { const k = claveNumCorte(fila); return (<span onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul(k); }} title={corteNumAzul[k] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'} style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul[k] ? '#38bdf8' : 'transparent', color: corteNumAzul[k] ? '#0f172a' : '#e2e8f0' }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>); })()}
                 <div
                   data-sq="1"
                   onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
