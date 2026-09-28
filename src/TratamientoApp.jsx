@@ -5311,7 +5311,7 @@ const terminar = () => {
                 onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
                 title="Arrastra para mover la fila (clic para seleccionar)"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: (fila.tipo === 'imagen' || fila.tipo === 'transicion') ? 'auto' : 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
-                {fila.tipo !== 'transicion' && <span style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 900, fontSize: '0.8rem', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
+                {fila.tipo !== 'transicion' && <span style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '0.8rem', minWidth: '18px', textAlign: 'center', flexShrink: 0 }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>}
                 <div
                   data-sq="1"
                   onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
