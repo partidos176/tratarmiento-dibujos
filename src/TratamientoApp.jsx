@@ -2444,7 +2444,10 @@ const terminar = () => {
           });
         }
         const esExportDeCortes = filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'));
-        const dc = esExportDeCortes ? (Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {})) : {};
+        // Los cortes viajan tanto en un export de cortes como en el de montaje
+        // (exportarMontaje incrusta datosCortes()), asi que se restauran en
+        // ambos casos. Solo las filas se tratan segun el tipo de archivo.
+        const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
         if (Array.isArray(dc.cortes) && dc.cortes.length) {
           const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
           if (lista.length) {
@@ -2455,6 +2458,7 @@ const terminar = () => {
             if (dc.accionCortes && typeof dc.accionCortes === 'object') setAccionCortes({ ...dc.accionCortes });
             else setAccionCortes({});
             if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
+            if (dc.fotoPorCorte && typeof dc.fotoPorCorte === 'object') setFotoPorCorte({ ...dc.fotoPorCorte });
           }
         }
         // Un export de cortes (por ejemplo *_para_tratamiento_bd.json, generado
