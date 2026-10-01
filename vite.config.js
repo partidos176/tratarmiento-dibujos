@@ -76,6 +76,14 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    // Aislamiento entre origenes: es lo que habilita SharedArrayBuffer y, con
+    // el, el core multi-hilo de ffmpeg.wasm. Sin esto el navegador lo esconde
+    // y el reindexado va a un solo hilo. Las mismas cabeceras estan en
+    // firebase.json para produccion; si tocas una, toca la otra.
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless'
+    }
   }
 });
