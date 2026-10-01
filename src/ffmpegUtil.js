@@ -1,33 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
 
-// Los cores de ffmpeg se sirven desde la propia app en vez de desde unpkg. Antes
-// se bajaban 30 MB de un CDN en cada recarga de la pagina, y en las pruebas el
-// multi-hilo fallaba al cargarlo desde ahi ('Failed to fetch', o se quedaba
-// colgado). Los copia scripts/copiar-core-ffmpeg.mjs a public/ffmpeg/ antes de
-// dev y de build, y Vite los sirve desde el mismo origen: sin CDN, sin espera de
-// red y con el worker del multi-hilo en el mismo origen, que es lo que necesita
-// con las cabeceras COOP/COEP.
-const CORE_BASE = '/ffmpeg/';
-const coreSTUrl = `${CORE_BASE}core-st.js`;
-const wasmSTUrl = `${CORE_BASE}core-st.wasm`;
-const coreMTUrl = `${CORE_BASE}core-mt.js`;
-const wasmMTUrl = `${CORE_BASE}core-mt.wasm`;
-const workerMTUrl = `${CORE_BASE}core-mt.worker.js`;
-
-// Multi-hilo de ffmpeg: esta apagado a proposito. La pagina ya queda aislada
-// entre origenes (COOP/COEP en vite.config.js y firebase.json), asi que
-// SharedArrayBuffer esta disponible, pero probando el core-mt@0.12.6 servido
-// desde el propio origen se queda COLGADO al cargar: no da error ni aviso en la
-// consola y la promesa nunca resuelve. Si se deja puesto, la descarga se queda
-// esperando y no termina nunca, que es peor que ir a un solo hilo.
-//
-// Por eso va detras de este interruptor y no se activa solo. Cuando se averigue
-// por que no engancha, se cambia a true y se mide: con 4 nucleos deberia ir de
-// 0,84x a algo entre 2x y 3x, que es lo unico que ataca de verdad el cuello de
-// botella del reindexado.
-const USAR_MULTIHILO = false;
-
 let ffmpegRef = null;
 let loadingRef = null;
 
@@ -37,30 +10,12 @@ export const loadFFmpeg = async () => {
 
   loadingRef = (async () => {
     const ffmpeg = new FFmpeg();
-    // El core multi-hilo necesita SharedArrayBuffer, que el navegador solo
-    // expone si la pagina esta aislada entre origenes (COOP + COEP). El reindexado
-    // es la parte lenta de la descarga: a un solo hilo va a 0,84x tiempo real, y
-    // con 4 nucleos el multi-hilo es la unica via para acelerarlo de verdad. Asi
-    // que se intenta primero el multi-hilo y, si no se puede, se cae al de un
-    // solo hilo como siempre, sin que la descarga falle.
-    if (USAR_MULTIHILO && typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined') {
-      try {
-        await ffmpeg.load({
-          coreURL: coreMTUrl,
-          wasmURL: wasmMTUrl,
-          workerURL: workerMTUrl,
-          classWorkerURL: workerMTUrl,
-        });
-        ffmpegRef = ffmpeg;
-        ffmpegRef.multihilo = true;
-        return ffmpeg;
-      } catch (e) {
-        console.warn('No se pudo cargar el core multi-hilo de ffmpeg, se usa el de un hilo', e);
-      }
-    }
-    await ffmpeg.load({ coreURL: coreSTUrl, wasmURL: wasmSTUrl });
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+    });
     ffmpegRef = ffmpeg;
-    ffmpegRef.multihilo = false;
     return ffmpeg;
   })();
 
