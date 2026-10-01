@@ -1244,7 +1244,12 @@ const bdVideoTargetRef = useRef(null);
         let cursor = ini;
         for (const a of anims) {
           if (!(a.en > cursor && a.en < fin)) continue;
-          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre });
+          // Este tramo va justo antes de una animacion, asi que no puede acabar por
+          // reloj: si el base se queda corto, al entrar la animacion el fotograma
+          // congelado (que es el de a.en) no encaja con el ultimo cuadro que se
+          // vio en directo y se ve un tiron. Aqui manda el origen: se marca
+          // 'esperarBase' y el bucle espera a que el base llegue a a.en.
+          segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre, esperarBase: true });
           totalDur += a.en - cursor;
           const av = await mkVid(a.src);
           segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
@@ -1353,6 +1358,18 @@ const bdVideoTargetRef = useRef(null);
         document.body.appendChild(vid);
         els.push(vid);
         await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
+        // 'loadedmetadata' es readyState 1: solo metadatos, todavia ningun
+        // fotograma decodificado. Si se dibuja ahi, drawImage no pinta nada y el
+        // canvas se queda con el fotograma del tramo anterior, que es el tiron que
+        // se ve al entrar en la animacion. Se espera a readyState 2
+        // (HAVE_CURRENT_DATA) con un tope para no colgarse nunca.
+        await new Promise((res) => {
+          if (vid.readyState >= 2) { res(); return; }
+          let fin = false;
+          const listo = () => { if (fin) return; fin = true; try { vid.removeEventListener('canplay', listo); } catch (_) {} res(); };
+          try { vid.addEventListener('canplay', listo); } catch (_) {}
+          setTimeout(listo, 1500);
+        });
         return vid;
       };
       const mkImg = async (u) => {
@@ -1522,6 +1539,9 @@ rec.start(250);
           try { elx.ontimeupdate = null; } catch (_) {}
           try { elx.pause(); } catch (_) {}
         };
+        // readyState 2 = HAVE_CURRENT_DATA: el elemento ya tiene un fotograma
+        // decodificado en la posicion actual y se puede dibujar de verdad.
+        const hayFotograma = (elx) => { try { return !!elx && elx.readyState >= 2; } catch (_) { return false; } };
         const posContenido = (seg) => {
           const segDur = Math.max(0, seg.hasta - seg.desde);
           if (seg.kind || seg.esAnim || seg.tipo === 'imagen') {
@@ -1553,6 +1573,9 @@ rec.start(250);
                 segVideoLista = true;
               } else if (esImagen || seg.esAnim) {
                 if (!esImagen) ponerEnMarcha(seg.el, seg.desde);
+                // Para la animacion la disponibilidad se comprueba al dibujar, en
+                // cada tick. Si se decidiera aqui, un solo tick malo dejaria el
+                // tramo entero sin dibujar y se veria el base congelado.
                 segVideoLista = true;
               } else {
                 const elx = seg.el;
@@ -1629,7 +1652,12 @@ rec.start(250);
                 currentSeg++; segElapsed = 0;
               }
             } else {
-              if (segVideoLista) {
+              // La animacion se dibuja en cuanto tiene fotograma, sin esperar mas,
+              // y se revisa en cada tick porque el primer fotograma puede tardar
+              // un poco en llegar: dibujar antes dejaria en el canvas el fotograma
+              // del tramo anterior (el tiron al entrar).
+              const listoAhora = seg.esAnim ? hayFotograma(seg.el) : segVideoLista;
+              if (listoAhora) {
                 try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
               }
               if (seg.nombre) {
@@ -1654,7 +1682,16 @@ rec.start(250);
                 // el corte tiene que hacerse cuando toca, no cuando el origen
                 // llegue: asi el tiempo total es la duracion del montaje.
                 const pasado = (Date.now() - segT0Wall) / 1000;
-                if (pasado >= segDur - 0.02) {
+                if (seg.esperarBase) {
+                  // Tramo justo anterior a una animacion: manda el origen, no el
+                  // reloj. Hay que esperar a que el base llegue realmente a 'hasta',
+                  // porque si se queda corto el corte congela un fotograma que no
+                  // es el que se estaba viendo y al entrar la animacion se nota el
+                  // salto. El tope de 4 s evita que se cuelgue si el origen se
+                  // atasca; solo afecta a estos tramos, no a todos.
+                  try { fin = seg.el.currentTime >= seg.hasta - 0.03; } catch (_) { fin = pasado >= segDur - 0.02; }
+                  if (!fin && pasado > segDur + 4) fin = true;
+                } else if (pasado >= segDur - 0.02) {
                   fin = true;
                 } else {
                   try { fin = seg.el.currentTime >= seg.hasta; } catch (_) { fin = false; }
