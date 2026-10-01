@@ -1366,9 +1366,6 @@ const bdVideoTargetRef = useRef(null);
     let elapsedTotal = 0;
     let tGrabaDesde = 0;
     const lastProgRef = { current: -1 };
-    // DIAGNOSTICO TEMPORAL: razon real por la que 40 s de montaje tardan 108 s.
-    const informeSegs = [];
-    const fases = { tIni: performance.now(), vids: 0, vidsTopados: 0, vidsEsperaMs: 0, prepMs: 0, hastaStartMs: 0, reindexMs: 0, grabMs: 0 };
     try {
       const baseSrc = videoUrlCortes || videoUrl;
       const { mime, ext } = mimeDescarga();
@@ -1386,16 +1383,13 @@ const bdVideoTargetRef = useRef(null);
         // canvas se queda con el fotograma del tramo anterior, que es el tiron que
         // se ve al entrar en la animacion. Se espera a readyState 2
         // (HAVE_CURRENT_DATA) con un tope para no colgarse nunca.
-        const tEspera = performance.now();
-        let topado = false;
         await new Promise((res) => {
           if (vid.readyState >= 2) { res(); return; }
           let fin = false;
           const listo = () => { if (fin) return; fin = true; try { vid.removeEventListener('canplay', listo); } catch (_) {} res(); };
           try { vid.addEventListener('canplay', listo); } catch (_) {}
-          setTimeout(() => { topado = true; listo(); }, 1500);
+          setTimeout(listo, 1500);
         });
-        try { fases.vids++; fases.vidsEsperaMs += (performance.now() - tEspera); if (topado) fases.vidsTopados++; } catch (_) {}
         return vid;
       };
       const mkImg = async (u) => {
@@ -1419,19 +1413,10 @@ const bdVideoTargetRef = useRef(null);
       canvas.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;z-index:99999;';
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
-      // 16 Mbps a 720p eran 70 MB por cada 40 s de montaje, y esa entrada
-      // enormousa es la que hace que el reindexado con ffmpeg vaya a 0,62x
-      // (19 fps) cuando con una entrada de 10 MB el mismo comando iba a 265 fps:
-      // el core de ffmpeg.wasm es de 32 bits y se queda sin memoria. Medido.
-      // 6 Mbps sigue siendo buena calidad a 720p (los servicios de streaming
-      // van por ahi) y deja la entrada en unos 26 MB, que es lo que hace falta
-      // para que la codificacion vaya a ritmo normal.
-      const bps = (w * h >= 1920 * 1080) ? 12000000 : (w * h >= 1280 * 720) ? 6000000 : 4000000;
+      const bps = (w * h >= 1920 * 1080) ? 30000000 : (w * h >= 1280 * 720) ? 16000000 : 10000000;
       rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bps });
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      const tPrep = performance.now();
       const prep = await prepararSegmentos({ validas, mkVid, mkImg, els, base, baseSrc, capturas, nombreCustom, videosBD, archivoCortes, archivo });
-      try { fases.prepMs = performance.now() - tPrep; } catch (_) {}
       if (!prep) { setAviso('Nada que descargar'); return; }
       const segsOk = prep.segsOk;
       totalDur = prep.totalDur;
@@ -1501,12 +1486,10 @@ rec.onstop = async () => {
           // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
           // siempre se reproduce aunque tarde mas en saltar.
           if (reindexar) {
-            const tRi = performance.now();
             try {
               const ri = await reindexarParaSalto(finalBlob, ext, mime);
               if (ri) finalBlob = ri;
             } catch (_) {}
-            try { fases.reindexMs = performance.now() - tRi; } catch (_) {}
           }
           try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           setProgresoDescarga(100);
@@ -1558,7 +1541,6 @@ rec.onstop = async () => {
           }
         }, 3000);
 };
-try { fases.hastaStartMs = performance.now() - fases.tIni; } catch (_) {}
 rec.start(250);
         let enTick = false;
         let segT0Wall = 0;
@@ -1691,10 +1673,6 @@ rec.start(250);
               }
               ctx.globalAlpha = 1;
               if (segElapsed >= segDur) {
-                // DIAGNOSTICO TEMPORAL: por que un montaje de 40 s tarda 108 s.
-                // Se anota el tiempo real de cada tramo frente a su contenido para
-                // ver donde se va. Quitar cuando se sepa la causa.
-                try { informeSegs.push({ tipo: 'transicion ' + seg.kind, contenido: Math.round(segDur * 100) / 100, real: Math.round((Date.now() - segT0Wall)) }); } catch (_) {}
                 const vistos = new Set();
                 for (const elx of [seg.elA, seg.elB]) {
                   if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
@@ -1749,8 +1727,6 @@ rec.start(250);
                 }
               }
               if (fin) {
-                // DIAGNOSTICO TEMPORAL: ver nota en la rama de transicion.
-                try { informeSegs.push({ tipo: (seg.esAnim ? 'animacion' : esImagen ? 'imagen' : (seg.esperarBase ? 'video-esperaAnim' : 'video')), contenido: Math.round(segDur * 100) / 100, real: Math.round((Date.now() - segT0Wall)) }); } catch (_) {}
                 if (!esImagen) detener(seg.el);
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
@@ -1771,59 +1747,6 @@ rec.start(250);
       try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     } finally {
-      // DIAGNOSTICO TEMPORAL: volcado por consola con el detalle por tramo.
-      // Hay que hacer la descarga con la consola abierta y pegar aqui el log.
-      try {
-        if (informeSegs.length) {
-          const porTipo = {};
-          for (const s of informeSegs) {
-            const k = s.tipo;
-            if (!porTipo[k]) porTipo[k] = { n: 0, contenido: 0, real: 0 };
-            porTipo[k].n++; porTipo[k].contenido += s.contenido; porTipo[k].real += s.real;
-          }
-          const filas = Object.entries(porTipo).map(([k, v]) => ({
-            tipo: k, tramos: v.n,
-            contenidoS: Math.round(v.contenido * 10) / 10,
-            realS: Math.round(v.real) / 1,
-            factor: v.real > 0 ? Math.round((v.real / 1000 / v.contenido) * 100) / 100 : 0
-          }));
-          const totalC = informeSegs.reduce((s, x) => s + x.contenido, 0);
-          const totalR = informeSegs.reduce((s, x) => s + x.real, 0) / 1000;
-          console.log('[DIAG] factor global x' + (totalR / totalC).toFixed(2),
-            '| contenido', Math.round(totalC) + 's', '| real', Math.round(totalR) + 's');
-          console.table ? console.table(filas) : console.log(filas);
-          const peores = [...informeSegs].sort((a, b) => (b.real / 1000 - b.contenido) - (a.real / 1000 - a.contenido)).slice(0, 8);
-          console.log('[DIAG]Tramos que mas se desvian (exceso de segundos reales):');
-          console.table ? console.table(peores) : console.log(peores);
-          // Linea unica con todo en JSON: es lo que hay que copiar y pegar.
-          try { fases.grabMs = totalR * 1000; } catch (_) {}
-          const totalFn = performance.now() - fases.tIni;
-          console.log('[DIAG]JSON ' + JSON.stringify({
-            factor: Math.round((totalR / totalC) * 100) / 100,
-            contenidoS: Math.round(totalC),
-            grabacionS: Math.round(totalR),
-            antesDeGrabarS: Math.round(fases.hastaStartMs) / 1000,
-            reindexS: Math.round(fases.reindexMs) / 1000,
-            totalFuncionS: Math.round(totalFn) / 1000,
-            reindexDesglose: {
-              nucleoMs: diagRef.current.nucleoMs || 0,
-              metaMs: diagRef.current.metaMs || 0,
-              escrituraMs: diagRef.current.escrituraMs || 0,
-              codificaMs: diagRef.current.codificaMs || 0,
-              lecturaMs: diagRef.current.lecturaMs || 0,
-              entradaMB: diagRef.current.entradaMB || 0,
-              extUsado: diagRef.current.extUsado || '',
-              ffmpeg: (diagRef.current.log || []).filter(l => /Duration:|Stream #0:0|^frame=/.test(l)).slice(-4)
-            },
-            videosCreados: fases.vids,
-            videosQueTopardaron: fases.vidsTopados,
-            esperaVideosS: Math.round(fases.vidsEsperaMs) / 1000,
-            prepMs: Math.round(fases.prepMs),
-            porTipo: filas,
-            peores: peores.map(s => ({ tipo: s.tipo, contenido: s.contenido, realS: Math.round(s.real / 100) / 10 }))
-          }));
-        }
-      } catch (_) {}
       // Tiempo real de la grabacion frente a la duracion del montaje. Si el
       // segundo es mucho mayor, el origen se para por el camino y ahi es donde
       // se va el tiempo.
@@ -1871,9 +1794,6 @@ rec.start(250);
   // WebM y en H.264 se usa CRF 20, que ademas es mucho mas rapido que VP9.
   // El core sigue siendo de 32 bits, asi que hay tope de tamano: por encima se
   // devuelve null y se entrega el crudo, que siempre se puede reproducir.
-  // DIAGNOSTICO TEMPORAL: desglose del reindexado.
-  const diagRef = useRef({});
-
   const reindexarParaSalto = async (blob, ext, mime) => {
     if (!blob || !isFFmpegSupported() || optimizando) return null;
     if (Math.round((blob.size || 0) / 1048576) > LIMITE_OPT_MB) return null;
@@ -1882,11 +1802,8 @@ rec.start(250);
     let ffmpeg = null;
     let logHandler = null;
     try {
-      const tNucleo = performance.now();
       ffmpeg = await loadFFmpeg();
-      try { diagRef.current.nucleoMs = Math.round(performance.now() - tNucleo); } catch (_) {}
       const { fetchFile } = await import('@ffmpeg/util');
-      const tMeta = performance.now();
       const dur = await new Promise((res) => {
         let done = false;
         const fin = (v) => { if (done) return; done = true; res(v); };
@@ -1900,7 +1817,6 @@ rec.start(250);
           setTimeout(() => fin(0), 5000);
         } catch (_) { fin(0); }
       });
-      try { diagRef.current.metaMs = Math.round(performance.now() - tMeta); } catch (_) {}
       logHandler = ({ message }) => {
         try {
           const m = String(message || '').match(/time=(\d+):(\d+):([\d.]+)/);
@@ -1911,29 +1827,16 @@ rec.start(250);
         } catch (_) {}
       };
       try { ffmpeg.on('log', logHandler); } catch (_) {}
-      // DIAGNOSTICO TEMPORAL: linea del log de ffmpeg sobre la entrada.
-      try { diagRef.current.log = []; ffmpeg.on('log', ({ message }) => { if (diagRef.current.log.length < 400) diagRef.current.log.push(String(message || '')); }); } catch (_) {}
-      try { diagRef.current.entradaMB = Math.round((blob.size || 0) / 1048576 * 10) / 10; } catch (_) {}
-      try { diagRef.current.extUsado = ext; } catch (_) {}
       const inName = `ri_in.${ext}`;
       const outName = `ri_out.${ext}`;
-      const tWrite = performance.now();
       await ffmpeg.writeFile(inName, new Uint8Array(await fetchFile(blob)));
-      try { diagRef.current.escrituraMs = Math.round(performance.now() - tWrite); } catch (_) {}
       setProgresoOpt(2);
-      const tExec = performance.now();
       if (ext === 'mp4') {
-        // CRF 26 en vez de 20: medido, no cambia el tiempo de codificacion
-        // (0,82 s los dos) pero deja el archivo a la mitad de tamano, que a
-        // 40 s son 44 MB con CRF 20.
-        await ffmpeg.exec(['-i', inName, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outName]);
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outName]);
       } else {
         await ffmpeg.exec(['-i', inName, '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '16M', '-g', '30', '-pix_fmt', 'yuv420p', outName]);
       }
-      try { diagRef.current.codificaMs = Math.round(performance.now() - tExec); } catch (_) {}
-      const tRead = performance.now();
       const data = await ffmpeg.readFile(outName);
-      try { diagRef.current.lecturaMs = Math.round(performance.now() - tRead); } catch (_) {}
       try { await ffmpeg.deleteFile(inName); } catch (_) {}
       try { await ffmpeg.deleteFile(outName); } catch (_) {}
       if (!data || !data.length) return null;
