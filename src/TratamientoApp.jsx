@@ -123,11 +123,14 @@ function TratamientoApp({ videoInicial }) {
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
-  // Las marcas de los numeros no viajan en los archivos, asi que se
-  // reconstruyen a partir de las filas de Montaje: todo corte que este en
-  // la hoja queda con el circulo azul en CORTES y en MONTAJE. Al quitar una
-  // fila, su marca desaparece. Se declara aqui porque la dependencia se
-  // evalua al renderizar y filasMontaje se define mas abajo.
+  // Las marcas de los numeros no viajan en los archivos, asi que se recalculan a
+  // partir de las filas de Montaje: un corte esta marcado si y solo si esta en la
+  // hoja. Asi el circulo azul se ve igual en CORTES y en MONTAJE, aparece solo al
+  // cargar un resumen, y desaparece en CORTES en cuanto se borra la fila en
+  // MONTAJE. Las tres vias para marcar (clic en el numero, clic en Montaje y
+  // SELEC. TODO) pasan ademas el corte a Montaje, que es lo que hace que las tres
+  // encajen. Se declara aqui porque la dependencia se evalua al renderizar y
+  // filasMontaje se define mas abajo.
   useEffect(() => {
     const marcadas = {};
     for (const f of (filasMontaje || [])) {
@@ -140,6 +143,19 @@ function TratamientoApp({ videoInicial }) {
       return marcadas;
     });
   }, [filasMontaje]);
+  // Marca todos los cortes de la hoja con el circulo azul y los pasa a Montaje.
+  // Equivale a pulsar el numero de cada uno, pero de una vez. No cambia de hoja,
+  // igual que el clic en un numero suelto. Los que ya estuvieran en Montaje no
+  // se duplican.
+  const marcarTodosLosCortes = () => {
+    if (!cortes.length) { setAviso('No hay cortes en la hoja'); return; }
+    setCorteNumAzul(prev => {
+      const next = { ...prev };
+      for (const ct of cortes) next['c' + ct] = true;
+      return next;
+    });
+    pasarCortesAMontaje(cortes);
+  };
   const [videosBD, setVideosBD] = useState([]);
   const [selVideoBD, setSelVideoBD] = useState(null);
   const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
@@ -4242,6 +4258,15 @@ const terminar = () => {
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
               >
                 ELIMINAR
+              </button>
+            )}
+            {cortes.length > 0 && (
+              <button
+                onClick={marcarTodosLosCortes}
+                title="Marcar todos los cortes con el círculo azul y pasarlos a la hoja Montaje"
+                style={{ background: '#0284c7', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+              >
+                SELEC. TODO
               </button>
             )}
           </div>
