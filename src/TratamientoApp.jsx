@@ -1347,13 +1347,17 @@ const bdVideoTargetRef = useRef(null);
   // 'optimizarDespues' genera ademas la version optimizada del video recien
   // grabado. 'soloOptimizado' evita descargarlo sin optimizar, de modo que
   // el unico archivo que sale es el optimizado.
-  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null) => {
+  // 'reindexar' recodifica el resultado antes de descargarlo, con un fotograma
+  // clave cada segundo, que es lo que hace que se pueda avanzar rapido en
+  // reproductores que no aguantan decodificar 3 s de 720p de golpe. Si no se
+  // puede (fichero muy grande, sin ffmpeg o error), se entrega el crudo igual.
+  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null, reindexar = false) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
     setDescargandoMontaje(true);
-    setOptimaEnDosFases(!!optimizarDespues);
+    setOptimaEnDosFases(!!(optimizarDespues || reindexar));
     setProgresoDescarga(0);
     let canvas = null;
     let rec = null;
@@ -1477,6 +1481,15 @@ rec.onstop = async () => {
             } catch (_) {}
           } catch (_) {
             finalBlob = new Blob(chunks, { type: mime });
+          }
+          // Reindexar antes de descargar: una clave por segundo para que el
+          // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
+          // siempre se reproduce aunque tarde mas en saltar.
+          if (reindexar) {
+            try {
+              const ri = await reindexarParaSalto(finalBlob, ext, mime);
+              if (ri) finalBlob = ri;
+            } catch (_) {}
           }
           try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           setProgresoDescarga(100);
@@ -1761,8 +1774,86 @@ rec.start(250);
   // Se descarto la exportacion con WebCodecs: cronometro 0.6x, es decir mas
   // lenta que la grabacion normal, porque buscar frame a frame obliga al
   // navegador a decodificar 30-60 frames por cada frame de salida.
+  // Reindexa el video para que se pueda saltar bien: recodifica con un fotograma
+  // clave cada segundo (-g 30) y, en MP4, con el indice al principio.
+  //
+  // Es la unica forma de arreglarlo, y conviene dejar por que escrito. Un
+  // reempaquetado con -c copy NO sirve: la densidad de claves no se puede tocar
+  // sin codificar, porque no se pueden insertar claves en un video ya codificado.
+  // Medido en este navegador:
+  //  - el MP4 que graba MediaRecorder sale con el indice (moov) YA al principio,
+  //    en el byte 40 de 9,7 MB, asi que el contenedor no es el problema. Y un
+  //    remux sin +faststart lo empeora: mueve el moov al final del fichero.
+  //  - el problema son las claves: solo 3 en 10 s, una cada ~3,3 s. Al avanzar
+  //    rapido el reproductor tiene que decodificar hasta 3,3 s de 720p desde la
+  //    ultima clave; el que no llega a tiempo enseña cuadro a medio decodificar,
+  //    que es el pixelado. Con -g 30 hay tres veces mas claves.
+  //
+  // No se pierde calidad, que era el motivo de que el archivo empeorara cuando
+  // esto existia: el original se graba a 16 Mbps, aqui se respeta ese bitrate en
+  // WebM y en H.264 se usa CRF 20, que ademas es mucho mas rapido que VP9.
+  // El core sigue siendo de 32 bits, asi que hay tope de tamano: por encima se
+  // devuelve null y se entrega el crudo, que siempre se puede reproducir.
+  const reindexarParaSalto = async (blob, ext, mime) => {
+    if (!blob || !isFFmpegSupported() || optimizando) return null;
+    if (Math.round((blob.size || 0) / 1048576) > LIMITE_OPT_MB) return null;
+    setOptimizando(true);
+    setProgresoOpt(0);
+    let ffmpeg = null;
+    let logHandler = null;
+    try {
+      ffmpeg = await loadFFmpeg();
+      const { fetchFile } = await import('@ffmpeg/util');
+      const dur = await new Promise((res) => {
+        let done = false;
+        const fin = (v) => { if (done) return; done = true; res(v); };
+        try {
+          const url = URL.createObjectURL(blob);
+          const v = document.createElement('video');
+          v.preload = 'metadata';
+          v.onloadedmetadata = () => { const d = v.duration; try { URL.revokeObjectURL(url); } catch (_) {} fin(Number.isFinite(d) && d > 0 ? d : 0); };
+          v.onerror = () => { try { URL.revokeObjectURL(url); } catch (_) {} fin(0); };
+          v.src = url;
+          setTimeout(() => fin(0), 5000);
+        } catch (_) { fin(0); }
+      });
+      logHandler = ({ message }) => {
+        try {
+          const m = String(message || '').match(/time=(\d+):(\d+):([\d.]+)/);
+          if (m && dur > 0) {
+            const s = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+            setProgresoOpt(Math.min(99, Math.round((s / dur) * 100)));
+          }
+        } catch (_) {}
+      };
+      try { ffmpeg.on('log', logHandler); } catch (_) {}
+      const inName = `ri_in.${ext}`;
+      const outName = `ri_out.${ext}`;
+      await ffmpeg.writeFile(inName, new Uint8Array(await fetchFile(blob)));
+      setProgresoOpt(2);
+      if (ext === 'mp4') {
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-g', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outName]);
+      } else {
+        await ffmpeg.exec(['-i', inName, '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '16M', '-g', '30', '-pix_fmt', 'yuv420p', outName]);
+      }
+      const data = await ffmpeg.readFile(outName);
+      try { await ffmpeg.deleteFile(inName); } catch (_) {}
+      try { await ffmpeg.deleteFile(outName); } catch (_) {}
+      if (!data || !data.length) return null;
+      setProgresoOpt(100);
+      return new Blob([data.buffer], { type: mime || (ext === 'mp4' ? 'video/mp4' : 'video/webm') });
+    } catch (e) {
+      console.warn('No se pudo reindexar el vídeo, se entrega el crudo', e);
+      return null;
+    } finally {
+      if (ffmpeg && logHandler) { try { ffmpeg.off('log', logHandler); } catch (_) {} }
+      setOptimizando(false);
+      setTimeout(() => setProgresoOpt(0), 1200);
+    }
+  };
+
   const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null) => {
-    await descargarLineas(lineas, nombre, false, false, basePreargada);
+    await descargarLineas(lineas, nombre, false, false, basePreargada, true);
   };
 
   // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
