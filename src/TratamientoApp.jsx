@@ -5,7 +5,7 @@ import { fetchFile } from '@ffmpeg/util';
 
 // Versión visible en la interfaz: tras cada deploy se sube la letra para
 // saber si la pestaña tiene el código nuevo o un bundle viejo en caché.
-const APP_VERSION = 'F1';
+const APP_VERSION = 'F2';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -221,9 +221,9 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { setTextoDiag(''); } catch (_) {}
   };
   // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F1], el
+  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F2], el
   // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F1]'; }, []);
+  useEffect(() => { document.title = 'Tratamiento Dibujos [F2]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -1546,6 +1546,17 @@ const bdVideoTargetRef = useRef(null);
     totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
     const segsOk = segs.filter(s => s.hasta > s.desde);
     if (!segsOk.length) return null;
+    // Último segmento que usa cada elemento (como el/elA/elB): durante la
+    // grabación se liberan los que quedan atrás (ventana deslizante) para
+    // no tener N decodificadores con el fichero en memoria.
+    const ultimoUso = new Map();
+    try {
+      segsOk.forEach((s, idx) => {
+        for (const elx of [s.el, s.elA, s.elB]) {
+          if (elx && elx.tagName !== 'IMG') ultimoUso.set(elx, idx);
+        }
+      });
+    } catch (_) {}
     try { if (clonesListos.length) { setAviso(`Preparando ${clonesListos.length} transiciones…`); diagFase(`Preparando ${clonesListos.length} transiciones`); } } catch (_) {}
     await Promise.all(clonesListos);
     const nombreBase = o.nombreCustom
@@ -1553,7 +1564,7 @@ const bdVideoTargetRef = useRef(null);
       || (o.archivoCortes && o.archivoCortes.name ? String(o.archivoCortes.name).replace(/\.[^.]+$/, '') : null)
       || (o.archivo && o.archivo.name ? String(o.archivo.name).replace(/\.[^.]+$/, '') : null)
       || 'montaje';
-    return { segsOk, totalDur, nombreBase, animsFallidas, animsAvisos };
+    return { segsOk, totalDur, nombreBase, animsFallidas, animsAvisos, ultimoUso };
   };
 
   // 'optimizarDespues' genera ademas la version optimizada del video recien
@@ -2005,25 +2016,33 @@ const bdVideoTargetRef = useRef(null);
       const chunks = [];
       const mkVid = async (src) => {
         const vid = document.createElement('video');
-        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        // 'metadata' y no 'auto': con 'auto' cada elemento se ponía a
+        // descargar el fichero entero en segundo plano y con 20-30 filas la
+        // pestaña moría por memoria a mitad de la preparación. Con
+        // 'metadata' solo trae bajo demanda lo que reproduce.
+        vid.muted = true; vid.playsInline = true; vid.preload = 'metadata'; vid.src = src;
         vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
         document.body.appendChild(vid);
         els.push(vid);
         // Con tope: un vídeo que no arranca ni falla dejaba la descarga
         // colgada para siempre con el botón pillado.
         await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; setTimeout(res, 10000); });
-        // 'loadedmetadata' es readyState 1: solo metadatos, todavia ningun
-        // fotograma decodificado. Si se dibuja ahi, drawImage no pinta nada y el
-        // canvas se queda con el fotograma del tramo anterior, que es el tiron que
-        // se ve al entrar en la animacion. Se espera a readyState 2
-        // (HAVE_CURRENT_DATA) con un tope para no colgarse nunca.
-        await new Promise((res) => {
-          if (vid.readyState >= 2) { res(); return; }
-          let fin = false;
-          const listo = () => { if (fin) return; fin = true; try { vid.removeEventListener('canplay', listo); } catch (_) {} res(); };
-          try { vid.addEventListener('canplay', listo); } catch (_) {}
-          setTimeout(listo, 1500);
-        });
+        // Calentado breve: con 'metadata' el primer fotograma aún no está
+        // decodificado y dibujarlo en vacío dejaba tirón al entrar el
+        // segmento. Se reproduce un instante para traerlo (con tope, sin
+        // tragar el fichero) y se rebobina a 0.
+        if (vid.readyState < 2 && !vid.error) {
+          try { await playConTope(vid, 5000); } catch (_) {}
+          await new Promise((res) => {
+            if (vid.readyState >= 2) { res(); return; }
+            let fin = false;
+            const listo = () => { if (fin) return; fin = true; try { vid.removeEventListener('canplay', listo); } catch (_) {} res(); };
+            try { vid.addEventListener('canplay', listo); } catch (_) {}
+            setTimeout(listo, 1500);
+          });
+          try { vid.pause(); } catch (_) {}
+          try { vid.currentTime = 0; } catch (_) {}
+        }
         return vid;
       };
       const mkImg = async (u) => {
@@ -2081,6 +2100,7 @@ const bdVideoTargetRef = useRef(null);
         setAviso(avisoPrepRef.current);
       }
       const segsOk = prep.segsOk;
+      const ultimoUso = (prep && prep.ultimoUso) || new Map();
       totalDur = prep.totalDur;
       const nombreBase = prep.nombreBase;
       const nombreArchivo = `${nombreBase}.${ext}`;
@@ -2281,9 +2301,29 @@ diagFase('Grabando…');
           try { elx.play().catch(() => {}); } catch (_) {}
         };
         const detener = (elx) => {
-          if (!elx || elx.tagName === 'IMG') return;
+          if (!elx || elx.tagName !== 'IMG') return;
           try { elx.ontimeupdate = null; } catch (_) {}
           try { elx.pause(); } catch (_) {}
+        };
+        // Ventana deslizante: los elementos cuyo último uso ya pasó se sacan
+        // del DOM y se purgan sus búferes. Solo toca elementos creados aquí
+        // (los de 'els'): el vídeo base preargado, si lo hay, es del
+        // llamante y no se mete en 'els' a propósito.
+        const liberarUsados = () => {
+          try {
+            if (!ultimoUso || !ultimoUso.size) return;
+            for (const [elx, idxUlt] of ultimoUso) {
+              if (idxUlt < currentSeg) {
+                ultimoUso.delete(elx);
+                if (elx && elx.tagName !== 'IMG' && els.includes(elx)) {
+                  try { elx.pause(); } catch (_) {}
+                  try { elx.removeAttribute('src'); } catch (_) {}
+                  try { elx.load(); } catch (_) {}
+                  try { elx.parentNode && elx.parentNode.removeChild(elx); } catch (_) {}
+                }
+              }
+            }
+          } catch (_) {}
         };
         // readyState 2 = HAVE_CURRENT_DATA: el elemento ya tiene un fotograma
         // decodificado en la posicion actual y se puede dibujar de verdad.
@@ -2409,6 +2449,7 @@ diagFase('Grabando…');
                 }
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
+                liberarUsados();
               }
             } else {
               if (segVideoLista) {
@@ -2481,6 +2522,7 @@ diagFase('Grabando…');
                 if (!esImagen) detener(seg.el);
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
+                liberarUsados();
               }
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
