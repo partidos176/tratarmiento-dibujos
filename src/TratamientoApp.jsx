@@ -996,7 +996,8 @@ const bdVideoTargetRef = useRef(null);
 
       rec.start(250);
       loop();
-      await orig.play();
+      const motivoPlay = await playConTope(orig, 8000);
+      if (motivoPlay) throw new Error('No se pudo reproducir: ' + motivoPlay);
     } catch (e) {
       console.error('Export error:', e);
       setExportando(false);
@@ -1250,6 +1251,27 @@ const bdVideoTargetRef = useRef(null);
   // Deja un vídeo de animación con frames en memoria antes de grabarlo:
   // si entra en frío, los primeros frames tardan y la animación sale a
   // tirones. Devuelve true si tiene frames (readyState >= 2).
+  // Arrancar un vídeo con tope: play() a veces no se cumple ni falla nunca
+  // (decodificador saturado, origen atascado) y el await eterno dejaba la
+  // descarga pillada para siempre. Devuelve '' si arranca o el motivo si no.
+  const playConTope = async (elx, ms = 8000) => {
+    try {
+      if (!elx || elx.tagName === 'IMG') return '';
+      let p = null;
+      try { p = elx.play(); } catch (e) { return (e && e.name) || 'error'; }
+      if (!p || typeof p.then !== 'function') return '';
+      let to = null;
+      const fin = await Promise.race([
+        p.then(() => 'ok', (e) => (e && e.name) || 'Rechazado'),
+        new Promise((res) => { to = setTimeout(() => res('Timeout'), ms); }),
+      ]);
+      try { clearTimeout(to); } catch (_) {}
+      return fin === 'ok' ? '' : fin;
+    } catch (e) {
+      return (e && e.message) || 'error';
+    }
+  };
+
   const calentarAnim = async (av) => {
     let playErr = '';
     const esperar = async (ms) => {
@@ -1259,8 +1281,7 @@ const bdVideoTargetRef = useRef(null);
       }
     };
     try {
-      const p = av.play();
-      if (p && p.catch) await p.catch(e => { playErr = (e && e.name) || 'Rechazado'; });
+      playErr = await playConTope(av, 8000);
       // Si ya da frames no se espera: la espera fija de 3 s por animación
       // (sana o no) sumaba minutos en montajes con varias animaciones.
       if (av.readyState < 2) {
@@ -1268,7 +1289,7 @@ const bdVideoTargetRef = useRef(null);
         if (av.readyState < 2) {
           // Primer arranque atascado: recarga completa y reintenta.
           try { av.load(); } catch (_) {}
-          try { const p2 = av.play(); if (p2 && p2.catch) await p2.catch(() => {}); } catch (_) {}
+          try { await playConTope(av, 8000); } catch (_) {}
           await esperar(2000);
         }
       }
@@ -2056,7 +2077,7 @@ const bdVideoTargetRef = useRef(null);
                   setTimeout(fin, 900);
                 });
               }
-              try { await fel.play().catch(() => {}); } catch (_) {}
+              try { await playConTope(fel, 8000); } catch (_) {}
             } catch (_) {}
             await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 2000))]);
             try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) { try { if (first && first.fbImg) ctx.drawImage(first.fbImg, 0, 0, w, h); } catch (_) {} }
@@ -3110,7 +3131,7 @@ rec.start(250);
                   setTimeout(fin, 900);
                 });
               }
-              try { await f0.el.play().catch(() => {}); } catch (_) {}
+              try { await playConTope(f0.el, 8000); } catch (_) {}
             } catch (_) {}
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
             try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
@@ -3269,7 +3290,7 @@ const terminar = () => {
                   setTimeout(fin, 900);
                 });
               }
-              try { await f0.el.play().catch(() => {}); } catch (_) {}
+              try { await playConTope(f0.el, 8000); } catch (_) {}
             } catch (_) {}
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
             try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
@@ -3710,7 +3731,7 @@ const terminar = () => {
                   setTimeout(fin, 600);
                 });
               }
-              await v.play().catch(() => {});
+              await playConTope(v, 8000);
             } catch (_) {}
             if (v.readyState < 2) {
               await new Promise(res => {
