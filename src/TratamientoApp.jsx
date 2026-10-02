@@ -1945,36 +1945,94 @@ rec.start(250);
     try { const j = await resp.json(); return j && j.id ? j : null; } catch (_) { return null; }
   };
 
-  // Sube el video fuente al servidor por fragmentos. Es una sola vez por video:
-  // a partir de ahi todos los montajes trabajan sobre la copia en disco.
-  // Se trocea con blob.slice, que es una vista: nunca se carga el archivo entero
-  // en memoria, que con partidos de varios gigas reventaba la pestaña.
-  const subirFuenteAlServidor = async (blob, nombre) => {
-    const TAM = 8 * 1024 * 1024;
-    const total = Math.max(1, Math.ceil(blob.size / TAM));
+  // Un trozo al servidor. El servidor los va concatenando sin mirar el tamano, asi
+  // que no hace falta que sean todos iguales.
+  const enviarTrozo = async (bytes, uploadId) => {
+    const fd = new FormData();
+    fd.append('chunk', new Blob([bytes]), 'chunk');
+    fd.append('uploadId', uploadId);
+    const r = await fetchConTimeout(SERVIDOR + '/api/upload-chunk', { method: 'POST', body: fd }, 120000);
+    return !!r && r.ok;
+  };
+
+  const iniciarSubida = async (nombre) => {
     const init = await fetchConTimeout(SERVIDOR + '/api/upload-init', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nombre || 'video.mp4', totalChunks: total }),
+      body: JSON.stringify({ name: nombre || 'video.mp4', totalChunks: 0 }),
     }, 30000);
-    if (!init || !init.ok) return false;
-    let uploadId = null;
-    try { uploadId = (await init.json()).uploadId; } catch (_) {}
-    if (!uploadId) return false;
-    for (let i = 0; i < total; i++) {
-      const trozo = blob.slice(i * TAM, Math.min(blob.size, (i + 1) * TAM));
-      const fd = new FormData();
-      fd.append('chunk', trozo, 'chunk');
-      fd.append('uploadId', uploadId);
-      const r = await fetchConTimeout(SERVIDOR + '/api/upload-chunk', { method: 'POST', body: fd }, 180000);
-      if (!r || !r.ok) return false;
-      const pct = Math.round((i + 1) / total * 100);
-      setProgresoDescarga(pct);
-      if (i % 8 === 0) setAviso('Subiendo el video al servidor ' + pct + ' % (solo la primera vez)...');
-    }
+    if (!init || !init.ok) return null;
+    try { return (await init.json()).uploadId || null; } catch (_) { return null; }
+  };
+
+  const cerrarSubida = async (uploadId) => {
     const fin = await fetchConTimeout(SERVIDOR + '/api/upload-complete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }),
     }, 60000);
     return !!fin && fin.ok;
+  };
+
+  const TAM_TROZO = 8 * 1024 * 1024;
+
+  // El source se sube una sola vez por video: a partir de ahi todos los montajes
+  // trabajan sobre la copia en disco del servidor.
+  //
+  // Si ya tenemos el File en memoria se trocea con blob.slice, que es una vista.
+  // Si no, se transmite el objectURL en streaming con getReader(). Lo que NO se
+  // hace nunca es un response.blob() del video entero: con partidos de varios
+  // gigas eso deja la pagina sin memoria y la descarga se queda colgada sin
+  // llegar a empezar.
+  const asegurarFuenteEnServidor = async () => {
+    const nombre = (archivoCortes && archivoCortes.name) || (archivo && archivo.name) || 'video.mp4';
+    const fichero = (archivoCortes && typeof archivoCortes.slice === 'function' && archivoCortes.size)
+      ? archivoCortes
+      : ((archivo && typeof archivo.slice === 'function' && archivo.size) ? archivo : null);
+
+    if (fichero) {
+      const total = Math.max(1, Math.ceil(fichero.size / TAM_TROZO));
+      const uploadId = await iniciarSubida(nombre);
+      if (!uploadId) return false;
+      for (let i = 0; i < total; i++) {
+        const trozo = fichero.slice(i * TAM_TROZO, Math.min(fichero.size, (i + 1) * TAM_TROZO));
+        if (!(await enviarTrozo(trozo, uploadId))) return false;
+        const pct = Math.round((i + 1) / total * 100);
+        setProgresoDescarga(pct);
+        setAviso('Subiendo el video al servidor ' + pct + ' % (solo la primera vez)...');
+      }
+      return cerrarSubida(uploadId);
+    }
+
+    let respuesta = null;
+    try { respuesta = await fetch(videoUrlCortes || videoUrl); } catch (_) {}
+    if (!respuesta || !respuesta.ok || !respuesta.body) return false;
+    const uploadId = await iniciarSubida(nombre);
+    if (!uploadId) return false;
+    const lector = respuesta.body.getReader();
+    let partes = [];
+    let acumulado = 0;
+    let enviados = 0;
+    const vaciar = async () => {
+      const uno = new Uint8Array(acumulado);
+      let off = 0;
+      for (const p of partes) { uno.set(p, off); off += p.length; }
+      partes = [];
+      acumulado = 0;
+      return enviarTrozo(uno, uploadId);
+    };
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (value && value.length) {
+        partes.push(value);
+        acumulado += value.length;
+        while (acumulado >= TAM_TROZO) {
+          if (!(await vaciar())) return false;
+          enviados++;
+          setAviso('Subiendo el video al servidor: ' + Math.round(acumulado * enviados / 1048576) + ' MB (solo la primera vez)...');
+        }
+      }
+      if (done) break;
+    }
+    if (acumulado > 0 && !(await vaciar())) return false;
+    return cerrarSubida(uploadId);
   };
 
   // Traduce las filas del Montaje a la lista de tramos que compone el servidor.
@@ -2041,25 +2099,20 @@ rec.start(250);
   const descargarDesdeServidor = async (validas, nombreArchivo) => {
     const est = await estadoDelServidor();
     if (!est) return { ok: false, motivo: 'el servidor no responde' };
-    const plan = await planParaElServidor(validas);
-    if (!plan.ok) return plan;
 
-    // El servidor compone desde el fichero fuente, asi que lo necesita en disco.
-    // Se sube una sola vez por video.
+    // El fuente va primero a proposito: si esa subida falla o se atasca, mejor
+    // enterarse ya que haber subido antes los clips de las animaciones.
     if (!est.fuente) {
-      // Se prefiere el File que ya esta en memoria (no ocupa nada nuevo) y solo
-      // si no, se recurre a la objectURL del video base.
-      let blob = (archivoCortes && typeof archivoCortes.slice === 'function') ? archivoCortes
-        : ((archivo && typeof archivo.slice === 'function') ? archivo : null);
-      if (!blob) {
-        try { blob = await (await fetch(videoUrlCortes || videoUrl)).blob(); } catch (_) {}
-      }
-      if (!blob || !blob.size) return { ok: false, motivo: 'no se pudo leer el video del navegador' };
-      if (!(await subirFuenteAlServidor(blob, (archivoCortes && archivoCortes.name) || (archivo && archivo.name)))) {
+      setAviso('Subiendo el video al servidor, solo la primera vez...');
+      if (!(await asegurarFuenteEnServidor())) {
+        setAviso('');
         return { ok: false, motivo: 'no se pudo subir el video al servidor' };
       }
       setAviso('');
     }
+
+    const plan = await planParaElServidor(validas);
+    if (!plan.ok) return plan;
 
     const t0 = performance.now();
     const r = await fetchConTimeout(SERVIDOR + '/api/montaje', {
