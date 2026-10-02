@@ -3,6 +3,10 @@ import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 import { fetchFile } from '@ffmpeg/util';
 
+// Versión visible en la interfaz: tras cada deploy se sube la letra para
+// saber si la pestaña tiene el código nuevo o un bundle viejo en caché.
+const APP_VERSION = 'F1';
+
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
   const s = [];
@@ -190,10 +194,36 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   // barra entera.
   const [optimaEnDosFases, setOptimaEnDosFases] = useState(false);
   const [informeDescarga, setInformeDescarga] = useState('');
+  // Diagnóstico en vivo de la descarga (fase + hora + memoria JS): si la
+  // pestaña se queda pillada, lo último que ponga dice dónde. Se actualiza
+  // una vez por segundo para no competir con la grabación.
+  const [textoDiag, setTextoDiag] = useState('');
+  const diagFaseRef = useRef('');
+  const diagTimerRef = useRef(null);
+  const diagFase = (f) => { try { diagFaseRef.current = f; } catch (_) {} };
+  const diagIniciar = () => {
+    try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
+    try {
+      diagTimerRef.current = setInterval(() => {
+        let heap = '';
+        try {
+          const m = performance && performance.memory;
+          if (m && m.usedJSHeapSize) heap = ` · heap ${Math.round(m.usedJSHeapSize / 1048576)} MB`;
+        } catch (_) {}
+        const hora = new Date().toLocaleTimeString('es-ES');
+        try { setTextoDiag(`${diagFaseRef.current || '…'} · ${hora}${heap}`); } catch (_) {}
+      }, 1000);
+    } catch (_) {}
+  };
+  const diagParar = () => {
+    try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
+    diagTimerRef.current = null;
+    try { setTextoDiag(''); } catch (_) {}
+  };
   // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F0], el
+  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F1], el
   // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F0]'; }, []);
+  useEffect(() => { document.title = 'Tratamiento Dibujos [F1]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -1344,7 +1374,7 @@ const bdVideoTargetRef = useRef(null);
       // La preparación es secuencial y sin barra de progreso: en montajes de
       // varias filas son minutos al 0% con el botón pillado y parece colgada.
       // Se avisa del avance para saber que trabaja y dónde se atasca.
-      try { if (nFilasPrep > 3 && (filaPrep === 1 || filaPrep % 2 === 0 || filaPrep === nFilasPrep)) setAviso(`Preparando segmentos (${filaPrep}/${nFilasPrep})…`); } catch (_) {}
+      try { if (nFilasPrep > 3 && (filaPrep === 1 || filaPrep % 2 === 0 || filaPrep === nFilasPrep)) { setAviso(`Preparando segmentos (${filaPrep}/${nFilasPrep})…`); diagFase(`Preparando segmentos (${filaPrep}/${nFilasPrep})`); } } catch (_) {}
       rangos.push([segs.length, segs.length]);
       if (linea.tipo === 'transicion') continue;
       const nombre = linea.concepto || '';
@@ -1516,7 +1546,7 @@ const bdVideoTargetRef = useRef(null);
     totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
     const segsOk = segs.filter(s => s.hasta > s.desde);
     if (!segsOk.length) return null;
-    try { if (clonesListos.length) setAviso(`Preparando ${clonesListos.length} transiciones…`); } catch (_) {}
+    try { if (clonesListos.length) { setAviso(`Preparando ${clonesListos.length} transiciones…`); diagFase(`Preparando ${clonesListos.length} transiciones`); } } catch (_) {}
     await Promise.all(clonesListos);
     const nombreBase = o.nombreCustom
       || (o.videosBD && o.videosBD.length > 0 && o.videosBD[0].nombre ? String(o.videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
@@ -1968,6 +1998,8 @@ const bdVideoTargetRef = useRef(null);
     const { mime, ext } = mimeDescarga();
     try {
       tPrepDesde = performance.now();
+      diagFase('Iniciando descarga…');
+      diagIniciar();
       const baseSrc = videoUrlCortes || videoUrl;
       if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
       const chunks = [];
@@ -2053,6 +2085,7 @@ const bdVideoTargetRef = useRef(null);
       const nombreBase = prep.nombreBase;
       const nombreArchivo = `${nombreBase}.${ext}`;
       tGrabaDesde = performance.now();
+      diagFase('Pre-dibujado…');
       // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
       // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
       // primer vídeo seekea y se dibuja). Con el frame ya pintado, el primer
@@ -2097,6 +2130,7 @@ rec.onstop = async () => {
           // despues el fallback de 3s lo creeria "no descargado" y volveria a
           // exportar el video entero una segunda vez.
           descargaHecha = true;
+          diagFase('Terminando grabación…');
           const tStop = performance.now();
           try { if (tGrabaDesde > 0) tGrabaMs = tStop - tGrabaDesde; } catch (_) {}
           let finalBlob = null;
@@ -2115,6 +2149,7 @@ rec.onstop = async () => {
                 // cada intento deja al servidor codificando minutos en balde.
                 // Sin recorte se entrega el crudo tal cual.
                 if ((blob.size || 0) <= 48 * 1048576 && await trimDisponible()) {
+                  diagFase('Recorte servidor…');
                   const t0Trim = performance.now();
                   const fd = new FormData();
                   fd.append('video', blob, `montaje.${ext}`);
@@ -2141,6 +2176,7 @@ rec.onstop = async () => {
             // cara de la descarga. Con el servidor off, o si el trim falla, se
             // sigue reindexando en WASM como hasta ahora.
             if (reindexar && !diag.trimOk) {
+              diagFase('Reindexando…');
               const tRi = performance.now();
               try {
                 const ri = await reindexarParaSalto(finalBlob, ext, mime);
@@ -2157,6 +2193,7 @@ rec.onstop = async () => {
           }
           const t0Entrega = performance.now();
           setProgresoDescarga(100);
+          diagFase('Entregando…');
           if (!soloOptimizado && !destinoDisco) {
             const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
@@ -2221,6 +2258,7 @@ rec.onstop = async () => {
         }, 3000);
 };
 rec.start(250);
+diagFase('Grabando…');
         let enTick = false;
         let segT0Wall = 0;
         let completado = 0;
@@ -2533,6 +2571,7 @@ rec.start(250);
       }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
+      diagParar();
     }
   };
 
@@ -6430,6 +6469,9 @@ const terminar = () => {
                 {informeDescarga}
               </div>
             )}
+            <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
+              [{APP_VERSION}]{textoDiag ? ` ${textoDiag}` : ''}
+            </div>
             <button
               onClick={() => exportarMontaje()}
               style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
