@@ -1261,12 +1261,16 @@ const bdVideoTargetRef = useRef(null);
     try {
       const p = av.play();
       if (p && p.catch) await p.catch(e => { playErr = (e && e.name) || 'Rechazado'; });
-      await esperar(3000);
+      // Si ya da frames no se espera: la espera fija de 3 s por animación
+      // (sana o no) sumaba minutos en montajes con varias animaciones.
       if (av.readyState < 2) {
-        // Primer arranque atascado: recarga completa y reintenta.
-        try { av.load(); } catch (_) {}
-        try { const p2 = av.play(); if (p2 && p2.catch) await p2.catch(() => {}); } catch (_) {}
-        await esperar(2000);
+        await esperar(3000);
+        if (av.readyState < 2) {
+          // Primer arranque atascado: recarga completa y reintenta.
+          try { av.load(); } catch (_) {}
+          try { const p2 = av.play(); if (p2 && p2.catch) await p2.catch(() => {}); } catch (_) {}
+          await esperar(2000);
+        }
       }
       // Veredicto ANTES de pausar/rebobinar: el seek a 0 baja readyState a 1
       // mientras dura y daba un falso negativo (vídeo sano → sin frames).
@@ -1287,7 +1291,13 @@ const bdVideoTargetRef = useRef(null);
   // IndexedDB guardó la URL cuando ya estaba revocada).
   const regenerarAnimCaliente = async (c) => {
     const fondo = c.baseDataUrl || c.dataUrl;
-    const im = await new Promise((res, rej) => { const x = new Image(); x.onload = () => res(x); x.onerror = rej; x.src = fondo; });
+    const im = await new Promise((res, rej) => {
+      const x = new Image();
+      x.onload = () => res(x);
+      x.onerror = rej;
+      x.src = fondo;
+      setTimeout(() => { try { rej(new Error('timeout fondo')); } catch (_) {} }, 15000);
+    });
     const w = im.naturalWidth || 1280;
     const h = im.naturalHeight || 720;
     const figs = normalizarFiguras(c.figuras || []);
@@ -1306,7 +1316,14 @@ const bdVideoTargetRef = useRef(null);
     const animsAvisos = [];
     const rangos = [];
     let totalDur = 0;
+    let filaPrep = 0;
+    const nFilasPrep = (validas || []).length;
     for (const linea of validas) {
+      filaPrep++;
+      // La preparación es secuencial y sin barra de progreso: en montajes de
+      // varias filas son minutos al 0% con el botón pillado y parece colgada.
+      // Se avisa del avance para saber que trabaja y dónde se atasca.
+      try { if (nFilasPrep > 3 && (filaPrep === 1 || filaPrep % 2 === 0 || filaPrep === nFilasPrep)) setAviso(`Preparando segmentos (${filaPrep}/${nFilasPrep})…`); } catch (_) {}
       rangos.push([segs.length, segs.length]);
       if (linea.tipo === 'transicion') continue;
       const nombre = linea.concepto || '';
@@ -1478,6 +1495,7 @@ const bdVideoTargetRef = useRef(null);
     totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
     const segsOk = segs.filter(s => s.hasta > s.desde);
     if (!segsOk.length) return null;
+    try { if (clonesListos.length) setAviso(`Preparando ${clonesListos.length} transiciones…`); } catch (_) {}
     await Promise.all(clonesListos);
     const nombreBase = o.nombreCustom
       || (o.videosBD && o.videosBD.length > 0 && o.videosBD[0].nombre ? String(o.videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
@@ -4280,11 +4298,17 @@ const terminar = () => {
   };
 
   const generarVideo = async (figurasFn, fondoDataUrl, w, h, onProgress) => {
+    // Con tope: una imagen que no carga ni falla dejaba la preparación
+    // colgada para siempre con el botón pillado al 0%.
     const cargarImg = (src) => new Promise((res, rej) => {
       const im = new Image();
-      im.onload = () => res(im);
-      im.onerror = rej;
+      let fin = false;
+      const ok = (v) => { if (fin) return; fin = true; res(v); };
+      const mal = (e) => { if (fin) return; fin = true; rej(e); };
+      im.onload = () => ok(im);
+      im.onerror = mal;
       im.src = src;
+      setTimeout(() => mal(new Error('timeout imagen')), 15000);
     });
     const fondo = await cargarImg(fondoDataUrl);
     // 25 fps, igual que muestrea la descarga: a 30 fps el re-muestreo 30→25
