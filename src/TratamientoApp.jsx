@@ -1439,7 +1439,13 @@ const bdVideoTargetRef = useRef(null);
       if (esVideoSeg(B) && B.src) {
         try {
           const clon = document.createElement('video');
-          clon.muted = true; clon.playsInline = true; clon.preload = 'auto'; clon.src = B.src;
+          // 'metadata' y no 'auto': el clon vive pausado casi toda la
+          // grabación, y con 'auto' cada clon descarga el vídeo de partida
+          // entero en segundo plano (un GB por cada transición hasta colgar
+          // la pestaña). Con 'metadata' solo trae bajo demanda lo que
+          // reproduce en su transición.
+          clon.muted = true; clon.playsInline = true; clon.preload = 'metadata'; clon.src = B.src;
+          try { clon.dataset.clonTransicion = '1'; } catch (_) {}
           clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
           document.body.appendChild(clon);
           els.push(clon);
@@ -2065,7 +2071,11 @@ rec.onstop = async () => {
               const blob = new Blob(chunks, { type: mime });
               finalBlob = blob;
               try {
-                if (await trimDisponible()) {
+                // El recorte solo compensa en archivos pequeños: con el preset
+                // del servidor uno grande nunca termina en los 10 s de tope y
+                // cada intento deja al servidor codificando minutos en balde.
+                // Sin recorte se entrega el crudo tal cual.
+                if ((blob.size || 0) <= 48 * 1048576 && await trimDisponible()) {
                   const t0Trim = performance.now();
                   const fd = new FormData();
                   fd.append('video', blob, `montaje.${ext}`);
@@ -2305,7 +2315,20 @@ rec.start(250);
               if (segElapsed >= segDur) {
                 const vistos = new Set();
                 for (const elx of [seg.elA, seg.elB]) {
-                  if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
+                  if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) {
+                    vistos.add(elx);
+                    detener(elx);
+                    // El clon solo se usa en esta transición: sacarlo del DOM
+                    // libera su decodificador y sus búferes en vez de
+                    // arrastrarlos hasta el final de la grabación. elA no se
+                    // toca: es el elemento del segmento y puede usarlo otra
+                    // transición posterior.
+                    if (elx.dataset && elx.dataset.clonTransicion) {
+                      try { elx.removeAttribute('src'); } catch (_) {}
+                      try { elx.load(); } catch (_) {}
+                      try { elx.parentNode && elx.parentNode.removeChild(elx); } catch (_) {}
+                    }
+                  }
                 }
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
@@ -6328,6 +6351,10 @@ const terminar = () => {
                           } catch (_) { return 'montaje'; }
                         })();
                         const destino = await pedirFicheroEnDisco(nombreSugerido, mimeDescarga().ext);
+                        // Sin destino en disco el montaje entero iría a memoria
+                        // (chunks + Blob + subida + reindexado): en montajes de
+                        // varios minutos eso cuelga la pestaña. Mejor avisar.
+                        if (!destino) { setAviso('Descarga cancelada: elige un destino para guardar el montaje.'); return; }
                         await descargarDesdeMontaje(marcadas, null, null, destino);
                       }}
                       disabled={descargandoMontaje}
