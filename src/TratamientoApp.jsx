@@ -1895,7 +1895,216 @@ rec.start(250);
     }
   };
 
+  // =========================================================================
+  // Ruta nativa: el servidor compone el montaje con ffmpeg.
+  //
+  // La ruta de siempre graba el montaje en tiempo real sobre un canvas con
+  // MediaRecorder, y eso tiene un techo de 1x: 40 s de montaje no pueden tardar
+  // menos de 40 s, y despues hay que recodificar el archivo entero. El servidor
+  // recorta los tramos del fichero fuente y los concatena, sin tiempo real y
+  // sin recodificar dos veces. Todo lo de aqui cae a la ruta de siempre en
+  // cuanto algo falla, para no perder nunca el trabajo del usuario.
+  // =========================================================================
+  const SERVIDOR = 'http://localhost:3001';
+
+  const nombreBaseDe = (nombreCustom) => (nombreCustom
+    || (videosBD && videosBD.length > 0 && videosBD[0].nombre ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
+    || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null)
+    || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null)
+    || 'montaje');
+
+  const estadoDelServidor = async () => {
+    const r = await fetchConTimeout(SERVIDOR + '/api/estado', {}, 2500);
+    if (!r || !r.ok) return null;
+    try { return await r.json(); } catch (_) { return null; }
+  };
+
+  // Duracion de un clip, para saber cuanto ocupa en el montaje. Se mide aqui
+  // porque el servidor solo recibe el clip ya subido, no su duracion.
+  const duracionDeClip = (url) => new Promise((resolve) => {
+    let hecho = false;
+    const v = document.createElement('video');
+    const fin = (d) => { if (hecho) return; hecho = true; resolve(d || 0); };
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => fin(v.duration);
+    v.onerror = () => fin(0);
+    setTimeout(() => fin(hecho ? 0 : (Number.isFinite(v.duration) ? v.duration : 0)), 4000);
+    try { v.src = url; } catch (_) { fin(0); }
+  });
+
+  // Sube un clip de animacion o una imagen. El servidor los guarda por hash del
+  // contenido, asi que volver a usar el mismo no cuesta nada.
+  const subirRecurso = async (url) => {
+    const r = await fetch(url);
+    const blob = await r.blob();
+    if (!blob || !blob.size) return null;
+    const resp = await fetchConTimeout(SERVIDOR + '/api/recurso', {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
+    }, 120000);
+    if (!resp || !resp.ok) return null;
+    try { const j = await resp.json(); return j && j.id ? j : null; } catch (_) { return null; }
+  };
+
+  // Sube el video fuente al servidor por fragmentos. Es una sola vez por video:
+  // a partir de ahi todos los montajes trabajan sobre la copia en disco.
+  // Se trocea con blob.slice, que es una vista: nunca se carga el archivo entero
+  // en memoria, que con partidos de varios gigas reventaba la pestaña.
+  const subirFuenteAlServidor = async (blob, nombre) => {
+    const TAM = 8 * 1024 * 1024;
+    const total = Math.max(1, Math.ceil(blob.size / TAM));
+    const init = await fetchConTimeout(SERVIDOR + '/api/upload-init', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nombre || 'video.mp4', totalChunks: total }),
+    }, 30000);
+    if (!init || !init.ok) return false;
+    let uploadId = null;
+    try { uploadId = (await init.json()).uploadId; } catch (_) {}
+    if (!uploadId) return false;
+    for (let i = 0; i < total; i++) {
+      const trozo = blob.slice(i * TAM, Math.min(blob.size, (i + 1) * TAM));
+      const fd = new FormData();
+      fd.append('chunk', trozo, 'chunk');
+      fd.append('uploadId', uploadId);
+      const r = await fetchConTimeout(SERVIDOR + '/api/upload-chunk', { method: 'POST', body: fd }, 180000);
+      if (!r || !r.ok) return false;
+      const pct = Math.round((i + 1) / total * 100);
+      setProgresoDescarga(pct);
+      if (i % 8 === 0) setAviso('Subiendo el video al servidor ' + pct + ' % (solo la primera vez)...');
+    }
+    const fin = await fetchConTimeout(SERVIDOR + '/api/upload-complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }),
+    }, 60000);
+    return !!fin && fin.ok;
+  };
+
+  // Traduce las filas del Montaje a la lista de tramos que compone el servidor.
+  // Si hay algo que el servidor aun no sabe hacer (una transicion), devuelve el
+  // motivo y se usa la ruta de siempre.
+  const planParaElServidor = async (validas) => {
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc) return { ok: false, motivo: 'no hay video base cargado' };
+    const tramos = [];
+    const subidos = new Map();
+    const asegurar = async (url) => {
+      if (subidos.has(url)) return subidos.get(url);
+      const r = await subirRecurso(url);
+      if (!r) return null;
+      const v = { id: r.id, ext: r.ext };
+      subidos.set(url, v);
+      return v;
+    };
+
+    for (const linea of validas) {
+      if (linea.tipo === 'transicion') return { ok: false, motivo: 'lleva transiciones' };
+      const nombre = linea.concepto || '';
+      if (linea.tipo === 'imagen' && linea.imagenUrl) {
+        const r = await asegurar(linea.imagenUrl);
+        if (!r) return { ok: false, motivo: 'no se pudo subir una imagen' };
+        tramos.push({ tipo: 'imagen', id: r.id, ext: r.ext, dur: 4, nombre });
+        continue;
+      }
+      if (linea.videoUrl) {
+        const r = await asegurar(linea.videoUrl);
+        if (!r) return { ok: false, motivo: 'no se pudo subir un clip' };
+        const d = await duracionDeClip(linea.videoUrl);
+        if (!(d > 0.1)) return { ok: false, motivo: 'no se pudo medir un clip' };
+        tramos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: d, nombre });
+        continue;
+      }
+      if (linea.inicio != null && linea.fin != null) {
+        const ini = Math.max(0, linea.inicio);
+        const fin = Math.max(ini + 0.5, linea.fin);
+        // Las animaciones van en medio del tramo: el base se parte en dos y en
+        // medio se encaja el clip, igual que hace el bucle de dibujo.
+        const anims = (capturas || [])
+          .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+          .map(c => ({ url: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
+          .sort((a, b) => a.en - b.en);
+        let cursor = ini;
+        for (const a of anims) {
+          if (!(a.en > cursor && a.en < fin)) continue;
+          if (a.en - cursor > 0.02) tramos.push({ tipo: 'fuente', ini: cursor, fin: a.en, nombre });
+          const r = await asegurar(a.url);
+          if (!r) return { ok: false, motivo: 'no se pudo subir una animacion' };
+          tramos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: a.dur, nombre });
+          cursor = a.en;
+        }
+        if (fin - cursor > 0.02) tramos.push({ tipo: 'fuente', ini: cursor, fin, nombre });
+        continue;
+      }
+      return { ok: false, motivo: 'hay una fila sin contenido reconocible' };
+    }
+    if (!tramos.length) return { ok: false, motivo: 'no quedan tramos validos' };
+    return { ok: true, tramos };
+  };
+
+  const descargarDesdeServidor = async (validas, nombreArchivo) => {
+    const est = await estadoDelServidor();
+    if (!est) return { ok: false, motivo: 'el servidor no responde' };
+    const plan = await planParaElServidor(validas);
+    if (!plan.ok) return plan;
+
+    // El servidor compone desde el fichero fuente, asi que lo necesita en disco.
+    // Se sube una sola vez por video.
+    if (!est.fuente) {
+      // Se prefiere el File que ya esta en memoria (no ocupa nada nuevo) y solo
+      // si no, se recurre a la objectURL del video base.
+      let blob = (archivoCortes && typeof archivoCortes.slice === 'function') ? archivoCortes
+        : ((archivo && typeof archivo.slice === 'function') ? archivo : null);
+      if (!blob) {
+        try { blob = await (await fetch(videoUrlCortes || videoUrl)).blob(); } catch (_) {}
+      }
+      if (!blob || !blob.size) return { ok: false, motivo: 'no se pudo leer el video del navegador' };
+      if (!(await subirFuenteAlServidor(blob, (archivoCortes && archivoCortes.name) || (archivo && archivo.name)))) {
+        return { ok: false, motivo: 'no se pudo subir el video al servidor' };
+      }
+      setAviso('');
+    }
+
+    const t0 = performance.now();
+    const r = await fetchConTimeout(SERVIDOR + '/api/montaje', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segmentos: plan.tramos, ancho: 1280, alto: 720 }),
+    }, 20 * 60 * 1000);
+    const ms = Math.round(performance.now() - t0);
+    if (!r || !r.ok) return { ok: false, motivo: 'el servidor no pudo componer el montaje' };
+    const blob = await r.blob();
+    if (!blob || blob.size < 2048) return { ok: false, motivo: 'el servidor devolvio un archivo vacio' };
+
+    descargarBlob(blob, nombreArchivo);
+    try { setUltimoVideo({ blob, nombre: nombreArchivo, mime: 'video/mp4', ext: 'mp4' }); } catch (_) {}
+    const contenido = Number(r.headers.get('x-montaje-contenido')) || 0;
+    setInformeDescarga('Montaje de ' + Math.round(contenido) + ' s compuesto por el servidor en '
+      + (ms / 1000).toFixed(1) + ' s reales (x' + (ms > 0 ? (contenido / (ms / 1000)).toFixed(1) : '?')
+      + ') | salida ' + Math.round(blob.size / 1024) + ' KB');
+    return { ok: true, ms, contenido };
+  };
+
   const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null) => {
+    // Si el servidor esta en marcha se compone alli, que es mucho mas rapido.
+    // Cualquier fallo cae a la ruta de siempre sin perder nada.
+    if (await trimDisponible()) {
+      setDescargandoMontaje(true);
+      try {
+        const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
+        if (validas.length) {
+          const nombreArchivo = `${nombreBaseDe(nombre)}.mp4`;
+          const res = await descargarDesdeServidor(validas, nombreArchivo);
+          if (res && res.ok) {
+            setProgresoDescarga(0);
+            setDescargandoMontaje(false);
+            try { setAviso(''); } catch (_) {}
+            return;
+          }
+          console.warn('Ruta nativa no disponible:', res && res.motivo, '-> se usa la ruta de siempre');
+          try { setAviso(''); } catch (_) {}
+        }
+      } catch (e) {
+        console.warn('Fallo en la ruta nativa, se usa la de siempre:', e);
+      }
+      setProgresoDescarga(0);
+      setDescargandoMontaje(false);
+    }
     await descargarLineas(lineas, nombre, false, false, basePreargada, true);
   };
 
