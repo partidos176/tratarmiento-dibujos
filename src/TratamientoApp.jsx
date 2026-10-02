@@ -190,6 +190,10 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   // barra entera.
   const [optimaEnDosFases, setOptimaEnDosFases] = useState(false);
   const [informeDescarga, setInformeDescarga] = useState('');
+  // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
+  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F0], el
+  // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
+  useEffect(() => { document.title = 'Tratamiento Dibujos [F0]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -1352,6 +1356,28 @@ const bdVideoTargetRef = useRef(null);
   // reproductores que no aguantan decodificar 3 s de 720p de golpe. Si no se
   // puede (fichero muy grande, sin ffmpeg o error), se entrega el crudo igual.
   const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null, reindexar = false) => {
+    // Diagnostico de tiempos de esta descarga. Es un objeto mutable del ambito
+    // de la funcion porque el informe se compone en rec.onstop, que se dispara
+    // despues de que el bucle de grabacion termine: un useState no serviria,
+    // la closure lo leeria con el valor viejo (null).
+    const diag = { grabacionMs: 0, trimMs: 0, trimOk: false, reindexMs: 0, salidaKB: 0, textoBase: '' };
+    // Publica el informe con lo que se sepa hasta ahora. Se llama desde el final
+    // del bucle y desde rec.onstop porque el orden entre ambos NO esta
+    // garantizado: rec.stop() dispara el evento 'stop' antes de que el bucle
+    // termine, asi que onstop suele ir primero y encuentra todo a cero. Como el
+    // objeto diag se va rellenando, el que publique el ultimo es el que ya tiene
+    // las cuatro fases completas.
+    const publicarInforme = () => {
+      try {
+        if (!diag.textoBase) return;
+        setInformeDescarga(diag.textoBase
+          + ' | grabacion ' + (diag.grabacionMs / 1000).toFixed(1) + ' s'
+          + ' | trim servidor ' + (diag.trimMs / 1000).toFixed(1) + ' s'
+          + (diag.trimOk ? ' (nativo, ya reindexa)' : ' (no disponible)')
+          + ' | reindex WASM ' + (diag.reindexMs / 1000).toFixed(1) + ' s'
+          + ' | salida ' + diag.salidaKB + ' KB');
+      } catch (_) {}
+    };
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
@@ -1475,8 +1501,10 @@ rec.onstop = async () => {
                 fd.append('video', blob, `montaje.${ext}`);
                 fd.append('trimStart', '0.2');
                 fd.append('ext', ext);
+                const tTrim = performance.now();
                 const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
-                if (resp && resp.ok) finalBlob = await resp.blob();
+                if (resp && resp.ok) { finalBlob = await resp.blob(); diag.trimOk = true; }
+                diag.trimMs = Math.round(performance.now() - tTrim);
               }
             } catch (_) {}
           } catch (_) {
@@ -1485,12 +1513,26 @@ rec.onstop = async () => {
           // Reindexar antes de descargar: una clave por segundo para que el
           // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
           // siempre se reproduce aunque tarde mas en saltar.
-          if (reindexar) {
+          //
+          // Si el servidor ya ha recortado (/api/trim-webm responde ok) NO se
+          // reindexa: ese endpoint ya reindexa en nativo con -g 30 y
+          // +faststart, asi que hacerlo aqui con ffmpeg.wasm es un recodificado
+          // completo del archivo entero que no aporta nada y cuesta la fase mas
+          // cara de la descarga. Con el servidor off, o si el trim falla, se
+          // sigue reindexando en WASM como hasta ahora.
+          if (reindexar && !diag.trimOk) {
+            const tRi = performance.now();
             try {
               const ri = await reindexarParaSalto(finalBlob, ext, mime);
               if (ri) finalBlob = ri;
             } catch (_) {}
+            diag.reindexMs = Math.round(performance.now() - tRi);
           }
+          try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
+          // Informe con el desglose de fases. Se compone aqui porque el trim y el
+          // reindexado ocurren despues del bucle: mostrarlo antes daria un total
+          // incompleto.
+          publicarInforme();
           try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           setProgresoDescarga(100);
           if (!soloOptimizado) {
@@ -1747,17 +1789,18 @@ rec.start(250);
       try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     } finally {
-      // Tiempo real de la grabacion frente a la duracion del montaje. Si el
-      // segundo es mucho mayor, el origen se para por el camino y ahi es donde
-      // se va el tiempo.
+      // Tiempo real de la grabacion frente a la duracion del montaje. Ojo: esto
+      // mide SOLO la grabacion. El trim del servidor y el reindexado pasan
+      // despues, en rec.onstop, asi que el total de la descarga es mayor. El
+      // informe completo se compone ahi, cuando ya se saben todas las fases.
       if (tGrabaDesde > 0 && totalDur > 0.5) {
         const real = (performance.now() - tGrabaDesde) / 1000;
         const f = totalDur / real;
-        setInformeDescarga(
-          'Montaje de ' + Math.round(totalDur) + ' s grabado en ' + real.toFixed(0) + ' s reales'
+        diag.grabacionMs = Math.round(real * 1000);
+        diag.textoBase = 'Montaje de ' + Math.round(totalDur) + ' s grabado en ' + real.toFixed(0) + ' s reales'
           + (f < 0.9 ? ' (x' + f.toFixed(2) + ', se va ' + Math.round(100 / f) + '% mas de tiempo).'
-            : (f > 1.05 ? ' (x' + f.toFixed(2) + ', mas rapido que el reloj).' : ' (x' + f.toFixed(2) + ').'))
-        );
+            : (f > 1.05 ? ' (x' + f.toFixed(2) + ', mas rapido que el reloj).' : ' (x' + f.toFixed(2) + ').'));
+        publicarInforme();
       }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
@@ -3810,6 +3853,15 @@ const terminar = () => {
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* Marca de version, visible dentro de la pagina. Si al recargar NO ves
+          la etiqueta [F0] arriba a la derecha, tu pestana sigue con el bundle
+          viejo y cualquier medicion de tiempos es falsa. */}
+      <div style={{ position: 'fixed', top: '4px', right: '8px', zIndex: 9999,
+                    background: '#facc15', color: '#000', fontWeight: 800,
+                    fontSize: '0.8rem', padding: '2px 8px', borderRadius: '6px',
+                    fontFamily: 'Inter, sans-serif', pointerEvents: 'none' }}>
+        F0
+      </div>
       <div style={{ display: 'flex', gap: '0.5rem', padding: '1.5rem 2rem 0', borderBottom: '1px solid #1e293b' }}>
         {hojas.map(h => (
           <button
