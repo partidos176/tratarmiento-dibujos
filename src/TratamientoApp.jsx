@@ -502,7 +502,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
           if (vp && vp.blob && vp.blob.size) {
             const url = URL.createObjectURL(vp.blob);
             videoGuardadoRef.current.ppal = url;
-            setArchivo({ name: vp.nombre || 'video' });
+            setArchivo({ name: vp.nombre || 'video', size: vp.blob.size, blob: vp.blob });
             setVideoUrl(url);
             setProgreso(0);
           }
@@ -1127,10 +1127,15 @@ const bdVideoTargetRef = useRef(null);
 
   const capsEditadasDeLinea = (fila) => (capturas || []).filter(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
 
-  const cargarVideoEnCortes = (url, nombre) => {
+  const cargarVideoEnCortes = (url, nombre, blob) => {
     if (!url) return;
     setVideoUrlCortes(url);
-    setArchivoCortes({ name: nombre || 'video' });
+    // Se guarda el blob (o al menos su tamaño) para que la descarga por servidor
+    // sepa si la caché ya tiene este vídeo sin tener que leerlo entero en
+    // memoria: esa lectura costaba un minuto en cada descarga.
+    setArchivoCortes(blob && blob.size
+      ? { name: nombre || 'video', size: blob.size, blob }
+      : { name: nombre || 'video' });
   };
 
   const selectorCargar = () => (   <select
@@ -1159,9 +1164,9 @@ const bdVideoTargetRef = useRef(null);
         if (!val) return;
         if (val === '__file__') { bdVideoTargetRef.current = { kind, id }; bdVideoRef.current?.click(); return; }
         if (kind === 'bd') {
-          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
           const vv = videosBD.find(x => x.videoUrl === val);
-          cargarVideoEnCortes(val, (vv && vv.nombre) || 'video');
+          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null, blob: (vv && vv.blob) || null } : x));
+          cargarVideoEnCortes(val, (vv && vv.nombre) || 'video', vv && vv.blob);
         } else {
           setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
           const cc = (capturas || []).find(x => x && x.videoUrl === val);
@@ -1646,14 +1651,20 @@ const bdVideoTargetRef = useRef(null);
   // Vídeo de partida del que salen los tramos. Hace falta saber cuál es:
   // si no coincide con la caché del servidor, los tramos saldrían de otro
   // vídeo y los tiempos no cuadrarían.
+  //
+  // Devuelve también el tamaño sin leer el vídeo si se conoce: comparar con la
+  // caché del servidor es gratis, en cambio leer 1 GB para eso costaba casi un
+  // minuto en cada descarga.
   const fuenteDeTramos = async () => {
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc) return null;
     const meta = videoUrlCortes ? archivoCortes : archivo;
-    if (meta && typeof meta.size === 'number' && meta.size > 0) return { blob: meta, nombre: meta.name || 'video' };
+    if (meta && meta.blob && meta.blob.size > 0) return { blob: meta.blob, size: meta.blob.size, nombre: meta.name || 'video' };
+    if (meta instanceof Blob && meta.size > 0) return { blob: meta, size: meta.size, nombre: meta.name || 'video' };
+    if (meta && typeof meta.size === 'number' && meta.size > 0) return { size: meta.size, nombre: meta.name || 'video' };
     if (/^(blob:|data:)/.test(baseSrc)) {
       const b = await blobDesdeUrl(baseSrc);
-      if (b) return { blob: b, nombre: (meta && meta.name) || 'video' };
+      if (b) return { blob: b, size: b.size, nombre: (meta && meta.name) || 'video' };
     }
     return null;
   };
@@ -1733,12 +1744,14 @@ const bdVideoTargetRef = useRef(null);
 
       const salud = await saludarServidor();
       if (!salud) return false;
+      const tPlan0 = performance.now();
       const plan = await construirPlanMontaje(validas);
+      const tPlanMs = performance.now() - tPlan0;
       if (!plan || !plan.items.length) return false;
 
       // Los tramos salen de la caché del servidor: tiene que ser nuestro vídeo.
       let tFuenteMs = 0;
-      let tPrep = 0;
+      let tLecturaMs = 0;
       let tSubidaMs = 0;
       let tServidorMs = 0;
       let tEntregaMs = 0;
@@ -1747,12 +1760,22 @@ const bdVideoTargetRef = useRef(null);
       if (plan.items.some(it => it.t === 'tramo')) {
         const fuente = await fuenteDeTramos();
         if (!fuente) return false;
-        const coincide = !!salud.cached && Number(salud.cachedSize) === fuente.blob.size;
+        // Comparar por tamaño con lo que ya tiene el servidor. Si coincide no se
+        // sube nada (y si conocemos el tamaño tampoco se lee el vídeo).
+        const tam = Number(fuente.size) || 0;
+        const coincide = !!salud.cached && tam > 0 && Number(salud.cachedSize) === tam;
         if (!coincide) {
+          let blob = fuente.blob;
+          if (!blob) {
+            const tLec = performance.now();
+            blob = await blobDesdeUrl(baseSrc);
+            tLecturaMs = performance.now() - tLec;
+            if (!blob) return false;
+          }
           setAviso('Subiendo el vídeo de partida al servidor…');
           const tSub = performance.now();
           try {
-            await subirFuenteAlServidor(fuente.blob, fuente.nombre, (p) => setProgresoDescarga(Math.round(p * 35)));
+            await subirFuenteAlServidor(blob, fuente.nombre, (p) => setProgresoDescarga(Math.round(p * 35)));
           } finally { tFuenteMs = performance.now() - tSub; setAviso(''); }
           subidaHecha = true;
         }
@@ -1769,7 +1792,6 @@ const bdVideoTargetRef = useRef(null);
           || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null)
           || 'montaje';
         const nombreArchivo = `${nombreBase}.mp4`;
-        tPrep = Math.max(0, tPrep0 - t0 - tFuenteMs);
 
         const res = await new Promise((resolve, reject) => {
           const fd = new FormData();
@@ -1822,7 +1844,8 @@ const bdVideoTargetRef = useRef(null);
         const f = real > 0 ? durTotal / real : 0;
         const s1 = (ms) => (Number.isFinite(ms) && ms > 0 ? (ms / 1000).toFixed(1) + ' s' : null);
         const fases = [];
-        if (tPrep > 0) fases.push('preparación ' + s1(tPrep));
+        if (tPlanMs > 0) fases.push('plan ' + s1(tPlanMs));
+        if (tLecturaMs > 0) fases.push('lectura fuente ' + s1(tLecturaMs));
         if (tFuenteMs > 0) fases.push('subida fuente ' + s1(tFuenteMs));
         if (tSubidaMs > 0) fases.push('subida plan ' + s1(tSubidaMs));
         if (tServidorMs > 0) fases.push('servidor ' + s1(tServidorMs));
@@ -4929,17 +4952,17 @@ const terminar = () => {
                 if (!f || !tgt) return;
                 const url = URL.createObjectURL(f);
                 if (tgt.kind === 'new') {
-                  setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
+                  setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url, blob: f }]);
                 } else                 if (tgt.kind === 'arc') {
                   const nid = Date.now() + Math.floor(Math.random() * 1000000);
-                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url, oculto: true }]);
+                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url, blob: f, oculto: true }]);
                   setArchivosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoRef: { kind: 'bd', id: nid } } : x));
                 } else if (tgt.kind === 'bd') {
-                  setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
+                  setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name, blob: f } : x));
                 } else {
                   setCapturas(prev => prev.map(c => c && c.id === tgt.id ? { ...c, videoUrl: url } : c));
                 }
-                cargarVideoEnCortes(url, f.name);
+                cargarVideoEnCortes(url, f.name, f);
                 bdVideoTargetRef.current = null;
               }}
             />
@@ -4975,7 +4998,7 @@ const terminar = () => {
                             setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, videoRef: { kind, id: nid } } : x));
                             if (kind === 'bd') {
                               const vv = videosBD.find(x => x.id === nid);
-                              if (vv) cargarVideoEnCortes(vv.videoUrl, vv.nombre || 'video');
+                              if (vv) cargarVideoEnCortes(vv.videoUrl, vv.nombre || 'video', vv.blob);
                             } else {
                               const cc = (capturas || []).find(x => x && x.id === nid);
                               if (cc) cargarVideoEnCortes(cc.videoUrl, `Animación ${formatoTiempo(cc.tiempo ?? 0)}`);

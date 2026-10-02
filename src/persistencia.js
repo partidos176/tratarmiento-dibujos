@@ -210,8 +210,8 @@ export const cargarVideosBD = async () => {
     const out = [];
     for (const e of (idx || [])) {
       if (!e || !e.key) continue;
-      const blob = await dbGet('videos', e.key);
-      if (blob) out.push({ id: e.id, nombre: e.nombre || 'video', key: e.key, videoUrl: URL.createObjectURL(blob) });
+        const blob = await dbGet('videos', e.key);
+        if (blob) out.push({ id: e.id, nombre: e.nombre || 'video', key: e.key, blob, videoUrl: URL.createObjectURL(blob) });
     }
     return out;
   } catch (e) {
