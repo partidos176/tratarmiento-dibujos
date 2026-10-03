@@ -5,7 +5,7 @@ import { fetchFile } from '@ffmpeg/util';
 
 // Versión visible en la interfaz: tras cada deploy se sube la letra para
 // saber si la pestaña tiene el código nuevo o un bundle viejo en caché.
-const APP_VERSION = 'F3';
+const APP_VERSION = 'F4';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -239,9 +239,9 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { setMigaMortal(''); } catch (_) {}
   };
   // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F3], el
+  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F4], el
   // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F3]'; }, []);
+  useEffect(() => { document.title = 'Tratamiento Dibujos [F4]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -1501,7 +1501,10 @@ const bdVideoTargetRef = useRef(null);
       rangos[rangos.length - 1][1] = segs.length;
     }
     const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
-    const clonesListos = [];
+    // Sin clones: las transiciones comparten UN solo elemento reutilizado
+    // (se crea al arrancar la primera y se re-posiciona en cada una). Crear
+    // un clon por transición (26 en un montaje típico) con un seek cada uno
+    // sobre el mismo fichero de 1 GB mataba la pestaña en preparación.
     for (let tk = validas.length - 1; tk >= 0; tk--) {
       const tl = validas[tk];
       if (!tl || tl.tipo !== 'transicion') continue;
@@ -1517,48 +1520,17 @@ const bdVideoTargetRef = useRef(null);
       if (!(d >= 0.2) || !(A.hasta > A.desde) || !(B.hasta > B.desde)) continue;
       if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
       if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
-      let elB = B.el;
       // elB arranca d/2 antes del inicio recortado (= head real de B): así la
       // transición muestra contenido legítimo y B continúa con solo d/2 de
       // solape dissolve en vez de repetir d segundos (frames cruzados).
       const bDesdeVal = esVideoSeg(B) ? Math.max(0, B.desde - d / 2) : 0;
-      if (esVideoSeg(B) && B.src) {
-        try {
-          const clon = document.createElement('video');
-          // 'metadata' y no 'auto': el clon vive pausado casi toda la
-          // grabación, y con 'auto' cada clon descarga el vídeo de partida
-          // entero en segundo plano (un GB por cada transición hasta colgar
-          // la pestaña). Con 'metadata' solo trae bajo demanda lo que
-          // reproduce en su transición.
-          clon.muted = true; clon.playsInline = true; clon.preload = 'metadata'; clon.src = B.src;
-          try { clon.dataset.clonTransicion = '1'; } catch (_) {}
-          clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
-          document.body.appendChild(clon);
-          els.push(clon);
-          elB = clon;
-          // Pre-cargar metadata y pre-posicionar el clon. Sin esto, el seek al
-          // iniciar la transición falla en silencio (sin metadata) y el clon
-          // reproduce desde 0: frames del inicio del vídeo entre cortes.
-          clonesListos.push(new Promise((res) => {
-            let done = false;
-            const fin = () => {
-              if (done) return; done = true;
-              try { clon.currentTime = Math.max(0, bDesdeVal); } catch (_) {}
-              try { clon.pause(); } catch (_) {}
-              res();
-            };
-            try {
-              if (clon.readyState >= 1) { fin(); return; }
-              clon.onloadedmetadata = fin;
-              clon.onerror = fin;
-            } catch (_) { fin(); return; }
-            setTimeout(fin, 2500);
-          }));
-        } catch (_) {}
-      }
-      segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
-      // B continúa donde termina el clon (b0+d): sin salto atrás ni repetición
-      // del head ya mostrado en la transición. Duración total -d/2 por transición.
+      const esVideoB = esVideoSeg(B) && B.src;
+      // elB se rellena al arrancar la transición (ver asegurarElB): solo hay
+      // una en pantalla a la vez. Si B no es vídeo con fuente, se usa su
+      // propio elemento como hasta ahora.
+      segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB: esVideoB ? null : B.el, bSrc: esVideoB ? B.src : null, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
+      // B continúa donde termina la transición (b0+d): sin salto atrás ni
+      // repetición del head ya mostrado. Duración total -d/2 por transición.
       if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
     }
     totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
@@ -1575,8 +1547,6 @@ const bdVideoTargetRef = useRef(null);
         }
       });
     } catch (_) {}
-    try { if (clonesListos.length) { setAviso(`Preparando ${clonesListos.length} transiciones…`); diagFase(`Preparando ${clonesListos.length} transiciones`); } } catch (_) {}
-    await Promise.all(clonesListos);
     const nombreBase = o.nombreCustom
       || (o.videosBD && o.videosBD.length > 0 && o.videosBD[0].nombre ? String(o.videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
       || (o.archivoCortes && o.archivoCortes.name ? String(o.archivoCortes.name).replace(/\.[^.]+$/, '') : null)
@@ -2310,6 +2280,45 @@ diagFase('Grabando…');
           try { elx.ontimeupdate = null; } catch (_) {}
           try { elx.pause(); } catch (_) {}
         };
+        // Elemento único reutilizado como elB de TODAS las transiciones (ver
+        // prepararSegmentos): solo hay una transición en pantalla a la vez.
+        // Se crea al arrancar la primera y se re-posiciona en cada una. Vive
+        // hasta el final (no entra en ultimoUso) y la limpieza general lo
+        // quita por estar en 'els'.
+        let scratchTransicion = null;
+        let scratchSrc = null;
+        const asegurarElB = (seg) => {
+          try {
+            if (!seg || !seg.kind || !seg.bSrc) return;
+            if (!scratchTransicion) {
+              const sc = document.createElement('video');
+              sc.muted = true; sc.playsInline = true; sc.preload = 'metadata';
+              sc.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+              document.body.appendChild(sc);
+              els.push(sc);
+              scratchTransicion = sc;
+            }
+            const sc = scratchTransicion;
+            const ir = () => {
+              try { sc.currentTime = Math.max(0, seg.bDesde || 0); } catch (_) {}
+              try { sc.play().catch(() => {}); } catch (_) {}
+            };
+            if (scratchSrc !== seg.bSrc) {
+              // Fuente distinta: hay que esperar metadatos o el seek falla en
+              // silencio y reproduce desde 0 (frames del inicio entre cortes).
+              scratchSrc = seg.bSrc;
+              let hecho = false;
+              const irUna = () => { if (hecho) return; hecho = true; ir(); };
+              try { sc.pause(); } catch (_) {}
+              try { sc.onloadedmetadata = irUna; } catch (_) {}
+              try { sc.src = seg.bSrc; } catch (_) { irUna(); return; }
+              setTimeout(irUna, 2500);
+            } else {
+              ir();
+            }
+            seg.elB = sc;
+          } catch (_) {}
+        };
         // Ventana deslizante: los elementos cuyo último uso ya pasó se sacan
         // del DOM y se purgan sus búferes. Solo toca elementos creados aquí
         // (los de 'els'): el vídeo base preargado, si lo hay, es del
@@ -2359,6 +2368,7 @@ diagFase('Grabando…');
             if (segElapsed === 0) {
               segT0Wall = Date.now();
               if (seg.kind) {
+                asegurarElB(seg);
                 ponerEnMarcha(seg.elA, seg.aDesde);
                 ponerEnMarcha(seg.elB, seg.bDesde);
                 segVideoLista = true;
@@ -2440,16 +2450,6 @@ diagFase('Grabando…');
                   if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) {
                     vistos.add(elx);
                     detener(elx);
-                    // El clon solo se usa en esta transición: sacarlo del DOM
-                    // libera su decodificador y sus búferes en vez de
-                    // arrastrarlos hasta el final de la grabación. elA no se
-                    // toca: es el elemento del segmento y puede usarlo otra
-                    // transición posterior.
-                    if (elx.dataset && elx.dataset.clonTransicion) {
-                      try { elx.removeAttribute('src'); } catch (_) {}
-                      try { elx.load(); } catch (_) {}
-                      try { elx.parentNode && elx.parentNode.removeChild(elx); } catch (_) {}
-                    }
                   }
                 }
                 completado += segDur;
