@@ -3,10 +3,6 @@ import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 import { fetchFile } from '@ffmpeg/util';
 
-// Versión visible en la interfaz: tras cada deploy se sube la letra para
-// saber si la pestaña tiene el código nuevo o un bundle viejo en caché.
-const APP_VERSION = 'F5';
-
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
   const s = [];
@@ -238,10 +234,6 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { localStorage.removeItem('diag_migaja'); } catch (_) {}
     try { setMigaMortal(''); } catch (_) {}
   };
-  // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F5], el
-  // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F5]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -4804,15 +4796,6 @@ const terminar = () => {
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      {/* Marca de version, visible dentro de la pagina. Si al recargar NO ves
-          la etiqueta [F0] arriba a la derecha, tu pestana sigue con el bundle
-          viejo y cualquier medicion de tiempos es falsa. */}
-      <div style={{ position: 'fixed', top: '4px', right: '8px', zIndex: 9999,
-                    background: '#facc15', color: '#000', fontWeight: 800,
-                    fontSize: '0.8rem', padding: '2px 8px', borderRadius: '6px',
-                    fontFamily: 'Inter, sans-serif', pointerEvents: 'none' }}>
-        F0
-      </div>
       <div style={{ display: 'flex', gap: '0.5rem', padding: '1.5rem 2rem 0', borderBottom: '1px solid #1e293b' }}>
         {hojas.map(h => (
           <button
@@ -6621,9 +6604,11 @@ const terminar = () => {
                 {informeDescarga}
               </div>
             )}
-            <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
-              [{APP_VERSION}]{textoDiag ? ` ${textoDiag}` : ''}
-            </div>
+            {textoDiag && (
+              <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
+                {textoDiag}
+              </div>
+            )}
             {migaMortal && (
               <div style={{ marginTop: '0.2rem', color: '#f59e0b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
                 Último intento se quedó en: {migaMortal}
