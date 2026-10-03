@@ -5,7 +5,7 @@ import { fetchFile } from '@ffmpeg/util';
 
 // Versión visible en la interfaz: tras cada deploy se sube la letra para
 // saber si la pestaña tiene el código nuevo o un bundle viejo en caché.
-const APP_VERSION = 'F4';
+const APP_VERSION = 'F5';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -239,9 +239,9 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { setMigaMortal(''); } catch (_) {}
   };
   // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F4], el
+  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F5], el
   // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F4]'; }, []);
+  useEffect(() => { document.title = 'Tratamiento Dibujos [F5]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -1320,6 +1320,45 @@ const bdVideoTargetRef = useRef(null);
     }
   };
 
+  // Grabación MP4 por WebCodecs (mediabunny) con claves densas, escribiendo
+  // a disco según se graba. Solo para la vía de disco: así el archivo sale
+  // con clave cada 1,2 s (como el servidor) y se deja avanzar sin pixelarse,
+  // sin cargar el vídeo entero en memoria. Lanza si no se puede.
+  const iniciarGrabacionWC = async (canvas, w, h, bps, destino, onBytes) => {
+    const mb = await import('mediabunny');
+    const stream = destino && destino.stream;
+    if (!stream) throw new Error('sin stream de disco');
+    const output = new mb.Output({
+      format: new mb.Mp4OutputFormat(),
+      target: new mb.StreamTarget(stream),
+    });
+    try {
+      output.target.on('write', ({ start, end }) => {
+        try { if (onBytes && end > 0) onBytes(end); } catch (_) {}
+      });
+    } catch (_) {}
+    const fuente = new mb.CanvasSource(canvas, {
+      codec: 'avc',
+      quality: new mb.Quality({ bitrate: bps, bitrateMode: 'constant' }),
+      latencyMode: 'realtime',
+      keyFrameInterval: 1.2,
+    });
+    output.addVideoTrack(fuente, { frameRate: 25 });
+    await output.start();
+    return { output, fuente, t0: performance.now(), proxClave: 0, fallos: 0 };
+  };
+
+  // Mete el fotograma actual del canvas en el codificador. Clave cada 1,2 s
+  // por reloj (no por contador: si se saltan ticks por presión, la cadencia
+  // se mantiene). Se espera (backpressure) para acotar la memoria.
+  const alimentarWC = async (g) => {
+    const ts = (performance.now() - g.t0) / 1000;
+    if (!(ts >= 0)) return;
+    const esClave = ts >= g.proxClave;
+    if (esClave) g.proxClave = ts + 1.2;
+    await g.fuente.add(ts, 1 / 25, esClave ? { keyFrame: true } : undefined);
+  };
+
   const calentarAnim = async (av) => {
     let playErr = '';
     const esperar = async (ms) => {
@@ -1573,15 +1612,21 @@ const bdVideoTargetRef = useRef(null);
       const stream = await handle.createWritable();
       let cadena = Promise.resolve();
       let error = null;
+      // Si mediabunny toma el stream (vía de disco por WebCodecs), él lo
+      // cierra al finalizar y aquí no hay que cerrarlo dos veces.
+      let entregado = false;
       return {
         escribir: (datos) => {
           cadena = cadena.then(() => stream.write(datos)).catch((e) => { error = error || e; });
         },
         cerrar: async () => {
+          if (entregado) return;
           await cadena;
           await stream.close();
           if (error) throw error;
         },
+        stream,
+        marcarEntregado: () => { entregado = true; },
       };
     } catch (e) {
       return null;
@@ -2054,13 +2099,24 @@ const bdVideoTargetRef = useRef(null);
       // memoria, escalarlo a 720p, dibujarlo y codificarlo 30 veces por
       // segundo. A 30 el navegador no da abasto y el fotograma sale a bloques.
       // En un video de analisis el salto de 30 a 25 no se aprecia.
-      rec = new MediaRecorder(canvas.captureStream(25), { mimeType: mime, videoBitsPerSecond: bps });
-      rec.ondataavailable = (e) => {
-        if (!e.data.size) return;
-        bytesGrabados += e.data.size;
-        if (destinoDisco) destinoDisco.escribir(e.data);
-        else chunks.push(e.data);
-      };
+      // Grabación por WebCodecs (claves densas) cuando hay destino en disco
+      // y MP4: el archivo se deja avanzar sin pixelarse. Si algo falla,
+      // MediaRecorder de siempre.
+      let grabWC = null;
+      if (destinoDisco && ext === 'mp4' && typeof VideoEncoder !== 'undefined') {
+        try {
+          grabWC = await iniciarGrabacionWC(canvas, w, h, bps, destinoDisco, (n) => { bytesGrabados = Math.max(bytesGrabados, n); });
+        } catch (e) { console.warn('WebCodecs no disponible, se usa MediaRecorder', e); grabWC = null; }
+      }
+      if (!grabWC) {
+        rec = new MediaRecorder(canvas.captureStream(25), { mimeType: mime, videoBitsPerSecond: bps });
+        rec.ondataavailable = (e) => {
+          if (!e.data.size) return;
+          bytesGrabados += e.data.size;
+          if (destinoDisco) destinoDisco.escribir(e.data);
+          else chunks.push(e.data);
+        };
+      }
       const prep = await prepararSegmentos({ validas, mkVid, mkImg, els, base, baseSrc, capturas, nombreCustom, videosBD, archivoCortes, archivo });
       if (!prep) { setAviso('Nada que descargar'); return; }
       if (prep.animsFallidas && prep.animsFallidas.length) {
@@ -2119,7 +2175,8 @@ const bdVideoTargetRef = useRef(null);
         let descargaHecha = false;
         let cierreForzoso = false;
         let finOk = false;
-rec.onstop = async () => {
+        // Sin rec en la vía WebCodecs: el cierre lo hace finalizarWC.
+        if (rec) rec.onstop = async () => {
           // Se marca de inmediato, antes de cualquier await. El recorte contra
           // localhost:3001 puede tardar hasta 10s, y si el flag se pusiera
           // despues el fallback de 3s lo creeria "no descargado" y volveria a
@@ -2207,16 +2264,47 @@ rec.onstop = async () => {
           finOk = true;
           resolve();
         };
+        // Cierre de la vía WebCodecs: se deja de alimentar, se vuelca el
+        // codificador y se finaliza el MP4 (cierra el fichero). Equivale al
+        // onstop de MediaRecorder para la vía de disco.
+        const finalizarWC = async (g) => {
+          diagFase('Finalizando vídeo…');
+          try { if (tGrabaDesde > 0) tGrabaMs = performance.now() - tGrabaDesde; } catch (_) {}
+          try {
+            try { g.fuente.close(); } catch (_) {}
+            await Promise.race([
+              g.output.finalize(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout al finalizar')), 30000)),
+            ]);
+            try { destinoDisco.marcarEntregado(); } catch (_) {}
+          } catch (e) {
+            console.error('Error al finalizar WebCodecs', e);
+            try { await g.output.cancel(); } catch (_) {}
+            try { avisoPrepRef.current = 'No se pudo finalizar el vídeo; revisa el archivo guardado.'; } catch (_) {}
+          }
+          const t0Entrega = performance.now();
+          try { setProgresoDescarga(100); } catch (_) {}
+          try { setAviso(cierreForzoso ? 'La grabación se atascó; se ha descargado lo grabado hasta el atasco.' : (avisoPrepRef.current || '')); } catch (_) {}
+          try { tEntregaMs = performance.now() - t0Entrega; } catch (_) {}
+          finOk = true;
+          try { resolve(); } catch (_) {}
+        };
         const terminar = () => {
           if (terminado) return;
           terminado = true;
           stopTicks();
-          try { rec.stop(); } catch (_) {}
+          if (grabWC) {
+            const g = grabWC;
+            grabWC = null;
+            finalizarWC(g);
+          } else {
+            try { rec.stop(); } catch (_) {}
+          }
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
 // Fallback: si rec.onstop no dispara en 3s, forzar descarga
         setTimeout(async () => {
-          if (!descargaHecha && rec.state === 'inactive') {
+          if (!descargaHecha && rec && rec.state === 'inactive') {
             if (destinoDisco) {
               // Con escritura a disco no hay nada que ensamblar: se cierra el
               // fichero y listo, sin jugarse la memoria con un Blob de 600 MB.
@@ -2252,8 +2340,11 @@ rec.onstop = async () => {
           }
         }, 3000);
 };
-rec.start(250);
-diagFase('Grabando…');
+if (grabWC) diagFase('Grabando (WebCodecs, claves cada 1,2 s)…');
+else {
+  rec.start(250);
+  diagFase('Grabando…');
+}
         let enTick = false;
         let segT0Wall = 0;
         let completado = 0;
@@ -2353,7 +2444,7 @@ diagFase('Grabando…');
           } catch (_) {}
           return Math.min(Math.max(0, (Date.now() - segT0Wall) / 1000), segDur);
         };
-        const tick = () => {
+        const tick = async () => {
           if (terminado || enTick) return;
           enTick = true;
           try {
@@ -2528,6 +2619,20 @@ diagFase('Grabando…');
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
                 liberarUsados();
+              }
+            }
+            // Vía WebCodecs: el fotograma ya dibujado va al codificador con
+            // clave cada 1,2 s. Con await hay backpressure (si el codificador
+            // no da abasto se saltan ticks: fotograma congelado, memoria sana).
+            if (grabWC) {
+              const gwc = grabWC;
+              try { await alimentarWC(gwc); }
+              catch (e) {
+                gwc.fallos = (gwc.fallos || 0) + 1;
+                if (gwc.fallos > 10 && !terminado) {
+                  try { setAviso('El codificador falló; se cierra con lo grabado.'); } catch (_) {}
+                  try { terminar(); } catch (_) {}
+                }
               }
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
