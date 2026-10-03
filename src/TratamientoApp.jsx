@@ -5,7 +5,7 @@ import { fetchFile } from '@ffmpeg/util';
 
 // Versión visible en la interfaz: tras cada deploy se sube la letra para
 // saber si la pestaña tiene el código nuevo o un bundle viejo en caché.
-const APP_VERSION = 'F2';
+const APP_VERSION = 'F3';
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -200,7 +200,23 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [textoDiag, setTextoDiag] = useState('');
   const diagFaseRef = useRef('');
   const diagTimerRef = useRef(null);
-  const diagFase = (f) => { try { diagFaseRef.current = f; } catch (_) {} };
+  // Miga de pan en localStorage: si la pestaña muere, al recargar se lee y
+  // dice en qué fase murió la última descarga (la hora congelada = momento
+  // de la muerte). Se borra al terminar bien.
+  const [migaMortal, setMigaMortal] = useState(() => {
+    try {
+      const m = JSON.parse(localStorage.getItem('diag_migaja') || 'null');
+      return m && m.fase ? `${m.fase} · ${m.hora || ''}${m.heap ? ` · heap ${m.heap} MB` : ''}` : '';
+    } catch (_) { return ''; }
+  });
+  const diagFase = (f) => {
+    try { diagFaseRef.current = f; } catch (_) {}
+    try {
+      let heap = 0;
+      try { const m = performance && performance.memory; if (m && m.usedJSHeapSize) heap = Math.round(m.usedJSHeapSize / 1048576); } catch (_) {}
+      localStorage.setItem('diag_migaja', JSON.stringify({ fase: f, hora: new Date().toLocaleTimeString('es-ES'), heap }));
+    } catch (_) {}
+  };
   const diagIniciar = () => {
     try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
     try {
@@ -219,11 +235,13 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
     diagTimerRef.current = null;
     try { setTextoDiag(''); } catch (_) {}
+    try { localStorage.removeItem('diag_migaja'); } catch (_) {}
+    try { setMigaMortal(''); } catch (_) {}
   };
   // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F2], el
+  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F3], el
   // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F2]'; }, []);
+  useEffect(() => { document.title = 'Tratamiento Dibujos [F3]'; }, []);
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -2019,7 +2037,10 @@ const bdVideoTargetRef = useRef(null);
         // 'metadata' y no 'auto': con 'auto' cada elemento se ponía a
         // descargar el fichero entero en segundo plano y con 20-30 filas la
         // pestaña moría por memoria a mitad de la preparación. Con
-        // 'metadata' solo trae bajo demanda lo que reproduce.
+        // 'metadata' solo trae bajo demanda lo que reproduce. Sin
+        // calentado: reproducir cada vídeo en preparación también tragaba
+        // búfer; el primer fotograma llega al darle a play en su segmento
+        // (las animaciones las verifica calentarAnim aparte).
         vid.muted = true; vid.playsInline = true; vid.preload = 'metadata'; vid.src = src;
         vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
         document.body.appendChild(vid);
@@ -2027,22 +2048,6 @@ const bdVideoTargetRef = useRef(null);
         // Con tope: un vídeo que no arranca ni falla dejaba la descarga
         // colgada para siempre con el botón pillado.
         await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; setTimeout(res, 10000); });
-        // Calentado breve: con 'metadata' el primer fotograma aún no está
-        // decodificado y dibujarlo en vacío dejaba tirón al entrar el
-        // segmento. Se reproduce un instante para traerlo (con tope, sin
-        // tragar el fichero) y se rebobina a 0.
-        if (vid.readyState < 2 && !vid.error) {
-          try { await playConTope(vid, 5000); } catch (_) {}
-          await new Promise((res) => {
-            if (vid.readyState >= 2) { res(); return; }
-            let fin = false;
-            const listo = () => { if (fin) return; fin = true; try { vid.removeEventListener('canplay', listo); } catch (_) {} res(); };
-            try { vid.addEventListener('canplay', listo); } catch (_) {}
-            setTimeout(listo, 1500);
-          });
-          try { vid.pause(); } catch (_) {}
-          try { vid.currentTime = 0; } catch (_) {}
-        }
         return vid;
       };
       const mkImg = async (u) => {
@@ -6514,6 +6519,11 @@ const terminar = () => {
             <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
               [{APP_VERSION}]{textoDiag ? ` ${textoDiag}` : ''}
             </div>
+            {migaMortal && (
+              <div style={{ marginTop: '0.2rem', color: '#f59e0b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
+                Último intento se quedó en: {migaMortal}
+              </div>
+            )}
             <button
               onClick={() => exportarMontaje()}
               style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
