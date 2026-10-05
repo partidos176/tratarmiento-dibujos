@@ -6,7 +6,6 @@ import { fetchFile } from '@ffmpeg/util';
 // Al recargar se empieza de cero en todas las hojas: se borran las claves
 // locales ANTES de que los estados las lean (esto corre al cargar el bundle,
 // previo al primer render). El IndexedDB se vacía en el primer efecto.
-// Se conserva diag_migaja: es el parte post-mortem y se lee al arrancar.
 try {
   for (const k of ['bd_archivos', 'bd_videos', 'fm_sesion', 'cap_sesion', 'preview_anim']) localStorage.removeItem(k);
 } catch (_) {}
@@ -204,30 +203,13 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [textoDiag, setTextoDiag] = useState('');
   const diagFaseRef = useRef('');
   const diagTimerRef = useRef(null);
-  // Secuencia de descargas: retener el 100% visible 1,2 s sin que el reset
-  // de una descarga pise a la siguiente encadenada.
-  const descargaSeqRef = useRef(0);
   // Cancelación de la descarga en curso: lo pone el botón Cancelar y lo
   // consultan las fases largas (ticks, subidas, recorte, reindexado).
   const cancelarDescargaRef = useRef(false);
   // XHR del montaje en el servidor, para abortarlo al cancelar.
   const xhrDescargaRef = useRef(null);
-  // Miga de pan en localStorage: si la pestaña muere, al recargar se lee y
-  // dice en qué fase murió la última descarga (la hora congelada = momento
-  // de la muerte). Se borra al terminar bien.
-  const [migaMortal, setMigaMortal] = useState(() => {
-    try {
-      const m = JSON.parse(localStorage.getItem('diag_migaja') || 'null');
-      return m && m.fase ? `${m.fase} · ${m.hora || ''}${m.heap ? ` · heap ${m.heap} MB` : ''}` : '';
-    } catch (_) { return ''; }
-  });
   const diagFase = (f) => {
     try { diagFaseRef.current = f; } catch (_) {}
-    try {
-      let heap = 0;
-      try { const m = performance && performance.memory; if (m && m.usedJSHeapSize) heap = Math.round(m.usedJSHeapSize / 1048576); } catch (_) {}
-      localStorage.setItem('diag_migaja', JSON.stringify({ fase: f, hora: new Date().toLocaleTimeString('es-ES'), heap }));
-    } catch (_) {}
   };
   const diagIniciar = () => {
     try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
@@ -247,8 +229,6 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
     diagTimerRef.current = null;
     try { setTextoDiag(''); } catch (_) {}
-    try { localStorage.removeItem('diag_migaja'); } catch (_) {}
-    try { setMigaMortal(''); } catch (_) {}
   };
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
@@ -1890,7 +1870,6 @@ const bdVideoTargetRef = useRef(null);
 
   const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null) => {
     const t0 = performance.now();
-    const miDescarga = ++descargaSeqRef.current;
     let entregaOk = false;
     try { cancelarDescargaRef.current = false; } catch (_) {}
     try { setInformeDescarga(''); } catch (_) {}
@@ -2028,19 +2007,10 @@ const bdVideoTargetRef = useRef(null);
         setAviso('');
         return true;
       } finally {
-        // El 100% se retiene visible 1,2 s: antes se reseteaba en el mismo
-        // instante y no se veía nunca.
-        if (entregaOk) {
-          const mi = miDescarga;
-          setTimeout(() => {
-            if (descargaSeqRef.current !== mi) return;
-            try { setDescargandoMontaje(false); } catch (_) {}
-            try { setProgresoDescarga(0); } catch (_) {}
-          }, 1200);
-        } else {
-          try { setDescargandoMontaje(false); } catch (_) {}
-          try { setProgresoDescarga(0); } catch (_) {}
-        }
+        // Al entregar, el botón se libera pero el 100% queda fijo hasta la
+        // próxima descarga. Si falló, reset completo.
+        try { setDescargandoMontaje(false); } catch (_) {}
+        if (!entregaOk) { try { setProgresoDescarga(0); } catch (_) {} }
       }
     } catch (e) {
       console.warn('Montaje en el servidor no disponible:', (e && e.message) || e);
@@ -2085,7 +2055,9 @@ const bdVideoTargetRef = useRef(null);
     const animsSinVideo = animsSinVideoDe(validas);
     if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); return; }
     setDescargandoMontaje(true);
-    setOptimaEnDosFases(!!(optimizarDespues || reindexar));
+      // A disco nunca hay segunda fase (ni recorte ni reindexado), así que la
+      // barra va a escala completa desde el inicio en vez de quedarse en 50.
+      setOptimaEnDosFases(!!((optimizarDespues || reindexar) && !destinoDisco));
     setProgresoDescarga(0);
     let canvas = null;
     let rec = null;
@@ -2103,7 +2075,6 @@ const bdVideoTargetRef = useRef(null);
     const { mime, ext } = mimeDescarga();
     try {
       tPrepDesde = performance.now();
-      const miDescarga = ++descargaSeqRef.current;
       let entregaOk = false;
       try { cancelarDescargaRef.current = false; } catch (_) {}
       try { setInformeDescarga(''); } catch (_) {}
@@ -2365,16 +2336,19 @@ const bdVideoTargetRef = useRef(null);
           }
           diagFase('Finalizando vídeo…');
           try { if (tGrabaDesde > 0) tGrabaMs = performance.now() - tGrabaDesde; } catch (_) {}
+          // Todo con tope: si el fichero de disco se atasca, finalize() y
+          // hasta cancel() pueden no resolverse nunca. Sin estos topes la
+          // descarga se quedaba en "Finalizando" para siempre con el botón
+          // bloqueado aunque el bucle siguiera vivo. Pase lo que pase se
+          // llega a resolve() y la interfaz se libera.
+          const conTope = (p, ms, etiqueta) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(etiqueta)), ms))]);
           try {
             try { g.fuente.close(); } catch (_) {}
-            await Promise.race([
-              g.output.finalize(),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout al finalizar')), 30000)),
-            ]);
+            await conTope(g.output.finalize(), 60000, 'timeout al finalizar');
             try { destinoDisco.marcarEntregado(); } catch (_) {}
           } catch (e) {
             console.error('Error al finalizar WebCodecs', e);
-            try { await g.output.cancel(); } catch (_) {}
+            try { await conTope(g.output.cancel(), 10000, 'timeout al cancelar'); } catch (_) {}
             try { avisoPrepRef.current = 'No se pudo finalizar el vídeo; revisa el archivo guardado.'; } catch (_) {}
           }
           const t0Entrega = performance.now();
@@ -2831,19 +2805,9 @@ else {
           'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s'
         );
       }
-      if (entregaOk) {
-        const mi = miDescarga;
-        setTimeout(() => {
-          if (descargaSeqRef.current !== mi) return;
-          try { setDescargandoMontaje(false); } catch (_) {}
-          try { setProgresoDescarga(0); } catch (_) {}
-          try { setOptimaEnDosFases(false); } catch (_) {}
-        }, 1200);
-      } else {
-        setDescargandoMontaje(false);
-        setProgresoDescarga(0);
-        try { setOptimaEnDosFases(false); } catch (_) {}
-      }
+      try { setDescargandoMontaje(false); } catch (_) {}
+      try { setOptimaEnDosFases(false); } catch (_) {}
+      if (!entregaOk) { try { setProgresoDescarga(0); } catch (_) {} }
       diagParar();
     }
   };
@@ -6726,7 +6690,7 @@ const terminar = () => {
               title="Descargar el montaje de las filas marcadas"
               style={{ background: (descargandoMontaje || optimizando) ? '#166534' : '#16a34a', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (descargandoMontaje || optimizando) ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
-              {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{pctDescargaTotal()}%</span>}
+              {((descargandoMontaje || optimizando) || progresoDescarga >= 100) && <span style={{ fontFamily: 'monospace' }}>{pctDescargaTotal()}%</span>}
               Descargar
             </button>
             <button
@@ -6749,11 +6713,6 @@ const terminar = () => {
             {textoDiag && (
               <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
                 {textoDiag}
-              </div>
-            )}
-            {migaMortal && (
-              <div style={{ marginTop: '0.2rem', color: '#f59e0b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
-                Último intento se quedó en: {migaMortal}
               </div>
             )}
             <button
@@ -6815,6 +6774,7 @@ const terminar = () => {
                 setVideoUrlCortes('');
                 setCapturas([]);
                 setInformeDescarga('');
+                try { setProgresoDescarga(0); } catch (_) {}
                 setShowTransiciones(false);
                 setShowModalDescarga(false);
                 setAviso(null);
