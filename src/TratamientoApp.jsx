@@ -728,6 +728,22 @@ const bdVideoTargetRef = useRef(null);
 
   useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current); }, []);
 
+  // La vista previa guarda su propia copia de animaciones: si las capturas
+  // cambian (borrados, recargas) y la copia queda huérfana, se poda sola en
+  // vez de seguir mostrando animaciones que ya no existen.
+  useEffect(() => {
+    try {
+      setPreviewMontaje(prev => {
+        if (!prev || !prev.anims || !prev.anims.length) return prev;
+        const idsVivas = new Set((capturas || []).map(c => c && String(c.id)));
+        const urlsVivas = new Set((capturas || []).map(c => c && c.videoUrl).filter(Boolean));
+        const quedan = prev.anims.filter(a => idsVivas.has(String(a.id)) || (a.src && urlsVivas.has(a.src)));
+        if (quedan.length === prev.anims.length) return prev;
+        return { ...prev, anims: quedan };
+      });
+    } catch (_) {}
+  }, [capturas]);
+
   useEffect(() => {
     if (hoja !== 'Montaje') {
       deseaPlayPreviewRef.current = false;
