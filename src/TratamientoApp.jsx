@@ -190,10 +190,50 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   // barra entera.
   const [optimaEnDosFases, setOptimaEnDosFases] = useState(false);
   const [informeDescarga, setInformeDescarga] = useState('');
-  // Marca de version en el titulo de la pestana. Sirve para saber de un vistazo
-  // si la pestana tiene el codigo nuevo: si tras recargar NO aparece [F0], el
-  // navegador sigue con el bundle viejo y cualquier medicion de tiempo es falsa.
-  useEffect(() => { document.title = 'Tratamiento Dibujos [F0]'; }, []);
+  // Diagnóstico en vivo de la descarga (fase + hora + memoria JS): si la
+  // pestaña se queda pillada, lo último que ponga dice dónde. Se actualiza
+  // una vez por segundo para no competir con la grabación.
+  const [textoDiag, setTextoDiag] = useState('');
+  const diagFaseRef = useRef('');
+  const diagTimerRef = useRef(null);
+  // Miga de pan en localStorage: si la pestaña muere, al recargar se lee y
+  // dice en qué fase murió la última descarga (la hora congelada = momento
+  // de la muerte). Se borra al terminar bien.
+  const [migaMortal, setMigaMortal] = useState(() => {
+    try {
+      const m = JSON.parse(localStorage.getItem('diag_migaja') || 'null');
+      return m && m.fase ? `${m.fase} · ${m.hora || ''}${m.heap ? ` · heap ${m.heap} MB` : ''}` : '';
+    } catch (_) { return ''; }
+  });
+  const diagFase = (f) => {
+    try { diagFaseRef.current = f; } catch (_) {}
+    try {
+      let heap = 0;
+      try { const m = performance && performance.memory; if (m && m.usedJSHeapSize) heap = Math.round(m.usedJSHeapSize / 1048576); } catch (_) {}
+      localStorage.setItem('diag_migaja', JSON.stringify({ fase: f, hora: new Date().toLocaleTimeString('es-ES'), heap }));
+    } catch (_) {}
+  };
+  const diagIniciar = () => {
+    try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
+    try {
+      diagTimerRef.current = setInterval(() => {
+        let heap = '';
+        try {
+          const m = performance && performance.memory;
+          if (m && m.usedJSHeapSize) heap = ` · heap ${Math.round(m.usedJSHeapSize / 1048576)} MB`;
+        } catch (_) {}
+        const hora = new Date().toLocaleTimeString('es-ES');
+        try { setTextoDiag(`${diagFaseRef.current || '…'} · ${hora}${heap}`); } catch (_) {}
+      }, 1000);
+    } catch (_) {}
+  };
+  const diagParar = () => {
+    try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
+    diagTimerRef.current = null;
+    try { setTextoDiag(''); } catch (_) {}
+    try { localStorage.removeItem('diag_migaja'); } catch (_) {}
+    try { setMigaMortal(''); } catch (_) {}
+  };
   const pctDescargaTotal = () => (optimizando
     ? 50 + Math.round((progresoOpt || 0) / 2)
     : Math.round((optimaEnDosFases ? (progresoDescarga || 0) / 2 : (progresoDescarga || 0))));
@@ -502,7 +542,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
           if (vp && vp.blob && vp.blob.size) {
             const url = URL.createObjectURL(vp.blob);
             videoGuardadoRef.current.ppal = url;
-            setArchivo({ name: vp.nombre || 'video' });
+            setArchivo({ name: vp.nombre || 'video', size: vp.blob.size, blob: vp.blob });
             setVideoUrl(url);
             setProgreso(0);
           }
@@ -631,6 +671,13 @@ const bdVideoTargetRef = useRef(null);
   const capsListasRef = useRef(false);
   const bdCargadoRef = useRef(false);
   const videoDataUrlCacheRef = useRef(new Map());
+  // URLs de animaciones regeneradas al vuelo durante una descarga: evita
+  // regenerar dos veces la misma captura (el estado 'capturas' del cierre
+  // sigue siendo el antiguo mientras dura la descarga).
+  const animsRegenRef = useRef(new Map());
+  // Aviso de animaciones problemáticas que debe sobrevivir al final de la
+  // descarga (onstop lo borra todo).
+  const avisoPrepRef = useRef('');
   useEffect(() => {
     if (previewMontaje && !(previewMontaje.anims && previewMontaje.anims.length)) { try { localStorage.removeItem('preview_anim'); } catch (_) {} }
   }, [previewMontaje]);
@@ -989,7 +1036,8 @@ const bdVideoTargetRef = useRef(null);
 
       rec.start(250);
       loop();
-      await orig.play();
+      const motivoPlay = await playConTope(orig, 8000);
+      if (motivoPlay) throw new Error('No se pudo reproducir: ' + motivoPlay);
     } catch (e) {
       console.error('Export error:', e);
       setExportando(false);
@@ -1120,10 +1168,15 @@ const bdVideoTargetRef = useRef(null);
 
   const capsEditadasDeLinea = (fila) => (capturas || []).filter(c => c && c.dataUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin);
 
-  const cargarVideoEnCortes = (url, nombre) => {
+  const cargarVideoEnCortes = (url, nombre, blob) => {
     if (!url) return;
     setVideoUrlCortes(url);
-    setArchivoCortes({ name: nombre || 'video' });
+    // Se guarda el blob (o al menos su tamaño) para que la descarga por servidor
+    // sepa si la caché ya tiene este vídeo sin tener que leerlo entero en
+    // memoria: esa lectura costaba un minuto en cada descarga.
+    setArchivoCortes(blob && blob.size
+      ? { name: nombre || 'video', size: blob.size, blob }
+      : { name: nombre || 'video' });
   };
 
   const selectorCargar = () => (   <select
@@ -1152,9 +1205,9 @@ const bdVideoTargetRef = useRef(null);
         if (!val) return;
         if (val === '__file__') { bdVideoTargetRef.current = { kind, id }; bdVideoRef.current?.click(); return; }
         if (kind === 'bd') {
-          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null } : x));
           const vv = videosBD.find(x => x.videoUrl === val);
-          cargarVideoEnCortes(val, (vv && vv.nombre) || 'video');
+          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null, blob: (vv && vv.blob) || null } : x));
+          cargarVideoEnCortes(val, (vv && vv.nombre) || 'video', vv && vv.blob);
         } else {
           setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
           const cc = (capturas || []).find(x => x && x.videoUrl === val);
@@ -1235,12 +1288,142 @@ const bdVideoTargetRef = useRef(null);
   // Construye la lista de segmentos del montage (cortes, animaciones,
   // imagenes y transiciones). Extrayenda a proposito: la logica de transiciones
   // es la parte con mas casos raros de la app y no conviene duplicarla.
+  // Deja un vídeo de animación con frames en memoria antes de grabarlo:
+  // si entra en frío, los primeros frames tardan y la animación sale a
+  // tirones. Devuelve true si tiene frames (readyState >= 2).
+  // Arrancar un vídeo con tope: play() a veces no se cumple ni falla nunca
+  // (decodificador saturado, origen atascado) y el await eterno dejaba la
+  // descarga pillada para siempre. Devuelve '' si arranca o el motivo si no.
+  const playConTope = async (elx, ms = 8000) => {
+    try {
+      if (!elx || elx.tagName === 'IMG') return '';
+      let p = null;
+      try { p = elx.play(); } catch (e) { return (e && e.name) || 'error'; }
+      if (!p || typeof p.then !== 'function') return '';
+      let to = null;
+      const fin = await Promise.race([
+        p.then(() => 'ok', (e) => (e && e.name) || 'Rechazado'),
+        new Promise((res) => { to = setTimeout(() => res('Timeout'), ms); }),
+      ]);
+      try { clearTimeout(to); } catch (_) {}
+      return fin === 'ok' ? '' : fin;
+    } catch (e) {
+      return (e && e.message) || 'error';
+    }
+  };
+
+  // Grabación MP4 por WebCodecs (mediabunny) con claves densas, escribiendo
+  // a disco según se graba. Solo para la vía de disco: así el archivo sale
+  // con clave cada 1,2 s (como el servidor) y se deja avanzar sin pixelarse,
+  // sin cargar el vídeo entero en memoria. Lanza si no se puede.
+  const iniciarGrabacionWC = async (canvas, w, h, bps, destino, onBytes) => {
+    const mb = await import('mediabunny');
+    const stream = destino && destino.stream;
+    if (!stream) throw new Error('sin stream de disco');
+    const output = new mb.Output({
+      format: new mb.Mp4OutputFormat(),
+      target: new mb.StreamTarget(stream),
+    });
+    try {
+      output.target.on('write', ({ start, end }) => {
+        try { if (onBytes && end > 0) onBytes(end); } catch (_) {}
+      });
+    } catch (_) {}
+    const fuente = new mb.CanvasSource(canvas, {
+      codec: 'avc',
+      quality: new mb.Quality({ bitrate: bps, bitrateMode: 'constant' }),
+      latencyMode: 'realtime',
+      keyFrameInterval: 1.2,
+    });
+    output.addVideoTrack(fuente, { frameRate: 25 });
+    await output.start();
+    return { output, fuente, t0: performance.now(), proxClave: 0, fallos: 0 };
+  };
+
+  // Mete el fotograma actual del canvas en el codificador. Clave cada 1,2 s
+  // por reloj (no por contador: si se saltan ticks por presión, la cadencia
+  // se mantiene). Se espera (backpressure) para acotar la memoria.
+  const alimentarWC = async (g) => {
+    const ts = (performance.now() - g.t0) / 1000;
+    if (!(ts >= 0)) return;
+    const esClave = ts >= g.proxClave;
+    if (esClave) g.proxClave = ts + 1.2;
+    await g.fuente.add(ts, 1 / 25, esClave ? { keyFrame: true } : undefined);
+  };
+
+  const calentarAnim = async (av) => {
+    let playErr = '';
+    const esperar = async (ms) => {
+      const t0 = performance.now();
+      while (performance.now() - t0 < ms && av.readyState < 2) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+    };
+    try {
+      playErr = await playConTope(av, 8000);
+      // Si ya da frames no se espera: la espera fija de 3 s por animación
+      // (sana o no) sumaba minutos en montajes con varias animaciones.
+      if (av.readyState < 2) {
+        await esperar(3000);
+        if (av.readyState < 2) {
+          // Primer arranque atascado: recarga completa y reintenta.
+          try { av.load(); } catch (_) {}
+          try { await playConTope(av, 8000); } catch (_) {}
+          await esperar(2000);
+        }
+      }
+      // Veredicto ANTES de pausar/rebobinar: el seek a 0 baja readyState a 1
+      // mientras dura y daba un falso negativo (vídeo sano → sin frames).
+      const ok = av.readyState >= 2;
+      const rs = av.readyState;
+      let buf = 0;
+      try { buf = av.buffered.length ? av.buffered.end(0) : 0; } catch (_) {}
+      try { av.pause(); } catch (_) {}
+      try { av.currentTime = 0; } catch (_) {}
+      return { ok, playErr, buf, rs };
+    } catch (e) {
+      return { ok: false, playErr: 'throw:' + ((e && e.message) || ''), buf: 0, rs: -1 };
+    }
+  };
+
+  // Reconstruye el vídeo de una animación a partir de su dibujo guardado.
+  // Para cuando el blob original está roto (pasa tras recargar si el
+  // IndexedDB guardó la URL cuando ya estaba revocada).
+  const regenerarAnimCaliente = async (c) => {
+    const fondo = c.baseDataUrl || c.dataUrl;
+    const im = await new Promise((res, rej) => {
+      const x = new Image();
+      x.onload = () => res(x);
+      x.onerror = rej;
+      x.src = fondo;
+      setTimeout(() => { try { rej(new Error('timeout fondo')); } catch (_) {} }, 15000);
+    });
+    const w = im.naturalWidth || 1280;
+    const h = im.naturalHeight || 720;
+    const figs = normalizarFiguras(c.figuras || []);
+    const figurasFn = (t) => {
+      const p = Math.min(1, Math.max(0, (t - 200) / 3600));
+      const e = 1 - Math.pow(1 - p, 3);
+      return figs.map(f => ({ ...f, crecimiento: e })).map(f => svgFigura(f, { w, h })).join('');
+    };
+    return await generarVideo(figurasFn, fondo, w, h, null);
+  };
+
   const prepararSegmentos = async (o) => {
     const { validas, mkVid, mkImg, els, base, baseSrc, capturas } = o;
     const segs = [];
+    const animsFallidas = [];
+    const animsAvisos = [];
     const rangos = [];
     let totalDur = 0;
+    let filaPrep = 0;
+    const nFilasPrep = (validas || []).length;
     for (const linea of validas) {
+      filaPrep++;
+      // La preparación es secuencial y sin barra de progreso: en montajes de
+      // varias filas son minutos al 0% con el botón pillado y parece colgada.
+      // Se avisa del avance para saber que trabaja y dónde se atasca.
+      try { if (nFilasPrep > 3 && (filaPrep === 1 || filaPrep % 2 === 0 || filaPrep === nFilasPrep)) { setAviso(`Preparando segmentos (${filaPrep}/${nFilasPrep})…`); diagFase(`Preparando segmentos (${filaPrep}/${nFilasPrep})`); } } catch (_) {}
       rangos.push([segs.length, segs.length]);
       if (linea.tipo === 'transicion') continue;
       const nombre = linea.concepto || '';
@@ -1259,11 +1442,14 @@ const bdVideoTargetRef = useRef(null);
         const fin = Math.max(ini + 0.5, linea.fin);
         const anims = (capturas || [])
           .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
-          .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
+          .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4, img: c.baseDataUrl || c.dataUrl || null, cap: c }))
           .sort((a, b) => a.en - b.en);
         let cursor = ini;
         for (const a of anims) {
-          if (!(a.en > cursor && a.en < fin)) continue;
+          // Bordes incluidos: el filtro ya es >=/<= y los trozos de base de
+          // longitud cero los elimina segsOk. Así no se pierde la animación
+          // dibujada justo al inicio/fin del corte ni dos en el mismo punto.
+          if (!(a.en >= cursor && a.en <= fin)) continue;
           // Este tramo va justo antes de una animacion, asi que no puede acabar por
           // reloj: si el base se queda corto, al entrar la animacion el fotograma
           // congelado (que es el de a.en) no encaja con el ultimo cuadro que se
@@ -1271,8 +1457,72 @@ const bdVideoTargetRef = useRef(null);
           // 'esperarBase' y el bucle espera a que el base llegue a a.en.
           segs.push({ el: base, src: baseSrc, desde: cursor, hasta: a.en, nombre, esperarBase: true });
           totalDur += a.en - cursor;
-          const av = await mkVid(a.src);
-          segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre });
+          // URL regenerada en esta sesión (el estado 'capturas' del cierre
+          // puede seguir apuntando al blob roto mientras dura la descarga).
+          try {
+            if (a.cap && a.cap.id != null && animsRegenRef.current.has(a.cap.id)) a.src = animsRegenRef.current.get(a.cap.id);
+          } catch (_) {}
+          let av = await mkVid(a.src);
+          let avOk = true;
+          let motivoFallo = '';
+          let detalle = '';
+          try { avOk = !av.error && av.readyState > 0; } catch (_) { avOk = false; }
+          if (!avOk) motivoFallo = 'el archivo no se puede leer';
+          if (avOk) {
+            const r = await calentarAnim(av);
+            avOk = r.ok;
+            if (!avOk) { motivoFallo = 'no da frames'; detalle = `play=${r.playErr || 'ok'}, rs=${r.rs}, buf=${r.buf.toFixed(2)}`; }
+          }
+          if (!avOk) {
+            const cap = a.cap;
+            const tieneDibujo = cap && Array.isArray(cap.figuras) && cap.figuras.length > 0;
+            const tieneFondo = cap && (cap.baseDataUrl || cap.dataUrl);
+            if (!tieneDibujo || !tieneFondo) {
+              motivoFallo = 'falta el dibujo o la imagen base para regenerarlo';
+            } else {
+              try {
+                const gv = await regenerarAnimCaliente(cap);
+                if (gv && gv.url) {
+                  a.src = gv.url;
+                  a.dur = gv.duracion || a.dur;
+                  try { if (cap.id != null) animsRegenRef.current.set(cap.id, gv.url); } catch (_) {}
+                  try { setCapturas(prev => prev.map(x => x && x.id === cap.id ? { ...x, videoUrl: gv.url, duracionAnim: gv.duracion || 4 } : x)); } catch (_) {}
+                  av = await mkVid(gv.url);
+                  avOk = !av.error && av.readyState > 0;
+                  let r2 = { ok: avOk, playErr: '', buf: 0, rs: av.readyState };
+                  if (avOk) r2 = await calentarAnim(av);
+                  avOk = r2.ok;
+                  if (!avOk) {
+                    let sz = -1;
+                    try { sz = (await (await fetch(gv.url)).blob()).size; } catch (_) {}
+                    const codErr = av.error ? av.error.code : 'ninguno';
+                    motivoFallo = 'regenerado pero sin frames';
+                    detalle = `bytes=${sz}, error=${codErr}, rs=${r2.rs}, play=${r2.playErr || 'ok'}, buf=${r2.buf.toFixed(2)}`;
+                  }
+                } else {
+                  motivoFallo = 'la regeneración no produjo archivo';
+                }
+              } catch (e) { avOk = false; motivoFallo = 'regeneración fallida: ' + ((e && e.message) || 'error desconocido'); }
+            }
+          }
+          if (!avOk) {
+            const lineaFallo = `${formatoTiempo(a.en)} — ${motivoFallo}${detalle ? ` (${detalle})` : ''}`;
+            // Solo se corta la descarga si no hay con qué pintar la animación.
+            // El resto se avisa pero se sigue: el segmento usa la imagen fija
+            // e incluso puede cargar el vídeo a mitad de grabación.
+            if (motivoFallo === 'falta el dibujo o la imagen base para regenerarlo') animsFallidas.push(lineaFallo);
+            else animsAvisos.push(lineaFallo);
+          }
+          // Dibujo final como respaldo: si el vídeo carga pero luego no da
+          // frames al grabar, se pinta esto en vez de dejar congelado el base.
+          let fbImg = null;
+          try {
+            if (a.img) {
+              const im = await mkImg(a.img);
+              if (im && im.complete && im.naturalWidth > 0) fbImg = im;
+            }
+          } catch (_) { fbImg = null; }
+          segs.push({ el: av, src: a.src, desde: 0, hasta: a.dur, esAnim: true, nombre, fbImg });
           totalDur += a.dur;
           cursor = a.en;
         }
@@ -1282,7 +1532,10 @@ const bdVideoTargetRef = useRef(null);
       rangos[rangos.length - 1][1] = segs.length;
     }
     const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
-    const clonesListos = [];
+    // Sin clones: las transiciones comparten UN solo elemento reutilizado
+    // (se crea al arrancar la primera y se re-posiciona en cada una). Crear
+    // un clon por transición (26 en un montaje típico) con un seek cada uno
+    // sobre el mismo fichero de 1 GB mataba la pestaña en preparación.
     for (let tk = validas.length - 1; tk >= 0; tk--) {
       const tl = validas[tk];
       if (!tl || tl.tipo !== 'transicion') continue;
@@ -1298,64 +1551,387 @@ const bdVideoTargetRef = useRef(null);
       if (!(d >= 0.2) || !(A.hasta > A.desde) || !(B.hasta > B.desde)) continue;
       if (esVideoSeg(A)) A.hasta = Math.max(A.desde + 0.1, A.hasta - d / 2);
       if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
-      let elB = B.el;
       // elB arranca d/2 antes del inicio recortado (= head real de B): así la
       // transición muestra contenido legítimo y B continúa con solo d/2 de
       // solape dissolve en vez de repetir d segundos (frames cruzados).
       const bDesdeVal = esVideoSeg(B) ? Math.max(0, B.desde - d / 2) : 0;
-      if (esVideoSeg(B) && B.src) {
-        try {
-          const clon = document.createElement('video');
-          clon.muted = true; clon.playsInline = true; clon.preload = 'auto'; clon.src = B.src;
-          clon.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
-          document.body.appendChild(clon);
-          els.push(clon);
-          elB = clon;
-          // Pre-cargar metadata y pre-posicionar el clon. Sin esto, el seek al
-          // iniciar la transición falla en silencio (sin metadata) y el clon
-          // reproduce desde 0: frames del inicio del vídeo entre cortes.
-          clonesListos.push(new Promise((res) => {
-            let done = false;
-            const fin = () => {
-              if (done) return; done = true;
-              try { clon.currentTime = Math.max(0, bDesdeVal); } catch (_) {}
-              try { clon.pause(); } catch (_) {}
-              res();
-            };
-            try {
-              if (clon.readyState >= 1) { fin(); return; }
-              clon.onloadedmetadata = fin;
-              clon.onerror = fin;
-            } catch (_) { fin(); return; }
-            setTimeout(fin, 2500);
-          }));
-        } catch (_) {}
-      }
-      segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
-      // B continúa donde termina el clon (b0+d): sin salto atrás ni repetición
-      // del head ya mostrado en la transición. Duración total -d/2 por transición.
+      const esVideoB = esVideoSeg(B) && B.src;
+      // elB se rellena al arrancar la transición (ver asegurarElB): solo hay
+      // una en pantalla a la vez. Si B no es vídeo con fuente, se usa su
+      // propio elemento como hasta ahora.
+      segs.splice(ib, 0, { kind: tl.modelo || 'crossfade', elA: A.el, aDesde: esVideoSeg(A) ? Math.max(A.desde, A.hasta - d / 2) : 0, elB: esVideoB ? null : B.el, bSrc: esVideoB ? B.src : null, bDesde: bDesdeVal, desde: 0, hasta: d, nombre: '' });
+      // B continúa donde termina la transición (b0+d): sin salto atrás ni
+      // repetición del head ya mostrado. Duración total -d/2 por transición.
       if (esVideoSeg(B)) B.desde = Math.min(B.hasta - 0.1, B.desde + d / 2);
     }
     totalDur = segs.reduce((s, x) => s + Math.max(0, (x.hasta ?? 0) - (x.desde ?? 0)), 0);
     const segsOk = segs.filter(s => s.hasta > s.desde);
     if (!segsOk.length) return null;
-    await Promise.all(clonesListos);
+    // Último segmento que usa cada elemento (como el/elA/elB): durante la
+    // grabación se liberan los que quedan atrás (ventana deslizante) para
+    // no tener N decodificadores con el fichero en memoria.
+    const ultimoUso = new Map();
+    try {
+      segsOk.forEach((s, idx) => {
+        for (const elx of [s.el, s.elA, s.elB]) {
+          if (elx && elx.tagName !== 'IMG') ultimoUso.set(elx, idx);
+        }
+      });
+    } catch (_) {}
     const nombreBase = o.nombreCustom
       || (o.videosBD && o.videosBD.length > 0 && o.videosBD[0].nombre ? String(o.videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
       || (o.archivoCortes && o.archivoCortes.name ? String(o.archivoCortes.name).replace(/\.[^.]+$/, '') : null)
       || (o.archivo && o.archivo.name ? String(o.archivo.name).replace(/\.[^.]+$/, '') : null)
       || 'montaje';
-    return { segsOk, totalDur, nombreBase };
+    return { segsOk, totalDur, nombreBase, animsFallidas, animsAvisos, ultimoUso };
   };
 
   // 'optimizarDespues' genera ademas la version optimizada del video recien
   // grabado. 'soloOptimizado' evita descargarlo sin optimizar, de modo que
   // el unico archivo que sale es el optimizado.
-  // 'reindexar' recodifica el resultado antes de descargarlo, con un fotograma
-  // clave cada segundo, que es lo que hace que se pueda avanzar rapido en
-  // reproductores que no aguantan decodificar 3 s de 720p de golpe. Si no se
-  // puede (fichero muy grande, sin ffmpeg o error), se entrega el crudo igual.
-  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null, reindexar = false) => {
+  // Escritura directa a disco. Sin esto, un montage largo se guarda entero en
+  // memoria (unos 660 MB para 10 minutos) y la pestana se cae. Escribiendo cada
+  // trozo segun llega, la memoria se queda en un trozo y nada mas.
+  // Devuelve null si el navegador no lo soporta, y entonces se usa la via
+  // normal con Blob.
+  const pedirFicheroEnDisco = async (nombreSugerido, ext) => {
+    try {
+      if (typeof window === 'undefined' || typeof window.showSaveFilePicker !== 'function') return null;
+      const handle = await window.showSaveFilePicker({
+        suggestedName: nombreSugerido,
+        types: [{ description: 'Video', accept: { 'video/*': ['.' + ext] } }],
+      });
+      const stream = await handle.createWritable();
+      let cadena = Promise.resolve();
+      let error = null;
+      // Si mediabunny toma el stream (vía de disco por WebCodecs), él lo
+      // cierra al finalizar y aquí no hay que cerrarlo dos veces.
+      let entregado = false;
+      return {
+        escribir: (datos) => {
+          cadena = cadena.then(() => stream.write(datos)).catch((e) => { error = error || e; });
+        },
+        cerrar: async () => {
+          if (entregado) return;
+          await cadena;
+          await stream.close();
+          if (error) throw error;
+        },
+        stream,
+        marcarEntregado: () => { entregado = true; },
+      };
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Exportación por ffmpeg en el servidor (localhost:3001, endpoint /api/montaje)
+  // ---------------------------------------------------------------------------
+  // El navegador solo manda el plan (tramos de la caché + clips + imágenes) y
+  // los ficheros sueltos; el servidor extrae, normaliza a 1280x720@25 y
+  // concatena con ffmpeg nativo. Se ahorra la grabación en tiempo real.
+  // Todo fallo devuelve false y la descarga sigue por la ruta de siempre
+  // (canvas), así que nunca se pierde el trabajo.
+  const SERVIDOR_MONTAJE = 'http://localhost:3001';
+
+  const animsSinVideoDe = (validas) => {
+    const fuera = [];
+    for (const l of validas) {
+      if (!l || l.videoUrl || l.imagenUrl || l.tipo === 'transicion') continue;
+      if (l.inicio == null || l.fin == null) continue;
+      const ini = Math.max(0, l.inicio);
+      const fin = Math.max(ini + 0.5, l.fin);
+      for (const c of (capturas || [])) {
+        if (!c || c.videoUrl || c.tiempo == null) continue;
+        const tieneDibujo = (Array.isArray(c.figuras) && c.figuras.length > 0) || c.dataUrl || c.baseDataUrl;
+        if (!tieneDibujo) continue;
+        if (c.tiempo >= ini && c.tiempo <= fin && !fuera.includes(c)) fuera.push(c);
+      }
+    }
+    return fuera;
+  };
+
+  const avisoAnimsSinVideo = (animsSinVideo) => {
+    const mins = [...new Set(animsSinVideo.map(c => {
+      const t = Math.max(0, Math.floor(Number(c.tiempo) || 0));
+      return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+    }))].join(', ');
+    return `Hay ${animsSinVideo.length} animación(es) sin vídeo generado (${mins}). Pulsa «Regenerar vídeos» y vuelve a descargar.`;
+  };
+
+  const blobDesdeUrl = async (u) => {
+    if (!u) return null;
+    try {
+      const r = await fetch(u);
+      if (!r || !r.ok) return null;
+      const b = await r.blob();
+      return b && b.size > 0 ? b : null;
+    } catch (_) { return null; }
+  };
+
+  const duracionDeVideo = (u) => new Promise((res) => {
+    let hecho = false;
+    const fin = (d) => { if (hecho) return; hecho = true; res(d); };
+    try {
+      const v = document.createElement('video');
+      v.muted = true; v.preload = 'metadata'; v.src = u;
+      v.onloadedmetadata = () => { const d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0; try { v.removeAttribute('src'); v.load(); } catch (_) {} fin(d); };
+      v.onerror = () => fin(0);
+      setTimeout(() => fin(0), 5000);
+    } catch (_) { fin(0); }
+  });
+
+  const extDeBlob = (b) => {
+    const t = (b && b.type) || '';
+    if (/mp4|mpeg-4/.test(t)) return '.mp4';
+    if (/webm/.test(t)) return '.webm';
+    if (/png/.test(t)) return '.png';
+    if (/jpe?g/.test(t)) return '.jpg';
+    if (/gif/.test(t)) return '.gif';
+    if (/webp/.test(t)) return '.webp';
+    return '';
+  };
+
+// Exportacion del montaje con ffmpeg en el servidor (localhost:3001).
+  //
+  // La ruta de siempre graba el montaje en tiempo real sobre un canvas con
+  // MediaRecorder, y eso tiene un techo de 1x: 40 s de montaje no pueden tardar
+  // menos de 40 s, y despues hay que recodificar el archivo entero. El servidor
+  // recorta los tramos del fichero fuente y los concatena con ffmpeg nativo, sin
+  // tiempo real y sin recodificar dos veces. Cualquier fallo devuelve false y la
+  // llamada sigue con la ruta de siempre: nunca se pierde la descarga.
+  //
+  // Los clips y las imagenes van aparte a /api/recurso, que los guarda por hash
+  // del contenido: si la misma animacion se usa en otro montaje no se vuelve a
+  // subir.
+
+  const nombreBaseDe = (nombreCustom) => (nombreCustom
+    || (videosBD && videosBD.length > 0 && videosBD[0].nombre ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
+    || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null)
+    || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null)
+    || 'montaje');
+
+  const estadoDelServidor = async () => {
+    const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/estado', { method: 'GET' }, 4000);
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    return d && d.ok ? d : null;
+  };
+
+  const subirRecurso = async (url) => {
+    const b = await blobDesdeUrl(url);
+    if (!b || !b.size) return null;
+    const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/recurso', {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: b,
+    }, 120000);
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    return d && d.ok && d.id ? d : null;
+  };
+
+  const enviarTrozo = async (bytes, uploadId) => {
+    const fd = new FormData();
+    fd.append('chunk', new Blob([bytes]), 'chunk');
+    fd.append('uploadId', uploadId);
+    const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/upload-chunk', { method: 'POST', body: fd }, 120000);
+    return !!r && r.ok;
+  };
+
+  const iniciarSubida = async (nombre) => {
+    const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/upload-init', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nombre || 'video.mp4', totalChunks: 0 }),
+    }, 30000);
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => null);
+    return d && d.uploadId ? d.uploadId : null;
+  };
+
+  const cerrarSubida = async (uploadId) => {
+    const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/upload-complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }),
+    }, 60000);
+    return !!r && r.ok;
+  };
+
+  const TAM_TROZO = 8 * 1024 * 1024;
+
+  // Video de partida del que salen los tramos. Hace falta saber cual es: si no
+  // coincide con la cache del servidor, los tramos saldrian de otro video y los
+  // tiempos no cuadriarian. Devuelve tambien el tamano sin leer el video si ya se
+  // conoce: comparar con la cache del servidor es gratis, en cambio leer 1 GB
+  // para eso costaba casi un minuto en cada descarga.
+  const fuenteDeTramos = async () => {
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc) return null;
+    const meta = videoUrlCortes ? archivoCortes : archivo;
+    if (meta && meta.blob && meta.blob.size > 0) return { blob: meta.blob, size: meta.blob.size, nombre: meta.name || 'video' };
+    if (typeof Blob !== 'undefined' && meta instanceof Blob && meta.size > 0) return { blob: meta, size: meta.size, nombre: meta.name || 'video' };
+    if (meta && typeof meta.size === 'number' && meta.size > 0) return { size: meta.size, nombre: meta.name || 'video' };
+    if (/^(blob:|data:)/.test(baseSrc)) {
+      const b = await blobDesdeUrl(baseSrc);
+      if (b) return { blob: b, size: b.size, nombre: (meta && meta.name) || 'video' };
+    }
+    return null;
+  };
+
+  // El fuente se sube una sola vez por video. Si ya hay un File en memoria se
+  // trocea con blob.slice, que es una vista. Si no, se transmite la objectURL
+  // con getReader(). Lo que NO se hace nunca es un response.blob() del video
+  // entero: con partidos de varios gigas eso deja la pagina sin memoria y la
+  // descarga se queda colgada sin llegar a empezar.
+  const subirFuenteAlServidor = async (fuente, onProg) => {
+    const TAM = TAM_TROZO;
+    const fichero = fuente.blob;
+    if (!fichero || !fichero.size || !fichero.slice) return false;
+    const total = Math.max(1, Math.ceil(fichero.size / TAM));
+    const uploadId = await iniciarSubida(fuente.nombre);
+    if (!uploadId) return false;
+    for (let i = 0; i < total; i++) {
+      const trozo = fichero.slice(i * TAM, Math.min(fichero.size, (i + 1) * TAM));
+      if (!(await enviarTrozo(trozo, uploadId))) return false;
+      const p = Math.round((i + 1) / total * 100);
+      try { if (onProg) onProg(p); } catch (_) {}
+    }
+    return cerrarSubida(uploadId);
+  };
+
+  // El plan que compone el servidor: cada fila del Montaje se traduce en un
+  // tramo del video fuente, un clip subido (las animaciones) o una imagen.
+  // Las animaciones que caen dentro de un corte parten ese corte en dos.
+  const construirPlanMontaje = async (validas) => {
+    const baseSrc = videoUrlCortes || videoUrl;
+    if (!baseSrc && validas.some(l => l.inicio != null)) return null;
+    const items = [];
+    const subidos = new Map();
+    const asegurar = async (url) => {
+      if (subidos.has(url)) return subidos.get(url);
+      const r = await subirRecurso(url);
+      if (!r) return null;
+      const v = { id: r.id, ext: r.ext };
+      subidos.set(url, v);
+      return v;
+    };
+    for (const linea of validas) {
+      if (!linea || linea.tipo === 'transicion') return null;
+      const nombre = (linea.concepto || '').trim();
+      if (linea.tipo === 'imagen' && linea.imagenUrl) {
+        const r = await asegurar(linea.imagenUrl);
+        if (!r) return null;
+        items.push({ tipo: 'imagen', id: r.id, ext: r.ext, dur: 4, nombre });
+      } else if (linea.videoUrl) {
+        const r = await asegurar(linea.videoUrl);
+        if (!r) return null;
+        const d = (await duracionDeVideo(linea.videoUrl)) || 5;
+        if (!(d > 0.1)) return null;
+        items.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: d, nombre });
+      } else if (linea.inicio != null && linea.fin != null && baseSrc) {
+        const ini = Math.max(0, linea.inicio);
+        const fin = Math.max(ini + 0.5, linea.fin);
+        const anims = (capturas || [])
+          .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
+          .map(c => ({ src: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4, cap: c }))
+          .sort((a, b) => a.en - b.en);
+        let cursor = ini;
+        for (const a of anims) {
+          if (!(a.en >= cursor && a.en <= fin)) continue;
+          if (a.en - cursor > 0.05) items.push({ tipo: 'fuente', ini: cursor, fin: a.en, nombre });
+          // URL regenerada en esta sesion: el estado puede seguir apuntando al
+          // blob roto.
+          try {
+            if (a.cap && a.cap.id != null && animsRegenRef.current.has(a.cap.id)) a.src = animsRegenRef.current.get(a.cap.id);
+          } catch (_) {}
+          const r = await asegurar(a.src);
+          if (!r) return null;
+          items.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: a.dur, nombre });
+          cursor = a.en;
+        }
+        if (fin - cursor > 0.05) items.push({ tipo: 'fuente', ini: cursor, fin, nombre });
+      } else {
+        return null;
+      }
+    }
+    return items.length ? { items } : null;
+  };
+
+  const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null) => {
+    const t0 = performance.now();
+    try {
+      // El servidor siempre devuelve MP4: si el navegador solo sabe grabar WebM
+      // el nombre del fichero no cuadra.
+      if (mimeDescarga().ext !== 'mp4') return false;
+      const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
+      if (!validas.length) return false;
+      const baseSrc = videoUrlCortes || videoUrl;
+      if (!baseSrc && validas.some(l => l.inicio != null)) return false;
+      // Sin transiciones en el servidor (Fase 3 descartada): se va por canvas.
+      if (validas.some(l => l.tipo === 'transicion')) return false;
+      const animsSinVideo = animsSinVideoDe(validas);
+      if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); return false; }
+
+      const salud = await estadoDelServidor();
+      if (!salud) return false;
+      const plan = await construirPlanMontaje(validas);
+      if (!plan) return false;
+
+      // Los tramos salen de la cache del servidor: tiene que ser nuestro video.
+      if (plan.items.some(it => it.tipo === 'fuente')) {
+        const fuente = await fuenteDeTramos();
+        if (!fuente) return false;
+        // Comparar por tamano con lo que ya tiene el servidor. Si coincide no se
+        // sube nada, y si ya se conoce el tamano tampoco hace falta leer el video.
+        const coincide = !!salud.fuente && Number(fuente.size) > 0 && Number(salud.fuenteBytes) === Number(fuente.size);
+        if (!coincide) {
+          if (!fuente.blob) return false;
+          setAviso('Subiendo el video de partida al servidor (solo la primera vez)...');
+          const ok = await subirFuenteAlServidor(fuente, (p) => { try { setProgresoDescarga(Math.round(p * 35)); } catch (_) {} });
+          setAviso('');
+          if (!ok) return false;
+        }
+      }
+
+      setDescargandoMontaje(true);
+      setOptimaEnDosFases(false);
+      setProgresoDescarga(0);
+      try {
+        const nombreArchivo = nombreBaseDe(nombreCustom) + '.mp4';
+        const resp = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/montaje', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ segmentos: plan.items, ancho: 1280, alto: 720 }),
+        }, 20 * 60 * 1000);
+        if (!resp || !resp.ok) return false;
+        if (destinoDisco) {
+          destinoDisco.escribir(resp);
+          await destinoDisco.cerrar();
+          try { destinoDisco.marcarEntregado(); } catch (_) {}
+          setProgresoDescarga(100);
+          setInformeDescarga('Montaje compuesto por el servidor en ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s, MP4/H.264 nativo');
+          return true;
+        }
+        const blob = await resp.blob();
+        if (!blob || blob.size < 2048) return false;
+        const contenido = Number(resp.headers.get('x-montaje-contenido')) || 0;
+        descargarBlob(blob, nombreArchivo);
+        try { setUltimoVideo({ blob, nombre: nombreArchivo, mime: 'video/mp4', ext: 'mp4' }); } catch (_) {}
+        setProgresoDescarga(100);
+        setInformeDescarga('Montaje de ' + Math.round(contenido) + ' s compuesto por el servidor en '
+          + ((performance.now() - t0) / 1000).toFixed(1) + ' s reales (x'
+          + (t0 ? (contenido / ((performance.now() - t0) / 1000)).toFixed(1) : '?')
+          + ') | ' + plan.items.length + ' tramos | salida ' + Math.round(blob.size / 1024) + ' KB, MP4/H.264 nativo');
+        return true;
+      } finally {
+        setProgresoDescarga(0);
+        setDescargandoMontaje(false);
+        setAviso('');
+      }
+    } catch (e) {
+      console.warn('Ruta nativa no disponible, se usa la de siempre:', e);
+      try { setProgresoDescarga(0); setDescargandoMontaje(false); setAviso(''); } catch (_) {}
+      return false;
+    }
+  };
+  const descargarLineas = async (lineas, nombreCustom, optimizarDespues = false, soloOptimizado = false, basePreargada = null, reindexar = false, destinoDisco = null) => {
     // Diagnostico de tiempos de esta descarga. Es un objeto mutable del ambito
     // de la funcion porque el informe se compone en rec.onstop, que se dispara
     // despues de que el bucle de grabacion termine: un useState no serviria,
@@ -1382,6 +1958,11 @@ const bdVideoTargetRef = useRef(null);
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
+    // Las animaciones sin vídeo generado no se pueden grabar: antes se
+    // saltaban en silencio y el vídeo salía sin ellas. Se avisa y no se
+    // descarga hasta pulsar «Regenerar vídeos».
+    const animsSinVideo = animsSinVideoDe(validas);
+    if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); return; }
     setDescargandoMontaje(true);
     setOptimaEnDosFases(!!(optimizarDespues || reindexar));
     setProgresoDescarga(0);
@@ -1391,31 +1972,37 @@ const bdVideoTargetRef = useRef(null);
     let totalDur = 0;
     let elapsedTotal = 0;
     let tGrabaDesde = 0;
+    let tPrepDesde = 0;
+    let tGrabaMs = 0;
+    let tTrimMs = 0;
+    let tEntregaMs = 0;
+    let bytesGrabados = 0;
+    let bpsSolicitado = 0;
     const lastProgRef = { current: -1 };
+    const { mime, ext } = mimeDescarga();
     try {
+      tPrepDesde = performance.now();
+      diagFase('Iniciando descarga…');
+      diagIniciar();
       const baseSrc = videoUrlCortes || videoUrl;
-      const { mime, ext } = mimeDescarga();
       if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
       const chunks = [];
       const mkVid = async (src) => {
         const vid = document.createElement('video');
-        vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.src = src;
+        // 'metadata' y no 'auto': con 'auto' cada elemento se ponía a
+        // descargar el fichero entero en segundo plano y con 20-30 filas la
+        // pestaña moría por memoria a mitad de la preparación. Con
+        // 'metadata' solo trae bajo demanda lo que reproduce. Sin
+        // calentado: reproducir cada vídeo en preparación también tragaba
+        // búfer; el primer fotograma llega al darle a play en su segmento
+        // (las animaciones las verifica calentarAnim aparte).
+        vid.muted = true; vid.playsInline = true; vid.preload = 'metadata'; vid.src = src;
         vid.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
         document.body.appendChild(vid);
         els.push(vid);
-        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; });
-        // 'loadedmetadata' es readyState 1: solo metadatos, todavia ningun
-        // fotograma decodificado. Si se dibuja ahi, drawImage no pinta nada y el
-        // canvas se queda con el fotograma del tramo anterior, que es el tiron que
-        // se ve al entrar en la animacion. Se espera a readyState 2
-        // (HAVE_CURRENT_DATA) con un tope para no colgarse nunca.
-        await new Promise((res) => {
-          if (vid.readyState >= 2) { res(); return; }
-          let fin = false;
-          const listo = () => { if (fin) return; fin = true; try { vid.removeEventListener('canplay', listo); } catch (_) {} res(); };
-          try { vid.addEventListener('canplay', listo); } catch (_) {}
-          setTimeout(listo, 1500);
-        });
+        // Con tope: un vídeo que no arranca ni falla dejaba la descarga
+        // colgada para siempre con el botón pillado.
+        await new Promise((res) => { vid.onloadedmetadata = res; vid.onerror = res; setTimeout(res, 10000); });
         return vid;
       };
       const mkImg = async (u) => {
@@ -1424,7 +2011,7 @@ const bdVideoTargetRef = useRef(null);
         im.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
         document.body.appendChild(im);
         els.push(im);
-        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = u; });
+        await new Promise((res) => { im.onload = res; im.onerror = res; im.src = u; setTimeout(res, 10000); });
         return im;
       };
       let base = null;
@@ -1433,6 +2020,13 @@ const bdVideoTargetRef = useRef(null);
       // para que la limpieza no lo quite.
       if (basePreargada) base = basePreargada;
       else if (baseSrc) base = await mkVid(baseSrc);
+      try {
+        if (base && base.tagName !== 'IMG' && (base.error || base.readyState === 0)) {
+          try { els.forEach(v => { try { v.parentNode && v.parentNode.removeChild(v); } catch (_) {} }); } catch (_) {}
+          setAviso('No se pudo cargar el vídeo de partida; recarga el vídeo e inténtalo de nuevo.');
+          return;
+        }
+      } catch (_) {}
       const w = 1280, h = 720;
       canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
@@ -1440,15 +2034,49 @@ const bdVideoTargetRef = useRef(null);
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
       const bps = (w * h >= 1920 * 1080) ? 30000000 : (w * h >= 1280 * 720) ? 16000000 : 10000000;
-      rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: bps });
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      bpsSolicitado = bps;
+      // 25 fps en vez de 30: el origen es de 1080p y hay que descargarlo de
+      // memoria, escalarlo a 720p, dibujarlo y codificarlo 30 veces por
+      // segundo. A 30 el navegador no da abasto y el fotograma sale a bloques.
+      // En un video de analisis el salto de 30 a 25 no se aprecia.
+      // Grabación por WebCodecs (claves densas) cuando hay destino en disco
+      // y MP4: el archivo se deja avanzar sin pixelarse. Si algo falla,
+      // MediaRecorder de siempre.
+      let grabWC = null;
+      if (destinoDisco && ext === 'mp4' && typeof VideoEncoder !== 'undefined') {
+        try {
+          grabWC = await iniciarGrabacionWC(canvas, w, h, bps, destinoDisco, (n) => { bytesGrabados = Math.max(bytesGrabados, n); });
+        } catch (e) { console.warn('WebCodecs no disponible, se usa MediaRecorder', e); grabWC = null; }
+      }
+      if (!grabWC) {
+        rec = new MediaRecorder(canvas.captureStream(25), { mimeType: mime, videoBitsPerSecond: bps });
+        rec.ondataavailable = (e) => {
+          if (!e.data.size) return;
+          bytesGrabados += e.data.size;
+          if (destinoDisco) destinoDisco.escribir(e.data);
+          else chunks.push(e.data);
+        };
+      }
       const prep = await prepararSegmentos({ validas, mkVid, mkImg, els, base, baseSrc, capturas, nombreCustom, videosBD, archivoCortes, archivo });
       if (!prep) { setAviso('Nada que descargar'); return; }
+      if (prep.animsFallidas && prep.animsFallidas.length) {
+        try { els.forEach(v => { try { v.parentNode && v.parentNode.removeChild(v); } catch (_) {} }); } catch (_) {}
+        try { if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas); } catch (_) {}
+        setAviso(`No se pudo usar: ${prep.animsFallidas.join(' | ')}.`);
+        return;
+      }
+      avisoPrepRef.current = '';
+      if (prep.animsAvisos && prep.animsAvisos.length) {
+        avisoPrepRef.current = `Animación con problemas: ${prep.animsAvisos.join(' | ')}. Si no carga durante la grabación, esa animación saldrá como imagen fija.`;
+        setAviso(avisoPrepRef.current);
+      }
       const segsOk = prep.segsOk;
+      const ultimoUso = (prep && prep.ultimoUso) || new Map();
       totalDur = prep.totalDur;
       const nombreBase = prep.nombreBase;
       const nombreArchivo = `${nombreBase}.${ext}`;
       tGrabaDesde = performance.now();
+      diagFase('Pre-dibujado…');
       // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
       // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
       // primer vídeo seekea y se dibuja). Con el frame ya pintado, el primer
@@ -1473,10 +2101,10 @@ const bdVideoTargetRef = useRef(null);
                   setTimeout(fin, 900);
                 });
               }
-              try { await fel.play().catch(() => {}); } catch (_) {}
+              try { await playConTope(fel, 8000); } catch (_) {}
             } catch (_) {}
-            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-            try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) {}
+            await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 2000))]);
+            try { ctx.globalAlpha = 1; ctx.drawImage(fel, 0, 0, w, h); } catch (_) { try { if (first && first.fbImg) ctx.drawImage(first.fbImg, 0, 0, w, h); } catch (_) {} }
           }
         }
       } catch (_) {}
@@ -1485,57 +2113,80 @@ const bdVideoTargetRef = useRef(null);
         let currentSeg = 0;
         let segElapsed = 0;
         let descargaHecha = false;
-rec.onstop = async () => {
+        let cierreForzoso = false;
+        let finOk = false;
+        // Sin rec en la vía WebCodecs: el cierre lo hace finalizarWC.
+        if (rec) rec.onstop = async () => {
           // Se marca de inmediato, antes de cualquier await. El recorte contra
           // localhost:3001 puede tardar hasta 10s, y si el flag se pusiera
           // despues el fallback de 3s lo creeria "no descargado" y volveria a
           // exportar el video entero una segunda vez.
           descargaHecha = true;
-          let finalBlob;
-          try {
-            const blob = new Blob(chunks, { type: mime });
-            finalBlob = blob;
+          diagFase('Terminando grabación…');
+          const tStop = performance.now();
+          try { if (tGrabaDesde > 0) tGrabaMs = tStop - tGrabaDesde; } catch (_) {}
+          let finalBlob = null;
+          if (destinoDisco) {
+            // El video ya esta escrito en disco trozo a trozo: no hay nada que
+            // ensamblar en memoria, que es justo lo que reventaba la pestana.
+            try { await Promise.race([destinoDisco.cerrar(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout al cerrar')), 20000))]); } catch (e) { console.error('Error al escribir el fichero', e); }
+            finalBlob = null;
+          } else {
             try {
-              if (await trimDisponible()) {
-                const fd = new FormData();
-                fd.append('video', blob, `montaje.${ext}`);
-                fd.append('trimStart', '0.2');
-                fd.append('ext', ext);
-                const tTrim = performance.now();
-                const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
-                if (resp && resp.ok) { finalBlob = await resp.blob(); diag.trimOk = true; }
-                diag.trimMs = Math.round(performance.now() - tTrim);
-              }
-            } catch (_) {}
-          } catch (_) {
-            finalBlob = new Blob(chunks, { type: mime });
+              const blob = new Blob(chunks, { type: mime });
+              finalBlob = blob;
+              try {
+                // El recorte solo compensa en archivos pequeños: con el preset
+                // del servidor uno grande nunca termina en los 10 s de tope y
+                // cada intento deja al servidor codificando minutos en balde.
+                // Sin recorte se entrega el crudo tal cual.
+                if ((blob.size || 0) <= 48 * 1048576 && await trimDisponible()) {
+                  diagFase('Recorte servidor…');
+                  const t0Trim = performance.now();
+                  const fd = new FormData();
+                  fd.append('video', blob, `montaje.${ext}`);
+                  fd.append('trimStart', '0.2');
+                  fd.append('ext', ext);
+                  const tTrim = performance.now();
+                  const resp = await fetchConTimeout('http://localhost:3001/api/trim-webm', { method: 'POST', body: fd }, 10000);
+                  if (resp && resp.ok) { finalBlob = await resp.blob(); diag.trimOk = true; }
+                  diag.trimMs = Math.round(performance.now() - tTrim);
+                  tTrimMs = performance.now() - t0Trim;
+                }
+              } catch (_) {}
+            } catch (_) {
+              finalBlob = new Blob(chunks, { type: mime });
+            }
+            // Reindexar antes de descargar: una clave por segundo para que el
+            // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
+            // siempre se reproduce aunque tarde mas en saltar.
+            //
+            // Si el servidor ya ha recortado (/api/trim-webm responde ok) NO se
+            // reindexa: ese endpoint ya reindexa en nativo con -g 30 y
+            // +faststart, asi que hacerlo aqui con ffmpeg.wasm es un recodificado
+            // completo del archivo entero que no aporta nada y cuesta la fase mas
+            // cara de la descarga. Con el servidor off, o si el trim falla, se
+            // sigue reindexando en WASM como hasta ahora.
+            if (reindexar && !diag.trimOk) {
+              diagFase('Reindexando…');
+              const tRi = performance.now();
+              try {
+                const ri = await reindexarParaSalto(finalBlob, ext, mime);
+                if (ri) finalBlob = ri;
+              } catch (_) {}
+              diag.reindexMs = Math.round(performance.now() - tRi);
+            }
+            try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
+            // Informe con el desglose de fases. Se compone aqui porque el trim y el
+            // reindexado ocurren despues del bucle: mostrarlo antes daria un total
+            // incompleto.
+            publicarInforme();
+            try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
-          // Reindexar antes de descargar: una clave por segundo para que el
-          // archivo se pueda saltar. Si no se puede, se entrega el crudo, que
-          // siempre se reproduce aunque tarde mas en saltar.
-          //
-          // Si el servidor ya ha recortado (/api/trim-webm responde ok) NO se
-          // reindexa: ese endpoint ya reindexa en nativo con -g 30 y
-          // +faststart, asi que hacerlo aqui con ffmpeg.wasm es un recodificado
-          // completo del archivo entero que no aporta nada y cuesta la fase mas
-          // cara de la descarga. Con el servidor off, o si el trim falla, se
-          // sigue reindexando en WASM como hasta ahora.
-          if (reindexar && !diag.trimOk) {
-            const tRi = performance.now();
-            try {
-              const ri = await reindexarParaSalto(finalBlob, ext, mime);
-              if (ri) finalBlob = ri;
-            } catch (_) {}
-            diag.reindexMs = Math.round(performance.now() - tRi);
-          }
-          try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
-          // Informe con el desglose de fases. Se compone aqui porque el trim y el
-          // reindexado ocurren despues del bucle: mostrarlo antes daria un total
-          // incompleto.
-          publicarInforme();
-          try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
+          const t0Entrega = performance.now();
           setProgresoDescarga(100);
-          if (!soloOptimizado) {
+          diagFase('Entregando…');
+          if (!soloOptimizado && !destinoDisco) {
             const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             a.href = url;
@@ -1545,22 +2196,67 @@ rec.onstop = async () => {
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(url), 5000);
           }
-          try { setAviso(''); } catch (_) {}
+          try { setAviso(cierreForzoso ? 'La grabación se atascó; se ha descargado lo grabado hasta el atasco.' : (avisoPrepRef.current || '')); } catch (_) {}
           if (optimizarDespues) {
             try { await optimizarUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
+          try { tEntregaMs = performance.now() - t0Entrega; } catch (_) {}
+          finOk = true;
           resolve();
+        };
+        // Cierre de la vía WebCodecs: se deja de alimentar, se vuelca el
+        // codificador y se finaliza el MP4 (cierra el fichero). Equivale al
+        // onstop de MediaRecorder para la vía de disco.
+        const finalizarWC = async (g) => {
+          diagFase('Finalizando vídeo…');
+          try { if (tGrabaDesde > 0) tGrabaMs = performance.now() - tGrabaDesde; } catch (_) {}
+          try {
+            try { g.fuente.close(); } catch (_) {}
+            await Promise.race([
+              g.output.finalize(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout al finalizar')), 30000)),
+            ]);
+            try { destinoDisco.marcarEntregado(); } catch (_) {}
+          } catch (e) {
+            console.error('Error al finalizar WebCodecs', e);
+            try { await g.output.cancel(); } catch (_) {}
+            try { avisoPrepRef.current = 'No se pudo finalizar el vídeo; revisa el archivo guardado.'; } catch (_) {}
+          }
+          const t0Entrega = performance.now();
+          try { setProgresoDescarga(100); } catch (_) {}
+          try { setAviso(cierreForzoso ? 'La grabación se atascó; se ha descargado lo grabado hasta el atasco.' : (avisoPrepRef.current || '')); } catch (_) {}
+          try { tEntregaMs = performance.now() - t0Entrega; } catch (_) {}
+          finOk = true;
+          try { resolve(); } catch (_) {}
         };
         const terminar = () => {
           if (terminado) return;
           terminado = true;
           stopTicks();
-          try { rec.stop(); } catch (_) {}
+          if (grabWC) {
+            const g = grabWC;
+            grabWC = null;
+            finalizarWC(g);
+          } else {
+            try { rec.stop(); } catch (_) {}
+          }
           els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { document.body.removeChild(v); } catch (_) {} });
           try { document.body.removeChild(canvas); } catch (_) {}
 // Fallback: si rec.onstop no dispara en 3s, forzar descarga
         setTimeout(async () => {
-          if (!descargaHecha && rec.state === 'inactive') {
+          if (!descargaHecha && rec && rec.state === 'inactive') {
+            if (destinoDisco) {
+              // Con escritura a disco no hay nada que ensamblar: se cierra el
+              // fichero y listo, sin jugarse la memoria con un Blob de 600 MB.
+              try { await destinoDisco.cerrar(); } catch (_) {}
+              descargaHecha = true;
+              setProgresoDescarga(100);
+              finOk = true;
+              resolve();
+              setDescargandoMontaje(false);
+              setProgresoDescarga(0);
+              return;
+            }
             const blob = new Blob(chunks, { type: mime });
             setProgresoDescarga(100);
             if (!soloOptimizado) {
@@ -1577,25 +2273,30 @@ rec.onstop = async () => {
             if (optimizarDespues) {
               try { await optimizarUltimoVideo({ blob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
             }
+            finOk = true;
             resolve();
             setDescargandoMontaje(false);
             setProgresoDescarga(0);
           }
         }, 3000);
 };
-rec.start(250);
+if (grabWC) diagFase('Grabando (WebCodecs, claves cada 1,2 s)…');
+else {
+  rec.start(250);
+  diagFase('Grabando…');
+}
         let enTick = false;
         let segT0Wall = 0;
         let completado = 0;
         let segVideoLista = true;
         let segSeekToken = 0;
         let lastFrameTime = performance.now();
-        // Cadencia fija a 30fps, igual que captureStream(30): mezclar
+        // Cadencia fija a 25fps, igual que captureStream(25): mezclar
         // requestVideoFrameCallback/rAF/setTimeout producía tirones.
         let tickHandle = null;
         const scheduleTick = () => {
           if (tickHandle || terminado) return;
-          tickHandle = setInterval(() => { if (!terminado) tick(performance.now()); }, 1000 / 30);
+          tickHandle = setInterval(() => { if (!terminado) tick(performance.now()); }, 1000 / 25);
         };
         const stopTicks = () => {
           if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
@@ -1606,9 +2307,68 @@ rec.start(250);
           try { elx.play().catch(() => {}); } catch (_) {}
         };
         const detener = (elx) => {
-          if (!elx || elx.tagName === 'IMG') return;
+          if (!elx || elx.tagName !== 'IMG') return;
           try { elx.ontimeupdate = null; } catch (_) {}
           try { elx.pause(); } catch (_) {}
+        };
+        // Elemento único reutilizado como elB de TODAS las transiciones (ver
+        // prepararSegmentos): solo hay una transición en pantalla a la vez.
+        // Se crea al arrancar la primera y se re-posiciona en cada una. Vive
+        // hasta el final (no entra en ultimoUso) y la limpieza general lo
+        // quita por estar en 'els'.
+        let scratchTransicion = null;
+        let scratchSrc = null;
+        const asegurarElB = (seg) => {
+          try {
+            if (!seg || !seg.kind || !seg.bSrc) return;
+            if (!scratchTransicion) {
+              const sc = document.createElement('video');
+              sc.muted = true; sc.playsInline = true; sc.preload = 'metadata';
+              sc.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+              document.body.appendChild(sc);
+              els.push(sc);
+              scratchTransicion = sc;
+            }
+            const sc = scratchTransicion;
+            const ir = () => {
+              try { sc.currentTime = Math.max(0, seg.bDesde || 0); } catch (_) {}
+              try { sc.play().catch(() => {}); } catch (_) {}
+            };
+            if (scratchSrc !== seg.bSrc) {
+              // Fuente distinta: hay que esperar metadatos o el seek falla en
+              // silencio y reproduce desde 0 (frames del inicio entre cortes).
+              scratchSrc = seg.bSrc;
+              let hecho = false;
+              const irUna = () => { if (hecho) return; hecho = true; ir(); };
+              try { sc.pause(); } catch (_) {}
+              try { sc.onloadedmetadata = irUna; } catch (_) {}
+              try { sc.src = seg.bSrc; } catch (_) { irUna(); return; }
+              setTimeout(irUna, 2500);
+            } else {
+              ir();
+            }
+            seg.elB = sc;
+          } catch (_) {}
+        };
+        // Ventana deslizante: los elementos cuyo último uso ya pasó se sacan
+        // del DOM y se purgan sus búferes. Solo toca elementos creados aquí
+        // (los de 'els'): el vídeo base preargado, si lo hay, es del
+        // llamante y no se mete en 'els' a propósito.
+        const liberarUsados = () => {
+          try {
+            if (!ultimoUso || !ultimoUso.size) return;
+            for (const [elx, idxUlt] of ultimoUso) {
+              if (idxUlt < currentSeg) {
+                ultimoUso.delete(elx);
+                if (elx && elx.tagName !== 'IMG' && els.includes(elx)) {
+                  try { elx.pause(); } catch (_) {}
+                  try { elx.removeAttribute('src'); } catch (_) {}
+                  try { elx.load(); } catch (_) {}
+                  try { elx.parentNode && elx.parentNode.removeChild(elx); } catch (_) {}
+                }
+              }
+            }
+          } catch (_) {}
         };
         // readyState 2 = HAVE_CURRENT_DATA: el elemento ya tiene un fotograma
         // decodificado en la posicion actual y se puede dibujar de verdad.
@@ -1624,7 +2384,7 @@ rec.start(250);
           } catch (_) {}
           return Math.min(Math.max(0, (Date.now() - segT0Wall) / 1000), segDur);
         };
-        const tick = () => {
+        const tick = async () => {
           if (terminado || enTick) return;
           enTick = true;
           try {
@@ -1639,6 +2399,7 @@ rec.start(250);
             if (segElapsed === 0) {
               segT0Wall = Date.now();
               if (seg.kind) {
+                asegurarElB(seg);
                 ponerEnMarcha(seg.elA, seg.aDesde);
                 ponerEnMarcha(seg.elB, seg.bDesde);
                 segVideoLista = true;
@@ -1717,19 +2478,44 @@ rec.start(250);
               if (segElapsed >= segDur) {
                 const vistos = new Set();
                 for (const elx of [seg.elA, seg.elB]) {
-                  if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) { vistos.add(elx); detener(elx); }
+                  if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) {
+                    vistos.add(elx);
+                    detener(elx);
+                  }
                 }
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
+                liberarUsados();
               }
             } else {
-              // La animacion se dibuja en cuanto tiene fotograma, sin esperar mas,
-              // y se revisa en cada tick porque el primer fotograma puede tardar
-              // un poco en llegar: dibujar antes dejaria en el canvas el fotograma
-              // del tramo anterior (el tiron al entrar).
-              const listoAhora = seg.esAnim ? hayFotograma(seg.el) : segVideoLista;
-              if (listoAhora) {
-                try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+              if (segVideoLista) {
+                // Vídeo de animación que no arranca: recarga y reintenta un
+                // par de veces a mitad de segmento. Mientras tanto se pinta
+                // el dibujo de respaldo (o queda el último frame).
+                if (seg.esAnim && seg.el && !seg.vioVideo && seg.el.readyState < 2 && seg.el.currentTime < 0.1) {
+                  if (seg.reintentos == null) seg.reintentos = 0;
+                  if (segElapsed > (seg.reintentos + 1) * 1.2 && seg.reintentos < 3) {
+                    seg.reintentos++;
+                    try { seg.el.load(); const pp = seg.el.play(); if (pp && pp.catch) pp.catch(() => {}); } catch (_) {}
+                  }
+                }
+                if (seg.esAnim && seg.fbImg) {
+                  // El vídeo manda mientras dé frames; si aún no está listo se
+                  // pinta ya el dibujo de respaldo (nunca frames viejos).
+                  let okVideo = false;
+                  try {
+                    if (seg.el && seg.el.readyState >= 2) {
+                      ctx.drawImage(seg.el, 0, 0, w, h);
+                      okVideo = true;
+                      try { if (seg.el.currentTime > 0.04) seg.vioVideo = true; } catch (_) {}
+                    }
+                  } catch (_) { okVideo = false; }
+                  if (!okVideo && !seg.vioVideo) {
+                    try { ctx.drawImage(seg.fbImg, 0, 0, w, h); } catch (_) {}
+                  }
+                } else {
+                  try { ctx.drawImage(seg.el, 0, 0, w, h); } catch (_) {}
+                }
               }
               if (seg.nombre) {
                 try {
@@ -1772,6 +2558,21 @@ rec.start(250);
                 if (!esImagen) detener(seg.el);
                 completado += segDur;
                 currentSeg++; segElapsed = 0;
+                liberarUsados();
+              }
+            }
+            // Vía WebCodecs: el fotograma ya dibujado va al codificador con
+            // clave cada 1,2 s. Con await hay backpressure (si el codificador
+            // no da abasto se saltan ticks: fotograma congelado, memoria sana).
+            if (grabWC) {
+              const gwc = grabWC;
+              try { await alimentarWC(gwc); }
+              catch (e) {
+                gwc.fallos = (gwc.fallos || 0) + 1;
+                if (gwc.fallos > 10 && !terminado) {
+                  try { setAviso('El codificador falló; se cierra con lo grabado.'); } catch (_) {}
+                  try { terminar(); } catch (_) {}
+                }
               }
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
@@ -1781,6 +2582,50 @@ rec.start(250);
             enTick = false;
           }
 };
+        // Perro guardián: los segmentos acaban por reloj, así que si pasado
+        // el total + 60 s de margen sigue grabando es que algo se ha atascado
+        // (pestaña en segundo plano, codificador parado). Se fuerza el cierre
+        // para no dejar el botón pillado; sale parcial con aviso.
+        const margenMs = Number.isFinite(totalDur) && totalDur > 0 ? totalDur * 1000 + 60000 : 180000;
+        try {
+          setTimeout(() => {
+            if (!terminado) {
+              cierreForzoso = true;
+              try { terminar(); } catch (_) {}
+            }
+          }, margenMs);
+        } catch (_) {}
+        // Escalado final: si ni onstop ni el fallback han resuelto (todo va
+        // con topes, pero el codificador puede quedarse en un estado raro),
+        // se cierra a la fuerza con lo grabado. Mejor parcial con aviso que
+        // el botón pillado para siempre.
+        try {
+          setTimeout(() => {
+            if (finOk) return;
+            try { stopTicks(); } catch (_) {}
+            try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (_) {}
+            try { els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { v.parentNode && v.parentNode.removeChild(v); } catch (_) {} }); } catch (_) {}
+            try { if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas); } catch (_) {}
+            try {
+              if (!destinoDisco && !soloOptimizado && chunks.length) {
+                const blob = new Blob(chunks, { type: mime });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = nombreArchivo;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+              }
+            } catch (_) {}
+            try { setAviso('La grabación se atascó y se ha forzado el cierre: revisa el vídeo descargado.'); } catch (_) {}
+            finOk = true;
+            try { resolve(); } catch (_) {}
+            try { setDescargandoMontaje(false); } catch (_) {}
+            try { setProgresoDescarga(0); } catch (_) {}
+          }, margenMs + 60000);
+        } catch (_) {}
         scheduleTick();
       });
     } catch (e) {
@@ -1789,21 +2634,36 @@ rec.start(250);
       try { els.forEach(v => { try { document.body.removeChild(v); } catch (_) {} }); } catch (_) {}
       try { if (canvas && canvas.parentNode) document.body.removeChild(canvas); } catch (_) {}
     } finally {
-      // Tiempo real de la grabacion frente a la duracion del montaje. Ojo: esto
-      // mide SOLO la grabacion. El trim del servidor y el reindexado pasan
-      // despues, en rec.onstop, asi que el total de la descarga es mayor. El
-      // informe completo se compone ahi, cuando ya se saben todas las fases.
+      // Tiempo real de la grabacion frente a la duracion del montaje. Si el
+      // segundo es mucho mayor, el origen se para por el camino y ahi es donde
+      // se va el tiempo. El trim del servidor y el reindexado pasan despues, en
+      // rec.onstop, asi que el total de la descarga es mayor. Se desglosa por
+      // fases para saber que parte tarda.
       if (tGrabaDesde > 0 && totalDur > 0.5) {
         const real = (performance.now() - tGrabaDesde) / 1000;
         const f = totalDur / real;
         diag.grabacionMs = Math.round(real * 1000);
-        diag.textoBase = 'Montaje de ' + Math.round(totalDur) + ' s grabado en ' + real.toFixed(0) + ' s reales'
-          + (f < 0.9 ? ' (x' + f.toFixed(2) + ', se va ' + Math.round(100 / f) + '% mas de tiempo).'
-            : (f > 1.05 ? ' (x' + f.toFixed(2) + ', mas rapido que el reloj).' : ' (x' + f.toFixed(2) + ').'));
-        publicarInforme();
+        // Tamano de verdad del fichero y bitrate real: lo pedido no siempre es
+        // lo entregado, y saber cuanto entrega el navegador explica el pixeleo.
+        const bytes = bytesGrabados;
+        const mbps = bytes > 0 && real > 0 ? ((bytes * 8) / real / 1e6) : 0;
+        const s1 = (ms) => (Number.isFinite(ms) && ms > 0 ? (ms / 1000).toFixed(1) + ' s' : null);
+        const fases = [];
+        if (tPrepDesde > 0) fases.push('preparación ' + s1(tGrabaDesde - tPrepDesde));
+        if (tGrabaMs > 0) fases.push('grabación ' + s1(tGrabaMs));
+        if (tTrimMs > 0) fases.push('recorte servidor ' + s1(tTrimMs));
+        if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
+        setInformeDescarga(
+          'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s (x' + f.toFixed(2)
+          + '). ' + Math.round(bytes / 1048576) + ' MB a ' + mbps.toFixed(1) + ' Mbps, pedido ' + (bpsSolicitado / 1e6).toFixed(0)
+          + '. ' + (mimeDescarga().ext === 'mp4' ? 'MP4/H.264' : 'WebM/VP9')
+          + (fases.length ? '. Fases: ' + fases.join(' / ') : '')
+          + (diag.salidaKB ? '. Salida ' + diag.salidaKB + ' KB' : '')
+        );
       }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
+      diagParar();
     }
   };
 
@@ -1895,270 +2755,14 @@ rec.start(250);
     }
   };
 
-  // =========================================================================
-  // Ruta nativa: el servidor compone el montaje con ffmpeg.
-  //
-  // La ruta de siempre graba el montaje en tiempo real sobre un canvas con
-  // MediaRecorder, y eso tiene un techo de 1x: 40 s de montaje no pueden tardar
-  // menos de 40 s, y despues hay que recodificar el archivo entero. El servidor
-  // recorta los tramos del fichero fuente y los concatena, sin tiempo real y
-  // sin recodificar dos veces. Todo lo de aqui cae a la ruta de siempre en
-  // cuanto algo falla, para no perder nunca el trabajo del usuario.
-  // =========================================================================
-  const SERVIDOR = 'http://localhost:3001';
-
-  const nombreBaseDe = (nombreCustom) => (nombreCustom
-    || (videosBD && videosBD.length > 0 && videosBD[0].nombre ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
-    || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null)
-    || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null)
-    || 'montaje');
-
-  const estadoDelServidor = async () => {
-    const r = await fetchConTimeout(SERVIDOR + '/api/estado', {}, 2500);
-    if (!r || !r.ok) return null;
-    try { return await r.json(); } catch (_) { return null; }
-  };
-
-  // Duracion de un clip, para saber cuanto ocupa en el montaje. Se mide aqui
-  // porque el servidor solo recibe el clip ya subido, no su duracion.
-  const duracionDeClip = (url) => new Promise((resolve) => {
-    let hecho = false;
-    const v = document.createElement('video');
-    const fin = (d) => { if (hecho) return; hecho = true; resolve(d || 0); };
-    v.preload = 'metadata';
-    v.onloadedmetadata = () => fin(v.duration);
-    v.onerror = () => fin(0);
-    setTimeout(() => fin(hecho ? 0 : (Number.isFinite(v.duration) ? v.duration : 0)), 4000);
-    try { v.src = url; } catch (_) { fin(0); }
-  });
-
-  // Sube un clip de animacion o una imagen. El servidor los guarda por hash del
-  // contenido, asi que volver a usar el mismo no cuesta nada.
-  const subirRecurso = async (url) => {
-    const r = await fetch(url);
-    const blob = await r.blob();
-    if (!blob || !blob.size) return null;
-    const resp = await fetchConTimeout(SERVIDOR + '/api/recurso', {
-      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
-    }, 120000);
-    if (!resp || !resp.ok) return null;
-    try { const j = await resp.json(); return j && j.id ? j : null; } catch (_) { return null; }
-  };
-
-  // Un trozo al servidor. El servidor los va concatenando sin mirar el tamano, asi
-  // que no hace falta que sean todos iguales.
-  const enviarTrozo = async (bytes, uploadId) => {
-    const fd = new FormData();
-    fd.append('chunk', new Blob([bytes]), 'chunk');
-    fd.append('uploadId', uploadId);
-    const r = await fetchConTimeout(SERVIDOR + '/api/upload-chunk', { method: 'POST', body: fd }, 120000);
-    return !!r && r.ok;
-  };
-
-  const iniciarSubida = async (nombre) => {
-    const init = await fetchConTimeout(SERVIDOR + '/api/upload-init', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nombre || 'video.mp4', totalChunks: 0 }),
-    }, 30000);
-    if (!init || !init.ok) return null;
-    try { return (await init.json()).uploadId || null; } catch (_) { return null; }
-  };
-
-  const cerrarSubida = async (uploadId) => {
-    const fin = await fetchConTimeout(SERVIDOR + '/api/upload-complete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }),
-    }, 60000);
-    return !!fin && fin.ok;
-  };
-
-  const TAM_TROZO = 8 * 1024 * 1024;
-
-  // El source se sube una sola vez por video: a partir de ahi todos los montajes
-  // trabajan sobre la copia en disco del servidor.
-  //
-  // Si ya tenemos el File en memoria se trocea con blob.slice, que es una vista.
-  // Si no, se transmite el objectURL en streaming con getReader(). Lo que NO se
-  // hace nunca es un response.blob() del video entero: con partidos de varios
-  // gigas eso deja la pagina sin memoria y la descarga se queda colgada sin
-  // llegar a empezar.
-  const asegurarFuenteEnServidor = async () => {
-    const nombre = (archivoCortes && archivoCortes.name) || (archivo && archivo.name) || 'video.mp4';
-    const fichero = (archivoCortes && typeof archivoCortes.slice === 'function' && archivoCortes.size)
-      ? archivoCortes
-      : ((archivo && typeof archivo.slice === 'function' && archivo.size) ? archivo : null);
-
-    if (fichero) {
-      const total = Math.max(1, Math.ceil(fichero.size / TAM_TROZO));
-      const uploadId = await iniciarSubida(nombre);
-      if (!uploadId) return false;
-      for (let i = 0; i < total; i++) {
-        const trozo = fichero.slice(i * TAM_TROZO, Math.min(fichero.size, (i + 1) * TAM_TROZO));
-        if (!(await enviarTrozo(trozo, uploadId))) return false;
-        const pct = Math.round((i + 1) / total * 100);
-        setProgresoDescarga(pct);
-        setAviso('Subiendo el video al servidor ' + pct + ' % (solo la primera vez)...');
-      }
-      return cerrarSubida(uploadId);
-    }
-
-    let respuesta = null;
-    try { respuesta = await fetch(videoUrlCortes || videoUrl); } catch (_) {}
-    if (!respuesta || !respuesta.ok || !respuesta.body) return false;
-    const uploadId = await iniciarSubida(nombre);
-    if (!uploadId) return false;
-    const lector = respuesta.body.getReader();
-    let partes = [];
-    let acumulado = 0;
-    let enviados = 0;
-    const vaciar = async () => {
-      const uno = new Uint8Array(acumulado);
-      let off = 0;
-      for (const p of partes) { uno.set(p, off); off += p.length; }
-      partes = [];
-      acumulado = 0;
-      return enviarTrozo(uno, uploadId);
-    };
-    for (;;) {
-      const { done, value } = await lector.read();
-      if (value && value.length) {
-        partes.push(value);
-        acumulado += value.length;
-        while (acumulado >= TAM_TROZO) {
-          if (!(await vaciar())) return false;
-          enviados++;
-          setAviso('Subiendo el video al servidor: ' + Math.round(acumulado * enviados / 1048576) + ' MB (solo la primera vez)...');
-        }
-      }
-      if (done) break;
-    }
-    if (acumulado > 0 && !(await vaciar())) return false;
-    return cerrarSubida(uploadId);
-  };
-
-  // Traduce las filas del Montaje a la lista de tramos que compone el servidor.
-  // Si hay algo que el servidor aun no sabe hacer (una transicion), devuelve el
-  // motivo y se usa la ruta de siempre.
-  const planParaElServidor = async (validas) => {
-    const baseSrc = videoUrlCortes || videoUrl;
-    if (!baseSrc) return { ok: false, motivo: 'no hay video base cargado' };
-    const tramos = [];
-    const subidos = new Map();
-    const asegurar = async (url) => {
-      if (subidos.has(url)) return subidos.get(url);
-      const r = await subirRecurso(url);
-      if (!r) return null;
-      const v = { id: r.id, ext: r.ext };
-      subidos.set(url, v);
-      return v;
-    };
-
-    for (const linea of validas) {
-      if (linea.tipo === 'transicion') return { ok: false, motivo: 'lleva transiciones' };
-      const nombre = linea.concepto || '';
-      if (linea.tipo === 'imagen' && linea.imagenUrl) {
-        const r = await asegurar(linea.imagenUrl);
-        if (!r) return { ok: false, motivo: 'no se pudo subir una imagen' };
-        tramos.push({ tipo: 'imagen', id: r.id, ext: r.ext, dur: 4, nombre });
-        continue;
-      }
-      if (linea.videoUrl) {
-        const r = await asegurar(linea.videoUrl);
-        if (!r) return { ok: false, motivo: 'no se pudo subir un clip' };
-        const d = await duracionDeClip(linea.videoUrl);
-        if (!(d > 0.1)) return { ok: false, motivo: 'no se pudo medir un clip' };
-        tramos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: d, nombre });
-        continue;
-      }
-      if (linea.inicio != null && linea.fin != null) {
-        const ini = Math.max(0, linea.inicio);
-        const fin = Math.max(ini + 0.5, linea.fin);
-        // Las animaciones van en medio del tramo: el base se parte en dos y en
-        // medio se encaja el clip, igual que hace el bucle de dibujo.
-        const anims = (capturas || [])
-          .filter(c => c && c.videoUrl && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin)
-          .map(c => ({ url: c.videoUrl, en: c.tiempo, dur: c.duracionAnim || 4 }))
-          .sort((a, b) => a.en - b.en);
-        let cursor = ini;
-        for (const a of anims) {
-          if (!(a.en > cursor && a.en < fin)) continue;
-          if (a.en - cursor > 0.02) tramos.push({ tipo: 'fuente', ini: cursor, fin: a.en, nombre });
-          const r = await asegurar(a.url);
-          if (!r) return { ok: false, motivo: 'no se pudo subir una animacion' };
-          tramos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: a.dur, nombre });
-          cursor = a.en;
-        }
-        if (fin - cursor > 0.02) tramos.push({ tipo: 'fuente', ini: cursor, fin, nombre });
-        continue;
-      }
-      return { ok: false, motivo: 'hay una fila sin contenido reconocible' };
-    }
-    if (!tramos.length) return { ok: false, motivo: 'no quedan tramos validos' };
-    return { ok: true, tramos };
-  };
-
-  const descargarDesdeServidor = async (validas, nombreArchivo) => {
-    const est = await estadoDelServidor();
-    if (!est) return { ok: false, motivo: 'el servidor no responde' };
-
-    // El fuente va primero a proposito: si esa subida falla o se atasca, mejor
-    // enterarse ya que haber subido antes los clips de las animaciones.
-    if (!est.fuente) {
-      setAviso('Subiendo el video al servidor, solo la primera vez...');
-      if (!(await asegurarFuenteEnServidor())) {
-        setAviso('');
-        return { ok: false, motivo: 'no se pudo subir el video al servidor' };
-      }
-      setAviso('');
-    }
-
-    const plan = await planParaElServidor(validas);
-    if (!plan.ok) return plan;
-
-    const t0 = performance.now();
-    const r = await fetchConTimeout(SERVIDOR + '/api/montaje', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ segmentos: plan.tramos, ancho: 1280, alto: 720 }),
-    }, 20 * 60 * 1000);
-    const ms = Math.round(performance.now() - t0);
-    if (!r || !r.ok) return { ok: false, motivo: 'el servidor no pudo componer el montaje' };
-    const blob = await r.blob();
-    if (!blob || blob.size < 2048) return { ok: false, motivo: 'el servidor devolvio un archivo vacio' };
-
-    descargarBlob(blob, nombreArchivo);
-    try { setUltimoVideo({ blob, nombre: nombreArchivo, mime: 'video/mp4', ext: 'mp4' }); } catch (_) {}
-    const contenido = Number(r.headers.get('x-montaje-contenido')) || 0;
-    setInformeDescarga('Montaje de ' + Math.round(contenido) + ' s compuesto por el servidor en '
-      + (ms / 1000).toFixed(1) + ' s reales (x' + (ms > 0 ? (contenido / (ms / 1000)).toFixed(1) : '?')
-      + ') | salida ' + Math.round(blob.size / 1024) + ' KB');
-    return { ok: true, ms, contenido };
-  };
-
-  const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null) => {
-    // Si el servidor esta en marcha se compone alli, que es mucho mas rapido.
-    // Cualquier fallo cae a la ruta de siempre sin perder nada.
-    if (await trimDisponible()) {
-      setDescargandoMontaje(true);
-      try {
-        const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
-        if (validas.length) {
-          const nombreArchivo = `${nombreBaseDe(nombre)}.mp4`;
-          const res = await descargarDesdeServidor(validas, nombreArchivo);
-          if (res && res.ok) {
-            setProgresoDescarga(0);
-            setDescargandoMontaje(false);
-            try { setAviso(''); } catch (_) {}
-            return;
-          }
-          console.warn('Ruta nativa no disponible:', res && res.motivo, '-> se usa la ruta de siempre');
-          try { setAviso(''); } catch (_) {}
-        }
-      } catch (e) {
-        console.warn('Fallo en la ruta nativa, se usa la de siempre:', e);
-      }
-      setProgresoDescarga(0);
-      setDescargandoMontaje(false);
-    }
-    await descargarLineas(lineas, nombre, false, false, basePreargada, true);
+  const descargarDesdeMontaje = async (lineas, nombre, basePreargada = null, destinoDisco = null) => {
+    // Primero la vía rápida (ffmpeg en el servidor). Si el servidor no está,
+    // el plan no encaja o algo falla, se sigue con la grabación por canvas de
+    // siempre: nunca se pierde la descarga.
+    try {
+      if (await descargarDesdeServidor(lineas, nombre, destinoDisco)) return;
+    } catch (_) {}
+    await descargarLineas(lineas, nombre, false, false, basePreargada, true, destinoDisco);
   };
 
   // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
@@ -2658,7 +3262,7 @@ rec.start(250);
                   setTimeout(fin, 900);
                 });
               }
-              try { await f0.el.play().catch(() => {}); } catch (_) {}
+              try { await playConTope(f0.el, 8000); } catch (_) {}
             } catch (_) {}
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
             try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
@@ -2817,7 +3421,7 @@ const terminar = () => {
                   setTimeout(fin, 900);
                 });
               }
-              try { await f0.el.play().catch(() => {}); } catch (_) {}
+              try { await playConTope(f0.el, 8000); } catch (_) {}
             } catch (_) {}
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
             try { ctx.drawImage(f0.el, 0, 0, w, h); } catch (_) {}
@@ -3126,9 +3730,12 @@ const terminar = () => {
   };
 
   const regenerarVideosAnim = async () => {
-    const lista = (capturas || []).filter(c => c && !c.videoUrl && Array.isArray(c.figuras) && c.figuras.length > 0 && (c.baseDataUrl || c.dataUrl));
-    if (!lista.length) { setAviso('No hay animaciones pendientes de generar'); return; }
+    // Regenera TODAS: las hechas antes van a 30 fps y dan tirones al
+    // descargarse (la descarga muestrea a 25); las nuevas van a 25 fps.
+    const lista = (capturas || []).filter(c => c && Array.isArray(c.figuras) && c.figuras.length > 0 && (c.baseDataUrl || c.dataUrl));
+    if (!lista.length) { setAviso('No hay animaciones que regenerar'); return; }
     if (exportando) { setAviso('Ocupado, espera a que termine'); return; }
+    animsRegenRef.current.clear();
     setExportando(true);
     setProgresoRegen(0);
     let ok = 0;
@@ -3255,7 +3862,7 @@ const terminar = () => {
                   setTimeout(fin, 600);
                 });
               }
-              await v.play().catch(() => {});
+              await playConTope(v, 8000);
             } catch (_) {}
             if (v.readyState < 2) {
               await new Promise(res => {
@@ -3843,18 +4450,35 @@ const terminar = () => {
   };
 
   const generarVideo = async (figurasFn, fondoDataUrl, w, h, onProgress) => {
+    // Con tope: una imagen que no carga ni falla dejaba la preparación
+    // colgada para siempre con el botón pillado al 0%.
     const cargarImg = (src) => new Promise((res, rej) => {
       const im = new Image();
-      im.onload = () => res(im);
-      im.onerror = rej;
+      let fin = false;
+      const ok = (v) => { if (fin) return; fin = true; res(v); };
+      const mal = (e) => { if (fin) return; fin = true; rej(e); };
+      im.onload = () => ok(im);
+      im.onerror = mal;
       im.src = src;
+      setTimeout(() => mal(new Error('timeout imagen')), 15000);
     });
     const fondo = await cargarImg(fondoDataUrl);
-    const totalFrames = 120;
-    const frameDuration = 1000 / 30;
+    // 25 fps, igual que muestrea la descarga: a 30 fps el re-muestreo 30→25
+    // hace un tirón rítmico cada 5 fotogramas.
+    const totalFrames = 100;
+    const frameDuration = 1000 / 25;
+    // Progreso sin re-render por fotograma (React durante la grabación
+    // compite con el dibujado y también mete tirones).
+    let ultimoPT = 0;
+    const emitP = (p) => {
+      const ahora = performance.now();
+      if (p < 100 && ahora - ultimoPT < 240) return;
+      ultimoPT = ahora;
+      if (onProgress) onProgress(p);
+    };
     const cuadros = [];
     for (let i = 0; i <= totalFrames; i++) {
-      const t = Math.min(4000, i * 33);
+      const t = Math.min(4000, i * frameDuration);
       const partes = figurasFn(t) || '';
       let imgCuadro = null;
       if (partes) {
@@ -3866,14 +4490,14 @@ const terminar = () => {
       }
       cuadros.push(imgCuadro);
       if (imgCuadro) { try { imgCuadro.decode && await imgCuadro.decode().catch(() => {}); } catch (_) {} }
-      if (onProgress) onProgress(Math.round((i / totalFrames) * 50));
+      emitP(Math.round((i / totalFrames) * 50));
       await new Promise(r => setTimeout(r, 0));
     }
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d');
-    const stream = canvas.captureStream(30);
+    const stream = canvas.captureStream(25);
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
     const chunks = [];
@@ -3883,24 +4507,29 @@ const terminar = () => {
       rec.onerror = rejRec;
       rec.start();
       let idx = 0;
+      // Compensa el drift de setTimeout: si un tick se atrasa, el siguiente
+      // se recorta en lugar de acumular → fotogramas cada 40 ms reales.
+      let proximoAt = performance.now() + frameDuration;
       const drawNext = () => {
         try { ctx.drawImage(fondo, 0, 0, w, h); } catch (_) {}
         if (idx < cuadros.length && cuadros[idx]) {
           try { ctx.drawImage(cuadros[idx], 0, 0, w, h); } catch (_) {}
         }
         idx++;
-        if (onProgress) onProgress(50 + Math.round((idx / (totalFrames + 1)) * 45));
+        emitP(50 + Math.round((idx / (totalFrames + 1)) * 45));
         if (idx <= totalFrames) {
-          setTimeout(drawNext, frameDuration);
+          const retraso = Math.max(0, proximoAt - performance.now());
+          proximoAt += frameDuration;
+          setTimeout(drawNext, retraso);
         } else {
-          if (onProgress) onProgress(95);
+          emitP(95);
           try { rec.stop(); } catch (e) { rejRec(e); }
         }
       };
       drawNext();
     });
     if (onProgress) onProgress(100);
-    return { url: URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), duracion: (totalFrames + 1) / 30 };
+    return { url: URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), duracion: (totalFrames + 1) / 25 };
   };
 
   const animarElipses = async () => {
@@ -4115,15 +4744,6 @@ const terminar = () => {
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      {/* Marca de version, visible dentro de la pagina. Si al recargar NO ves
-          la etiqueta [F0] arriba a la derecha, tu pestana sigue con el bundle
-          viejo y cualquier medicion de tiempos es falsa. */}
-      <div style={{ position: 'fixed', top: '4px', right: '8px', zIndex: 9999,
-                    background: '#facc15', color: '#000', fontWeight: 800,
-                    fontSize: '0.8rem', padding: '2px 8px', borderRadius: '6px',
-                    fontFamily: 'Inter, sans-serif', pointerEvents: 'none' }}>
-        F0
-      </div>
       <div style={{ display: 'flex', gap: '0.5rem', padding: '1.5rem 2rem 0', borderBottom: '1px solid #1e293b' }}>
         {hojas.map(h => (
           <button
@@ -4522,17 +5142,17 @@ const terminar = () => {
                 if (!f || !tgt) return;
                 const url = URL.createObjectURL(f);
                 if (tgt.kind === 'new') {
-                  setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url }]);
+                  setVideosBD(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000000), nombre: f.name, videoUrl: url, blob: f }]);
                 } else                 if (tgt.kind === 'arc') {
                   const nid = Date.now() + Math.floor(Math.random() * 1000000);
-                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url, oculto: true }]);
+                  setVideosBD(prev => [...prev, { id: nid, nombre: f.name, videoUrl: url, blob: f, oculto: true }]);
                   setArchivosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoRef: { kind: 'bd', id: nid } } : x));
                 } else if (tgt.kind === 'bd') {
-                  setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name } : x));
+                  setVideosBD(prev => prev.map(x => x.id === tgt.id ? { ...x, videoUrl: url, key: null, nombre: f.name, blob: f } : x));
                 } else {
                   setCapturas(prev => prev.map(c => c && c.id === tgt.id ? { ...c, videoUrl: url } : c));
                 }
-                cargarVideoEnCortes(url, f.name);
+                cargarVideoEnCortes(url, f.name, f);
                 bdVideoTargetRef.current = null;
               }}
             />
@@ -4568,7 +5188,7 @@ const terminar = () => {
                             setArchivosBD(prev => prev.map(x => x.id === a.id ? { ...x, videoRef: { kind, id: nid } } : x));
                             if (kind === 'bd') {
                               const vv = videosBD.find(x => x.id === nid);
-                              if (vv) cargarVideoEnCortes(vv.videoUrl, vv.nombre || 'video');
+                              if (vv) cargarVideoEnCortes(vv.videoUrl, vv.nombre || 'video', vv.blob);
                             } else {
                               const cc = (capturas || []).find(x => x && x.id === nid);
                               if (cc) cargarVideoEnCortes(cc.videoUrl, `Animación ${formatoTiempo(cc.tiempo ?? 0)}`);
@@ -5831,7 +6451,7 @@ const terminar = () => {
             <button
               onClick={() => regenerarVideosAnim()}
               disabled={progresoRegen !== null}
-              title="Generar los vídeos de animación que falten"
+              title="Regenerar todos los vídeos de animación a 25 fps (los de antes iban a 30 y daban tirones)"
               style={{ background: '#8b5cf6', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: progresoRegen !== null ? 'wait' : 'pointer', opacity: progresoRegen !== null ? 0.7 : 1 }}
             >
               {progresoRegen !== null ? `Generando ${progresoRegen}%` : 'Regenerar vídeos'}
@@ -5886,7 +6506,23 @@ const terminar = () => {
                     <button
                       onClick={async () => {
                         setShowModalDescarga(false);
-                        await descargarDesdeMontaje(marcadas, null);
+                        // Se pide destino ANTES de empezar. Si el navegador lo
+                        // soporta, el montage se escribe en disco segun se
+                        // graba y no se guarda entero en memoria. Si no, se cae
+                        // a la via de siempre.
+                        const nombreSugerido = (() => {
+                          try {
+                            const n = (videosBD && videosBD[0] && videosBD[0].nombre) ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : '';
+                            const m = n || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : '') || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : '') || 'montaje';
+                            return m;
+                          } catch (_) { return 'montaje'; }
+                        })();
+                        const destino = await pedirFicheroEnDisco(nombreSugerido, mimeDescarga().ext);
+                        // Sin destino en disco el montaje entero iría a memoria
+                        // (chunks + Blob + subida + reindexado): en montajes de
+                        // varios minutos eso cuelga la pestaña. Mejor avisar.
+                        if (!destino) { setAviso('Descarga cancelada: elige un destino para guardar el montaje.'); return; }
+                        await descargarDesdeMontaje(marcadas, null, null, destino);
                       }}
                       disabled={descargandoMontaje}
                       style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
@@ -5914,6 +6550,16 @@ const terminar = () => {
             {informeDescarga && (
               <div style={{ marginTop: '0.4rem', color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'Inter, sans-serif', lineHeight: 1.35 }}>
                 {informeDescarga}
+              </div>
+            )}
+            {textoDiag && (
+              <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
+                {textoDiag}
+              </div>
+            )}
+            {migaMortal && (
+              <div style={{ marginTop: '0.2rem', color: '#f59e0b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
+                Último intento se quedó en: {migaMortal}
               </div>
             )}
             <button
@@ -6024,6 +6670,23 @@ const terminar = () => {
                             <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#94a3b8' }}>{formatoTiempo(capEd.tiempo)}</span>
                           )}
                         </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  // Lo que la descarga ve en esta fila: mismo rango que el montaje.
+                  if (fila.inicio == null || fila.fin == null || fila.videoUrl || fila.imagenUrl || fila.tipo === 'transicion' || fila.tipo === 'imagen') return null;
+                  const ini = Math.max(0, fila.inicio);
+                  const fin = Math.max(ini + 0.5, fila.fin);
+                  const lista = (capturas || []).filter(c => c && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin && ((Array.isArray(c.figuras) && c.figuras.length > 0) || c.dataUrl || c.baseDataUrl));
+                  if (!lista.length) return null;
+                  return (
+                    <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0, alignItems: 'center' }}>
+                      {lista.map(c => (
+                        <span key={c.id} title={c.videoUrl ? 'Animación con vídeo: saldrá en la descarga' : 'Dibujo SIN vídeo generado: pulsa Regenerar vídeos'} style={{ fontSize: '0.65rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', color: c.videoUrl ? '#4ade80' : '#f87171', border: `1px solid ${c.videoUrl ? '#4ade80' : '#f87171'}`, borderRadius: '6px', padding: '0.15rem 0.4rem', whiteSpace: 'nowrap' }}>
+                          {c.videoUrl ? `🎬 ${formatoTiempo(c.tiempo)}` : `⚠️ ${formatoTiempo(c.tiempo)}`}
+                        </span>
                       ))}
                     </div>
                   );

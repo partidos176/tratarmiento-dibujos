@@ -76,6 +76,10 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    // strictPort: si el 5173 esta ocupado, Vite avisa y para. Sin esto se
+    // cambiaba al 5174 en silencio y abrir el 5173 no mostraba nada, que es
+    // justo lo que hacia pensar que la app no arrancaba.
+    strictPort: true
   }
 });
