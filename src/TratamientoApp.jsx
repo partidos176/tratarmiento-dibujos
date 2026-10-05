@@ -5157,7 +5157,48 @@ const terminar = () => {
                             />
             )}
             <button
-                            onClick={() => setCapturas(prev => prev.filter(x => x.id !== c.id))}
+                            onClick={() => {
+                              const idBor = c.id;
+                              const urlBor = c.videoUrl;
+                              setCapturas(prev => prev.filter(x => x.id !== idBor));
+                              // La vista previa guarda su propia copia de animaciones:
+                              // si no se purga, la borrada se sigue viendo.
+                              try {
+                                setPreviewMontaje(prev => {
+                                  if (!prev) return prev;
+                                  if (prev.src === urlBor) return null;
+                                  if (!prev.anims || !prev.anims.length) return prev;
+                                  const quedan = prev.anims.filter(a => String(a.id ?? a.src) !== String(idBor) && a.src !== urlBor);
+                                  return quedan.length === prev.anims.length ? prev : { ...prev, anims: quedan };
+                                });
+                              } catch (_) {}
+                              try {
+                                animMostradasRef.current.delete(String(idBor));
+                                if (urlBor) animMostradasRef.current.delete(String(urlBor));
+                                if (animActualRef.current && (String(animActualRef.current.id ?? animActualRef.current.src) === String(idBor) || animActualRef.current.src === urlBor)) {
+                                  animActualRef.current = null;
+                                  limpiarTimerAnim();
+                                  setFasePreview('base');
+                                }
+                              } catch (_) {}
+                              try { animsRegenRef.current.delete(idBor); } catch (_) {}
+                              try {
+                                const meta = JSON.parse(localStorage.getItem('preview_anim') || 'null');
+                                if (meta && Array.isArray(meta.anims)) {
+                                  const rest = meta.anims.filter(m => String(m.capturaId) !== String(idBor));
+                                  if (rest.length !== meta.anims.length) {
+                                    if (rest.length) localStorage.setItem('preview_anim', JSON.stringify({ ...meta, anims: rest }));
+                                    else localStorage.removeItem('preview_anim');
+                                  }
+                                }
+                              } catch (_) {}
+                              try {
+                                if (urlBor && urlBor.startsWith('blob:')) {
+                                  const enUso = (filasMontaje || []).some(f => f && (f.videoUrl === urlBor || f.imagenUrl === urlBor));
+                                  if (!enUso) URL.revokeObjectURL(urlBor);
+                                }
+                              } catch (_) {}
+                            }}
                             title="Eliminar captura"
                             style={{ position: 'absolute', top: '4px', right: '4px', width: '22px', height: '22px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.9rem', lineHeight: '22px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
                           >
@@ -6663,7 +6704,41 @@ const terminar = () => {
               Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
             <button
-              onClick={() => { setFilasMontaje([]); setLineasSelMontaje({}); setPreviewMontaje(null); setCortes([]); setDuracionCortes({}); setNombreCortes({}); setAccionCortes({}); setFiltroAccionCortes(''); if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes); setVideoUrlCortes(''); setCapturas([]); }}
+              onClick={() => {
+                // Limpiar lo deja TODO a cero en esta hoja: filas, selección,
+                // vista previa (pausada y reseteada), cortes, vídeo de cortes
+                // cargado, informe y avisos. No toca otras hojas (archivo,
+                // vídeos) ni el servidor.
+                try { if (previewVideoRef.current) previewVideoRef.current.pause(); } catch (_) {}
+                try { limpiarTimerAnim(); } catch (_) {}
+                try { animActualRef.current = null; } catch (_) {}
+                try { animMostradasRef.current.clear(); } catch (_) {}
+                try { deseaPlayPreviewRef.current = false; } catch (_) {}
+                try { retomarEnRef.current = null; } catch (_) {}
+                try { prevTPreviewRef.current = null; } catch (_) {}
+                try { localStorage.removeItem('preview_anim'); } catch (_) {}
+                setFasePreview('base');
+                setPreviewT(null);
+                setPreviewDur(0);
+                setPreviewMontaje(null);
+                setFilasMontaje([]);
+                setLineasSelMontaje({});
+                setFilaSelMontaje(null);
+                setSelPeriodoMontaje({});
+                setCortes([]);
+                setDuracionCortes({});
+                setNombreCortes({});
+                setAccionCortes({});
+                setFiltroAccionCortes('');
+                setArchivoCortes(null);
+                if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
+                setVideoUrlCortes('');
+                setCapturas([]);
+                setInformeDescarga('');
+                setShowTransiciones(false);
+                setShowModalDescarga(false);
+                setAviso(null);
+              }}
               style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
               Limpiar
