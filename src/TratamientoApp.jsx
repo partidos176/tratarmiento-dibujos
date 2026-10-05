@@ -1893,6 +1893,7 @@ const bdVideoTargetRef = useRef(null);
     const miDescarga = ++descargaSeqRef.current;
     let entregaOk = false;
     try { cancelarDescargaRef.current = false; } catch (_) {}
+    try { setInformeDescarga(''); } catch (_) {}
     try {
       // El servidor siempre devuelve MP4: si este navegador solo sabe grabar
       // WebM, el nombre del fichero guardado no cuadraría.
@@ -2105,6 +2106,7 @@ const bdVideoTargetRef = useRef(null);
       const miDescarga = ++descargaSeqRef.current;
       let entregaOk = false;
       try { cancelarDescargaRef.current = false; } catch (_) {}
+      try { setInformeDescarga(''); } catch (_) {}
       diagFase('Iniciando descarga…');
       diagIniciar();
       const baseSrc = videoUrlCortes || videoUrl;
