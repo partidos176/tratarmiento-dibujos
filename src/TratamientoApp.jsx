@@ -2317,7 +2317,7 @@ const bdVideoTargetRef = useRef(null);
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(url), 5000);
           }
-          try { setAviso(cierreForzoso ? 'La grabación se atascó; se ha descargado lo grabado hasta el atasco.' : (avisoPrepRef.current || '')); } catch (_) {}
+          try { setAviso(avisoPrepRef.current || ''); } catch (_) {}
           if (optimizarDespues) {
             try { await optimizarUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
@@ -2357,7 +2357,7 @@ const bdVideoTargetRef = useRef(null);
           const t0Entrega = performance.now();
           entregaOk = true;
           try { setProgresoDescarga(100); } catch (_) {}
-          try { setAviso(cierreForzoso ? 'La grabación se atascó; se ha descargado lo grabado hasta el atasco.' : (avisoPrepRef.current || '')); } catch (_) {}
+          try { setAviso(avisoPrepRef.current || ''); } catch (_) {}
           try { tEntregaMs = performance.now() - t0Entrega; } catch (_) {}
           finOk = true;
           try { resolve(); } catch (_) {}
@@ -2822,7 +2822,6 @@ else {
                 setTimeout(() => URL.revokeObjectURL(url), 5000);
               }
             } catch (_) {}
-            try { setAviso('La grabación se atascó y se ha forzado el cierre: revisa el vídeo descargado.'); } catch (_) {}
             finOk = true;
             try { resolve(); } catch (_) {}
             try { setDescargandoMontaje(false); } catch (_) {}
