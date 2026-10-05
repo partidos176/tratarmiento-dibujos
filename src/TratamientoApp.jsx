@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './persistencia';
+import { guardarSesion, guardarVideosBD, borrarTodoLocal } from './persistencia';
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 import { fetchFile } from '@ffmpeg/util';
+
+// Al recargar se empieza de cero en todas las hojas: se borran las claves
+// locales ANTES de que los estados las lean (esto corre al cargar el bundle,
+// previo al primer render). El IndexedDB se vacía en el primer efecto.
+// Se conserva diag_migaja: es el parte post-mortem y se lee al arrancar.
+try {
+  for (const k of ['bd_archivos', 'bd_videos', 'fm_sesion', 'cap_sesion', 'preview_anim']) localStorage.removeItem(k);
+} catch (_) {}
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -511,51 +519,12 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [videoUrl]);
+  // Al recargar se empieza de cero en todas las hojas: no se restaura nada,
+  // solo se vacía lo persistido y se liberan los flags para trabajar.
   useEffect(() => {
     (async () => {
-      try {
-        const s = await idbLeer();
-        if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
-          setCapturas(prev => {
-            const prevById = new Map((prev || []).map(c => [c && c.id, c]));
-            return s.capturas.map(c => {
-              const p = prevById.get(c && c.id);
-              if (p && p.videoUrl && !c.videoUrl) return { ...c, videoUrl: p.videoUrl, duracionAnim: p.duracionAnim };
-              return c;
-            });
-          });
-          try { await aplicarCortes(s); } catch (_) {}
-          if (Array.isArray(s.figuras)) setFiguras(normalizarFiguras(s.figuras));
-          const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
-          if (sel) {
-            setCapturaSeleccionada(prevSel => {
-              if (prevSel && prevSel.id === sel.id && prevSel.videoUrl && !sel.videoUrl) {
-                return { ...sel, videoUrl: prevSel.videoUrl, duracionAnim: prevSel.duracionAnim };
-              }
-              return sel;
-            });
-          } else {
-            setCapturaSeleccionada(null);
-          }
-          setCapturaGuardada(null);
-          setImgDim(null);
-          setFiguraSeleccionada(null);
-        }
-        try {
-          const vp = await idbLeerKV(VIDEO_PP_KEY);
-          if (vp && vp.blob && vp.blob.size) {
-            const url = URL.createObjectURL(vp.blob);
-            videoGuardadoRef.current.ppal = url;
-            setArchivo({ name: vp.nombre || 'video', size: vp.blob.size, blob: vp.blob });
-            setVideoUrl(url);
-            setProgreso(0);
-          }
-        } catch (_) {}
-        try {
-          await idbPonerKV(VIDEO_CORTES_KEY, null);
-        } catch (_) {}
-      } catch (_) {}
-      sesionListaRef.current = true;
+      try { await borrarTodoLocal(); } catch (_) {}
+      try { sesionListaRef.current = true; } catch (_) {}
     })();
   }, []);
 
@@ -753,18 +722,7 @@ const bdVideoTargetRef = useRef(null);
   }, [hoja]);
 
   useEffect(() => {
-    cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
-      if (fm.length > 0) setFilasMontaje(fm.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : (fm.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length) }));
-      if (caps.length > 0) {
-        setCapturas(caps);
-        for (const c of caps) {
-          if (c && c.videoUrl && c.videoUrl.startsWith('blob:')) {
-            videoBlobADataUrl(c.videoUrl).then(r => { if (r) videoDataUrlCacheRef.current.set(c.videoUrl, r); }).catch(() => {});
-          }
-        }
-      }
-      capsListasRef.current = true;
-    }).catch(() => {});
+    try { capsListasRef.current = true; } catch (_) {}
   }, []);
 
   useEffect(() => {
@@ -1248,8 +1206,58 @@ const bdVideoTargetRef = useRef(null);
     </select>
   );
 
-  const abrirPreviewLinea = (fila, tIr, autoPlay = true) => {
-    const src = videoUrlCortes || videoUrl;
+  // Borrar una captura del todo. Quitar solo la foto dejaba un fantasma
+  // invisible (con vídeo y tiempo pero sin imagen) que se seguía viendo en
+  // la vista previa y en la descarga sin aparecer en ninguna hoja.
+  const eliminarCaptura = (idBor) => {
+    const victima = (capturas || []).find(x => x && x.id === idBor);
+    const urlBor = victima ? victima.videoUrl : null;
+    const tBor = victima ? victima.tiempo : null;
+    setCapturas(prev => prev.filter(x => x.id !== idBor));
+    try {
+      setPreviewMontaje(prev => {
+        if (!prev) return prev;
+        if (prev.src === urlBor) return null;
+        if (!prev.anims || !prev.anims.length) return prev;
+        const quedan = prev.anims.filter(a => String(a.id ?? a.src) !== String(idBor) && a.src !== urlBor);
+        return quedan.length === prev.anims.length ? prev : { ...prev, anims: quedan };
+      });
+    } catch (_) {}
+    try {
+      animMostradasRef.current.delete(String(idBor));
+      if (urlBor) animMostradasRef.current.delete(String(urlBor));
+      if (animActualRef.current && (String(animActualRef.current.id ?? animActualRef.current.src) === String(idBor) || animActualRef.current.src === urlBor)) {
+        animActualRef.current = null;
+        limpiarTimerAnim();
+        setFasePreview('base');
+      }
+    } catch (_) {}
+    try { animsRegenRef.current.delete(idBor); } catch (_) {}
+    try {
+      const meta = JSON.parse(localStorage.getItem('preview_anim') || 'null');
+      if (meta && Array.isArray(meta.anims)) {
+        const rest = meta.anims.filter(m => String(m.capturaId) !== String(idBor));
+        if (rest.length !== meta.anims.length) {
+          if (rest.length) localStorage.setItem('preview_anim', JSON.stringify({ ...meta, anims: rest }));
+          else localStorage.removeItem('preview_anim');
+        }
+      }
+    } catch (_) {}
+    try {
+      if (urlBor && urlBor.startsWith('blob:')) {
+        const enUso = (filasMontaje || []).some(f => f && (f.videoUrl === urlBor || f.imagenUrl === urlBor));
+        if (!enUso) URL.revokeObjectURL(urlBor);
+      }
+    } catch (_) {}
+    try {
+      if (tBor != null) {
+        const quedan = (capturas || []).filter(x => x && x.id !== idBor && x.tiempo === tBor).length;
+        if (quedan > 0) setAviso(`Quedan ${quedan} animaciones con el mismo tiempo: bórralas también si no deben salir en los cortes.`);
+      }
+    } catch (_) {}
+  };
+
+  const abrirPreviewLinea = (fila, tIr, autoPlay = true) => {    const src = videoUrlCortes || videoUrl;
     if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
     const anims = (capturas || [])
       .filter(c => c && c.videoUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin)
@@ -3639,12 +3647,7 @@ const terminar = () => {
   };
 
   useEffect(() => {
-    cargarVideosBD().then(v => {
-          const vivos = (v || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin));
-          if (vivos.length > 0) setVideosBD(vivos);
-          bdCargadoRef.current = true;
-        });
-        setVideosBD(prev => (prev || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin)));
+    try { bdCargadoRef.current = true; } catch (_) {}
   }, []);
 
   useEffect(() => {
@@ -5173,57 +5176,7 @@ const terminar = () => {
                             />
             )}
             <button
-                            onClick={() => {
-                              const idBor = c.id;
-                              const urlBor = c.videoUrl;
-                              const tBor = c.tiempo;
-                              setCapturas(prev => prev.filter(x => x.id !== idBor));
-                              // Las gemelas (mismo tiempo) se siguen enganchando a los
-                              // cortes: se avisa para borrarlas también si sobran.
-                              try {
-                                if (tBor != null) {
-                                  const quedan = (capturas || []).filter(x => x && x.id !== idBor && x.tiempo === tBor).length;
-                                  if (quedan > 0) setAviso(`Quedan ${quedan} animaciones con el mismo tiempo: bórralas también si no deben salir en los cortes.`);
-                                }
-                              } catch (_) {}
-                              // La vista previa guarda su propia copia de animaciones:
-                              // si no se purga, la borrada se sigue viendo.
-                              try {
-                                setPreviewMontaje(prev => {
-                                  if (!prev) return prev;
-                                  if (prev.src === urlBor) return null;
-                                  if (!prev.anims || !prev.anims.length) return prev;
-                                  const quedan = prev.anims.filter(a => String(a.id ?? a.src) !== String(idBor) && a.src !== urlBor);
-                                  return quedan.length === prev.anims.length ? prev : { ...prev, anims: quedan };
-                                });
-                              } catch (_) {}
-                              try {
-                                animMostradasRef.current.delete(String(idBor));
-                                if (urlBor) animMostradasRef.current.delete(String(urlBor));
-                                if (animActualRef.current && (String(animActualRef.current.id ?? animActualRef.current.src) === String(idBor) || animActualRef.current.src === urlBor)) {
-                                  animActualRef.current = null;
-                                  limpiarTimerAnim();
-                                  setFasePreview('base');
-                                }
-                              } catch (_) {}
-                              try { animsRegenRef.current.delete(idBor); } catch (_) {}
-                              try {
-                                const meta = JSON.parse(localStorage.getItem('preview_anim') || 'null');
-                                if (meta && Array.isArray(meta.anims)) {
-                                  const rest = meta.anims.filter(m => String(m.capturaId) !== String(idBor));
-                                  if (rest.length !== meta.anims.length) {
-                                    if (rest.length) localStorage.setItem('preview_anim', JSON.stringify({ ...meta, anims: rest }));
-                                    else localStorage.removeItem('preview_anim');
-                                  }
-                                }
-                              } catch (_) {}
-                              try {
-                                if (urlBor && urlBor.startsWith('blob:')) {
-                                  const enUso = (filasMontaje || []).some(f => f && (f.videoUrl === urlBor || f.imagenUrl === urlBor));
-                                  if (!enUso) URL.revokeObjectURL(urlBor);
-                                }
-                              } catch (_) {}
-                            }}
+                            onClick={() => eliminarCaptura(c.id)}
                             title="Eliminar captura"
                             style={{ position: 'absolute', top: '4px', right: '4px', width: '22px', height: '22px', background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.9rem', lineHeight: '22px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
                           >
@@ -6829,13 +6782,9 @@ const terminar = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setCapturas(prev => {
-                                const t = prev.find(c => c.id === capEd.id);
-                                if (t && t.videoUrl) return prev.map(c => c.id === capEd.id ? { ...c, dataUrl: null, baseDataUrl: null, imagenEditada: null } : c);
-                                return prev.filter(c => c.id !== capEd.id);
-                              });
+                              eliminarCaptura(capEd.id);
                             }}
-                            title="Borrar foto"
+                            title="Borrar animación"
                             style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', background: '#dc2626', border: 'none', borderRadius: '5px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', lineHeight: '18px', textAlign: 'center', cursor: 'pointer', padding: '0' }}
                           >×</button>
                           </div>
