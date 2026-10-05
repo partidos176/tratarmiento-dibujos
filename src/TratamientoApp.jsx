@@ -2535,7 +2535,7 @@ else {
             const now = performance.now();
             const dt = (now - lastFrameTime) / 1000;
             lastFrameTime = now;
-            const dtC = Math.min(Math.max(dt, 0), 0.1); // recorta saltos tras pausas
+            const dtC = Math.min(Math.max(dt, 0), 0.5); // recorta saltos tras pausas sin arrastrar con ticks lentos
             if (segElapsed === 0) {
               segT0Wall = Date.now();
               if (seg.kind) {
@@ -2702,18 +2702,23 @@ else {
               }
             }
             // Vía WebCodecs: el fotograma ya dibujado va al codificador con
-            // clave cada 1,2 s. Con await hay backpressure (si el codificador
-            // no da abasto se saltan ticks: fotograma congelado, memoria sana).
+            // clave cada 1,2 s. SIN await: esperar al codificador/disco en
+            // cada tick arrastraba el bucle (dt recortado) y la grabación se
+            // alargaba hasta el cierre forzoso. Solo va uno en vuelo: si el
+            // anterior no ha terminado se salta el fotograma (congelado).
             if (grabWC) {
-              const gwc = grabWC;
-              try { await alimentarWC(gwc); }
-              catch (e) {
-                gwc.fallos = (gwc.fallos || 0) + 1;
-                if (gwc.fallos > 10 && !terminado) {
-                  try { setAviso('El codificador falló; se cierra con lo grabado.'); } catch (_) {}
-                  try { terminar(); } catch (_) {}
+              try {
+                if (!grabWC.ocupado) {
+                  grabWC.ocupado = true;
+                  alimentarWC(grabWC).catch((e) => {
+                    grabWC.fallos = (grabWC.fallos || 0) + 1;
+                    if (grabWC.fallos > 10 && !terminado) {
+                      try { setAviso('El codificador falló; se cierra con lo grabado.'); } catch (_) {}
+                      try { terminar(); } catch (_) {}
+                    }
+                  }).finally(() => { try { grabWC.ocupado = false; } catch (_) {} });
                 }
-              }
+              } catch (_) {}
             }
             const prog = Math.min(99, Math.round(((completado + (currentSeg < segsOk.length ? posContenido(segsOk[currentSeg]) : 0)) / Math.max(0.1, totalDur)) * 100));
             if (prog !== lastProgRef.current) { lastProgRef.current = prog; setProgresoDescarga(prog); }
@@ -2723,10 +2728,11 @@ else {
           }
 };
         // Perro guardián: los segmentos acaban por reloj, así que si pasado
-        // el total + 60 s de margen sigue grabando es que algo se ha atascado
+        // el total + margen sigue grabando es que algo se ha atascado
         // (pestaña en segundo plano, codificador parado). Se fuerza el cierre
-        // para no dejar el botón pillado; sale parcial con aviso.
-        const margenMs = Number.isFinite(totalDur) && totalDur > 0 ? totalDur * 1000 + 60000 : 180000;
+        // para no dejar el botón pillado; sale parcial con aviso. El margen
+        // crece con la duración: en máquinas lentas el bucle va bajo 25 fps.
+        const margenMs = Number.isFinite(totalDur) && totalDur > 0 ? totalDur * 1000 + Math.max(60000, totalDur * 250) : 180000;
         try {
           setTimeout(() => {
             if (!terminado) {
