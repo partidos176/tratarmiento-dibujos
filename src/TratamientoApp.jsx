@@ -2273,6 +2273,10 @@ const bdVideoTargetRef = useRef(null);
               } catch (_) {}
               diag.reindexMs = Math.round(performance.now() - tRi);
             }
+            // Sin segunda fase pendiente (recortó el servidor o no hay
+            // reindexado), la entrega va a escala completa: antes se quedaba
+            // en 50% y el 100% no se veía nunca.
+            try { setOptimaEnDosFases(false); } catch (_) {}
             try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
             // Informe con el desglose de fases. Se compone aqui porque el trim y el
             // reindexado ocurren despues del bucle: mostrarlo antes daria un total
@@ -2760,6 +2764,7 @@ else {
       }
       setDescargandoMontaje(false);
       setProgresoDescarga(0);
+      try { setOptimaEnDosFases(false); } catch (_) {}
       diagParar();
     }
   };
