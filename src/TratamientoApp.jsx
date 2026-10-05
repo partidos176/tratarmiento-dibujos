@@ -453,13 +453,17 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     if (!videoUrl || typeof videoUrl !== 'string' || !videoUrl.startsWith('blob:')) return;
     if (videoGuardadoRef.current.ppal === videoUrl) return;
     videoGuardadoRef.current.ppal = videoUrl;
+    // El nombre se captura AHORA, con el videoUrl de este render: leer
+    // `archivo` tras el fetch (de ~1 GB, tarda un minuto) emparejaba los
+    // bytes con un nombre ya cambiado y envenenaba la caché del servidor.
+    const nombreGuardado = (archivo && archivo.name) || 'video';
     let cancelado = false;
     (async () => {
       try {
         const r = await fetch(videoUrl);
         const b = await r.blob();
         if (cancelado || !b || !b.size) return;
-        await idbPonerKV(VIDEO_PP_KEY, { blob: b, nombre: (archivo && archivo.name) || 'video' });
+        await idbPonerKV(VIDEO_PP_KEY, { blob: b, nombre: nombreGuardado });
       } catch (_) {}
     })();
     return () => { cancelado = true; };
@@ -1206,7 +1210,10 @@ const bdVideoTargetRef = useRef(null);
         if (val === '__file__') { bdVideoTargetRef.current = { kind, id }; bdVideoRef.current?.click(); return; }
         if (kind === 'bd') {
           const vv = videosBD.find(x => x.videoUrl === val);
-          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null, blob: (vv && vv.blob) || null } : x));
+          // Nombre, URL y blob siempre del mismo vídeo: si la celda apunta a
+          // la URL de otro registro y se conserva el nombre viejo, la fuente
+          // que se sube al servidor lleva bytes de uno y nombre de otro.
+          setVideosBD(prev => prev.map(x => x.id === id ? { ...x, videoUrl: val, key: null, nombre: (vv && vv.nombre) || x.nombre, blob: (vv && vv.blob) || null } : x));
           cargarVideoEnCortes(val, (vv && vv.nombre) || 'video', vv && vv.blob);
         } else {
           setCapturas(prev => prev.map(c => c && c.id === id ? { ...c, videoUrl: val } : c));
@@ -1532,6 +1539,16 @@ const bdVideoTargetRef = useRef(null);
       rangos[rangos.length - 1][1] = segs.length;
     }
     const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
+    // Si hay animaciones en la hoja pero ninguna cae en los recortes, saldría
+    // una descarga sin animaciones sin explicación: se avisa para revisar
+    // sus tiempos. Con que una caiga, silencio (lo normal).
+    try {
+      const nAnimsHoja = (capturas || []).filter(c => c && c.videoUrl && c.tiempo != null).length;
+      const nAnimsUsadas = segs.filter(s => s && s.esAnim).length;
+      if (nAnimsHoja > 0 && nAnimsUsadas === 0 && (validas || []).length > 1) {
+        animsAvisos.push(`${nAnimsHoja} animaciones fuera de los recortes marcados: no salen en la descarga. Revisa sus tiempos.`);
+      }
+    } catch (_) {}
     // Sin clones: las transiciones comparten UN solo elemento reutilizado
     // (se crea al arrancar la primera y se re-posiciona en cada una). Crear
     // un clon por transición (26 en un montaje típico) con un seek cada uno
@@ -1883,7 +1900,11 @@ const bdVideoTargetRef = useRef(null);
             tLecturaMs = performance.now() - tLec;
             if (!blob) return false;
           }
-          setAviso('Subiendo el vídeo de partida al servidor…');
+          // Se enseña qué hay en caché y qué se sube: si no coinciden, la
+          // subida de GB es esperable una vez; si se repite siempre, la
+          // caché tiene otro vídeo y hay que revisarlo.
+          const mb = (n) => (Number(n) > 0 ? Math.round(Number(n) / 1048576) + ' MB' : '?');
+          setAviso(`Subiendo el vídeo de partida al servidor (${mb(blob.size)}; en caché: ${salud.cachedName || 'vacío'} ${mb(salud.cachedSize)})…`);
           const tSub = performance.now();
           try {
             await subirFuenteAlServidor(blob, fuente.nombre, (p) => setProgresoDescarga(Math.round(p * 35)));
@@ -6722,23 +6743,6 @@ const terminar = () => {
                             <span style={{ fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.6rem', color: '#94a3b8' }}>{formatoTiempo(capEd.tiempo)}</span>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-                {(() => {
-                  // Lo que la descarga ve en esta fila: mismo rango que el montaje.
-                  if (fila.inicio == null || fila.fin == null || fila.videoUrl || fila.imagenUrl || fila.tipo === 'transicion' || fila.tipo === 'imagen') return null;
-                  const ini = Math.max(0, fila.inicio);
-                  const fin = Math.max(ini + 0.5, fila.fin);
-                  const lista = (capturas || []).filter(c => c && c.tiempo != null && c.tiempo >= ini && c.tiempo <= fin && ((Array.isArray(c.figuras) && c.figuras.length > 0) || c.dataUrl || c.baseDataUrl));
-                  if (!lista.length) return null;
-                  return (
-                    <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0, alignItems: 'center' }}>
-                      {lista.map(c => (
-                        <span key={c.id} title={c.videoUrl ? 'Animación con vídeo: saldrá en la descarga' : 'Dibujo SIN vídeo generado: pulsa Regenerar vídeos'} style={{ fontSize: '0.65rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', color: c.videoUrl ? '#4ade80' : '#f87171', border: `1px solid ${c.videoUrl ? '#4ade80' : '#f87171'}`, borderRadius: '6px', padding: '0.15rem 0.4rem', whiteSpace: 'nowrap' }}>
-                          {c.videoUrl ? `🎬 ${formatoTiempo(c.tiempo)}` : `⚠️ ${formatoTiempo(c.tiempo)}`}
-                        </span>
                       ))}
                     </div>
                   );
