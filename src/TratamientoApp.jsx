@@ -212,18 +212,9 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     try { diagFaseRef.current = f; } catch (_) {}
   };
   const diagIniciar = () => {
+    // Sin intervalo: la línea de diagnóstico en vivo se quitó de la vista.
     try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
-    try {
-      diagTimerRef.current = setInterval(() => {
-        let heap = '';
-        try {
-          const m = performance && performance.memory;
-          if (m && m.usedJSHeapSize) heap = ` · heap ${Math.round(m.usedJSHeapSize / 1048576)} MB`;
-        } catch (_) {}
-        const hora = new Date().toLocaleTimeString('es-ES');
-        try { setTextoDiag(`${diagFaseRef.current || '…'} · ${hora}${heap}`); } catch (_) {}
-      }, 1000);
-    } catch (_) {}
+    diagTimerRef.current = null;
   };
   const diagParar = () => {
     try { if (diagTimerRef.current) clearInterval(diagTimerRef.current); } catch (_) {}
@@ -6762,11 +6753,6 @@ const terminar = () => {
             {informeDescarga && (
               <div style={{ marginTop: '0.4rem', color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'Inter, sans-serif', lineHeight: 1.35 }}>
                 {informeDescarga}
-              </div>
-            )}
-            {textoDiag && (
-              <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.65rem', fontFamily: 'Inter, sans-serif' }}>
-                {textoDiag}
               </div>
             )}
             <button
