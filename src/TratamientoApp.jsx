@@ -2065,6 +2065,8 @@ const bdVideoTargetRef = useRef(null);
     let totalDur = 0;
     let elapsedTotal = 0;
     let tGrabaDesde = 0;
+    let tGrabStartWall = 0;
+    let faseGrabacion = 'Grabando…';
     let tPrepDesde = 0;
     let tGrabaMs = 0;
     let tTrimMs = 0;
@@ -2172,6 +2174,7 @@ const bdVideoTargetRef = useRef(null);
       const nombreBase = prep.nombreBase;
       const nombreArchivo = `${nombreBase}.${ext}`;
       tGrabaDesde = performance.now();
+      tGrabStartWall = Date.now();
       diagFase('Pre-dibujado…');
       // Pre-dibujar el primer frame ANTES de rec.start: si la grabación arranca
       // con el canvas vacío, los primeros ~0.15s salen negros (hasta que el
@@ -2363,6 +2366,7 @@ const bdVideoTargetRef = useRef(null);
           if (terminado) return;
           terminado = true;
           stopTicks();
+          try { document.removeEventListener('visibilitychange', alCambiarVisibilidad); } catch (_) {}
           if (grabWC) {
             const g = grabWC;
             grabWC = null;
@@ -2419,10 +2423,11 @@ const bdVideoTargetRef = useRef(null);
           }
         }, 3000);
 };
-if (grabWC) diagFase('Grabando (WebCodecs, claves cada 1,2 s)…');
+if (grabWC) { faseGrabacion = 'Grabando (WebCodecs, claves cada 1,2 s)…'; diagFase(faseGrabacion); }
 else {
   rec.start(250);
-  diagFase('Grabando…');
+  faseGrabacion = 'Grabando…';
+  diagFase(faseGrabacion);
 }
         let enTick = false;
         let segT0Wall = 0;
@@ -2525,6 +2530,9 @@ else {
         };
         const tick = async () => {
           if (terminado || enTick) return;
+          // Pestaña oculta: no se avanza nada (la grabación está en pausa).
+          if (pausadoPorOculto) return;
+          try { if (document.hidden) return; } catch (_) {}
           enTick = true;
           try {
             if (cancelarDescargaRef.current) { try { terminar(); } catch (_) {} return; }
@@ -2615,7 +2623,10 @@ else {
                 dib(seg.elB, t);
               }
               ctx.globalAlpha = 1;
-              if (segElapsed >= segDur) {
+              // La transición acaba por reloj o por pared: con ticks lentos o
+              // pestaña oculta el reloj interno se puede quedar atrás.
+              const pasadoSeg = (Date.now() - segT0Wall) / 1000;
+              if (segElapsed >= segDur || pasadoSeg >= segDur + 2) {
                 const vistos = new Set();
                 for (const elx of [seg.elA, seg.elB]) {
                   if (elx && elx.tagName !== 'IMG' && !vistos.has(elx)) {
@@ -2733,14 +2744,49 @@ else {
         // para no dejar el botón pillado; sale parcial con aviso. El margen
         // crece con la duración: en máquinas lentas el bucle va bajo 25 fps.
         const margenMs = Number.isFinite(totalDur) && totalDur > 0 ? totalDur * 1000 + Math.max(60000, totalDur * 250) : 180000;
-        try {
-          setTimeout(() => {
-            if (!terminado) {
-              cierreForzoso = true;
-              try { terminar(); } catch (_) {}
+        const forzarCierre = () => {
+          if (!terminado) {
+            cierreForzoso = true;
+            try { terminar(); } catch (_) {}
+          }
+        };
+        let watchdogId = null;
+        try { watchdogId = setTimeout(forzarCierre, margenMs); } catch (_) {}
+        // Pestaña oculta: los temporizadores se congelan y la grabación no
+        // avanza; sin esto el vigilante la mataba igual. Se pausa (MediaRecorder
+        // o dejando de alimentar WebCodecs) y al volver se sigue donde estaba,
+        // con el vigilante rearmado sin contar el tiempo oculto.
+        let ocultoDesde = 0;
+        let tiempoOcultoMs = 0;
+        let pausadoPorOculto = false;
+        const alCambiarVisibilidad = () => {
+          try {
+            if (document.hidden) {
+              if (terminado) return;
+              ocultoDesde = Date.now();
+              pausadoPorOculto = true;
+              try { if (rec && rec.state === 'recording') rec.pause(); } catch (_) {}
+              diagFase('En pausa (pestaña oculta)…');
+            } else {
+              if (!ocultoDesde) return;
+              const fueraMs = Date.now() - ocultoDesde;
+              ocultoDesde = 0;
+              tiempoOcultoMs += fueraMs;
+              try { segT0Wall += fueraMs; } catch (_) {}
+              try { lastFrameTime = performance.now(); } catch (_) {}
+              if (grabWC) { try { grabWC.t0 += fueraMs; } catch (_) {} }
+              try { if (rec && rec.state === 'paused') rec.resume(); } catch (_) {}
+              pausadoPorOculto = false;
+              diagFase(faseGrabacion);
+              try {
+                if (watchdogId) clearTimeout(watchdogId);
+                const transcurrido = Date.now() - tGrabStartWall - tiempoOcultoMs;
+                watchdogId = setTimeout(forzarCierre, Math.max(15000, margenMs - transcurrido));
+              } catch (_) {}
             }
-          }, margenMs);
-        } catch (_) {}
+          } catch (_) {}
+        };
+        try { document.addEventListener('visibilitychange', alCambiarVisibilidad); } catch (_) {};
         // Escalado final: si ni onstop ni el fallback han resuelto (todo va
         // con topes, pero el codificador puede quedarse en un estado raro),
         // se cierra a la fuerza con lo grabado. Mejor parcial con aviso que
@@ -2748,6 +2794,9 @@ else {
         try {
           setTimeout(() => {
             if (finOk) return;
+            // En pausa por pestaña oculta no se fuerza nada: al volver, el
+            // vigilante rearmado decide con el presupuesto correcto.
+            if (pausadoPorOculto) return;
             if (cancelarDescargaRef.current) {
               try { setAviso('Descarga cancelada.'); } catch (_) {}
               finOk = true;
