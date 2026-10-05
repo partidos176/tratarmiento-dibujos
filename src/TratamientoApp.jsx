@@ -5160,7 +5160,16 @@ const terminar = () => {
                             onClick={() => {
                               const idBor = c.id;
                               const urlBor = c.videoUrl;
+                              const tBor = c.tiempo;
                               setCapturas(prev => prev.filter(x => x.id !== idBor));
+                              // Las gemelas (mismo tiempo) se siguen enganchando a los
+                              // cortes: se avisa para borrarlas también si sobran.
+                              try {
+                                if (tBor != null) {
+                                  const quedan = (capturas || []).filter(x => x && x.id !== idBor && x.tiempo === tBor).length;
+                                  if (quedan > 0) setAviso(`Quedan ${quedan} animaciones con el mismo tiempo: bórralas también si no deben salir en los cortes.`);
+                                }
+                              } catch (_) {}
                               // La vista previa guarda su propia copia de animaciones:
                               // si no se purga, la borrada se sigue viendo.
                               try {
