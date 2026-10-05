@@ -204,6 +204,14 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   const [textoDiag, setTextoDiag] = useState('');
   const diagFaseRef = useRef('');
   const diagTimerRef = useRef(null);
+  // Secuencia de descargas: retener el 100% visible 1,2 s sin que el reset
+  // de una descarga pise a la siguiente encadenada.
+  const descargaSeqRef = useRef(0);
+  // Cancelación de la descarga en curso: lo pone el botón Cancelar y lo
+  // consultan las fases largas (ticks, subidas, recorte, reindexado).
+  const cancelarDescargaRef = useRef(false);
+  // XHR del montaje en el servidor, para abortarlo al cancelar.
+  const xhrDescargaRef = useRef(null);
   // Miga de pan en localStorage: si la pestaña muere, al recargar se lee y
   // dice en qué fase murió la última descarga (la hora congelada = momento
   // de la muerte). Se borra al terminar bien.
@@ -1835,6 +1843,7 @@ const bdVideoTargetRef = useRef(null);
       const uploadId = datos && datos.uploadId;
       if (!uploadId) throw new Error('El servidor no devolvió el id de subida');
       for (let i = 0; i < total; i++) {
+        if (cancelarDescargaRef.current) throw new Error('Descarga cancelada');
         const parte = blob.slice(i * TAMANO_FRAGMENTO, Math.min((i + 1) * TAMANO_FRAGMENTO, blob.size));
         const fd = new FormData();
         fd.append('uploadId', uploadId);
@@ -1881,6 +1890,9 @@ const bdVideoTargetRef = useRef(null);
 
   const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null) => {
     const t0 = performance.now();
+    const miDescarga = ++descargaSeqRef.current;
+    let entregaOk = false;
+    try { cancelarDescargaRef.current = false; } catch (_) {}
     try {
       // El servidor siempre devuelve MP4: si este navegador solo sabe grabar
       // WebM, el nombre del fichero guardado no cuadraría.
@@ -1940,6 +1952,7 @@ const bdVideoTargetRef = useRef(null);
       setDescargandoMontaje(true);
       setOptimaEnDosFases(false);
       setProgresoDescarga(0);
+      if (cancelarDescargaRef.current) return false;
       try {
         const tPrep0 = performance.now();
         const nombreBase = nombreCustom
@@ -1973,11 +1986,13 @@ const bdVideoTargetRef = useRef(null);
           xhr.onerror = () => reject(new Error('Sin conexión con el servidor'));
           xhr.ontimeout = () => reject(new Error('El montaje en el servidor tardó demasiado'));
           xhr.onabort = () => reject(new Error('Subida cancelada'));
+          try { xhrDescargaRef.current = xhr; } catch (_) {}
           xhr.send(fd);
         });
 
         bytes = res.size;
         const t0Entrega = performance.now();
+        entregaOk = true;
         setProgresoDescarga(100);
         if (destinoDisco) {
           destinoDisco.escribir(res);
@@ -2007,16 +2022,24 @@ const bdVideoTargetRef = useRef(null);
         if (tServidorMs > 0) fases.push('servidor ' + s1(tServidorMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
         setInformeDescarga(
-          'Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s (x' + f.toFixed(2) + '). '
-          + Math.round(bytes / 1048576) + ' MB en ' + plan.items.length + ' segmentos, MP4/H.264 nativo'
-          + (subidaHecha ? ' (vídeo de partida subido al servidor)' : '')
-          + (fases.length ? '. Fases: ' + fases.join(' / ') : '')
+          'Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s'
         );
         setAviso('');
         return true;
       } finally {
-        try { setDescargandoMontaje(false); } catch (_) {}
-        try { setProgresoDescarga(0); } catch (_) {}
+        // El 100% se retiene visible 1,2 s: antes se reseteaba en el mismo
+        // instante y no se veía nunca.
+        if (entregaOk) {
+          const mi = miDescarga;
+          setTimeout(() => {
+            if (descargaSeqRef.current !== mi) return;
+            try { setDescargandoMontaje(false); } catch (_) {}
+            try { setProgresoDescarga(0); } catch (_) {}
+          }, 1200);
+        } else {
+          try { setDescargandoMontaje(false); } catch (_) {}
+          try { setProgresoDescarga(0); } catch (_) {}
+        }
       }
     } catch (e) {
       console.warn('Montaje en el servidor no disponible:', (e && e.message) || e);
@@ -2079,6 +2102,9 @@ const bdVideoTargetRef = useRef(null);
     const { mime, ext } = mimeDescarga();
     try {
       tPrepDesde = performance.now();
+      const miDescarga = ++descargaSeqRef.current;
+      let entregaOk = false;
+      try { cancelarDescargaRef.current = false; } catch (_) {}
       diagFase('Iniciando descarga…');
       diagIniciar();
       const baseSrc = videoUrlCortes || videoUrl;
@@ -2214,6 +2240,17 @@ const bdVideoTargetRef = useRef(null);
         let finOk = false;
         // Sin rec en la vía WebCodecs: el cierre lo hace finalizarWC.
         if (rec) rec.onstop = async () => {
+          // Cancelado: no se entrega nada, solo se cierra y resuelve.
+          if (cancelarDescargaRef.current) {
+            descargaHecha = true;
+            try { setAviso('Descarga cancelada.'); } catch (_) {}
+            try {
+              if (destinoDisco) await Promise.race([destinoDisco.cerrar(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout al cerrar')), 20000))]);
+            } catch (_) {}
+            finOk = true;
+            try { resolve(); } catch (_) {}
+            return;
+          }
           // Se marca de inmediato, antes de cualquier await. El recorte contra
           // localhost:3001 puede tardar hasta 10s, y si el flag se pusiera
           // despues el fallback de 3s lo creeria "no descargado" y volveria a
@@ -2278,6 +2315,12 @@ const bdVideoTargetRef = useRef(null);
             // en 50% y el 100% no se veía nunca.
             try { setOptimaEnDosFases(false); } catch (_) {}
             try { diag.salidaKB = Math.round((finalBlob.size || 0) / 1024); } catch (_) {}
+            if (cancelarDescargaRef.current) {
+              try { setAviso('Descarga cancelada.'); } catch (_) {}
+              finOk = true;
+              try { resolve(); } catch (_) {}
+              return;
+            }
             // Informe con el desglose de fases. Se compone aqui porque el trim y el
             // reindexado ocurren despues del bucle: mostrarlo antes daria un total
             // incompleto.
@@ -2285,6 +2328,7 @@ const bdVideoTargetRef = useRef(null);
             try { setUltimoVideo({ blob: finalBlob, nombre: nombreArchivo, mime, ext }); } catch (_) {}
           }
           const t0Entrega = performance.now();
+          entregaOk = true;
           setProgresoDescarga(100);
           diagFase('Entregando…');
           if (!soloOptimizado && !destinoDisco) {
@@ -2309,6 +2353,14 @@ const bdVideoTargetRef = useRef(null);
         // codificador y se finaliza el MP4 (cierra el fichero). Equivale al
         // onstop de MediaRecorder para la vía de disco.
         const finalizarWC = async (g) => {
+          if (cancelarDescargaRef.current) {
+            diagFase('Descarga cancelada…');
+            try { setAviso('Descarga cancelada.'); } catch (_) {}
+            try { if (destinoDisco) await destinoDisco.cerrar(); } catch (_) {}
+            finOk = true;
+            try { resolve(); } catch (_) {}
+            return;
+          }
           diagFase('Finalizando vídeo…');
           try { if (tGrabaDesde > 0) tGrabaMs = performance.now() - tGrabaDesde; } catch (_) {}
           try {
@@ -2324,6 +2376,7 @@ const bdVideoTargetRef = useRef(null);
             try { avisoPrepRef.current = 'No se pudo finalizar el vídeo; revisa el archivo guardado.'; } catch (_) {}
           }
           const t0Entrega = performance.now();
+          entregaOk = true;
           try { setProgresoDescarga(100); } catch (_) {}
           try { setAviso(cierreForzoso ? 'La grabación se atascó; se ha descargado lo grabado hasta el atasco.' : (avisoPrepRef.current || '')); } catch (_) {}
           try { tEntregaMs = performance.now() - t0Entrega; } catch (_) {}
@@ -2345,6 +2398,15 @@ const bdVideoTargetRef = useRef(null);
           try { document.body.removeChild(canvas); } catch (_) {}
 // Fallback: si rec.onstop no dispara en 3s, forzar descarga
         setTimeout(async () => {
+          if (cancelarDescargaRef.current && !descargaHecha) {
+            descargaHecha = true;
+            try { setAviso('Descarga cancelada.'); } catch (_) {}
+            finOk = true;
+            try { resolve(); } catch (_) {}
+            try { setDescargandoMontaje(false); } catch (_) {}
+            try { setProgresoDescarga(0); } catch (_) {}
+            return;
+          }
           if (!descargaHecha && rec && rec.state === 'inactive') {
             if (destinoDisco) {
               // Con escritura a disco no hay nada que ensamblar: se cierra el
@@ -2489,6 +2551,7 @@ else {
           if (terminado || enTick) return;
           enTick = true;
           try {
+            if (cancelarDescargaRef.current) { try { terminar(); } catch (_) {} return; }
             if (currentSeg >= segsOk.length) { terminar(); return; }
             const seg = segsOk[currentSeg];
             const esImagen = seg.tipo === 'imagen';
@@ -2703,6 +2766,14 @@ else {
         try {
           setTimeout(() => {
             if (finOk) return;
+            if (cancelarDescargaRef.current) {
+              try { setAviso('Descarga cancelada.'); } catch (_) {}
+              finOk = true;
+              try { resolve(); } catch (_) {}
+              try { setDescargandoMontaje(false); } catch (_) {}
+              try { setProgresoDescarga(0); } catch (_) {}
+              return;
+            }
             try { stopTicks(); } catch (_) {}
             try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (_) {}
             try { els.forEach(v => { try { v.pause && v.pause(); } catch (_) {} try { v.parentNode && v.parentNode.removeChild(v); } catch (_) {} }); } catch (_) {}
@@ -2755,16 +2826,22 @@ else {
         if (tTrimMs > 0) fases.push('recorte servidor ' + s1(tTrimMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
         setInformeDescarga(
-          'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s (x' + f.toFixed(2)
-          + '). ' + Math.round(bytes / 1048576) + ' MB a ' + mbps.toFixed(1) + ' Mbps, pedido ' + (bpsSolicitado / 1e6).toFixed(0)
-          + '. ' + (mimeDescarga().ext === 'mp4' ? 'MP4/H.264' : 'WebM/VP9')
-          + (fases.length ? '. Fases: ' + fases.join(' / ') : '')
-          + (diag.salidaKB ? '. Salida ' + diag.salidaKB + ' KB' : '')
+          'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s'
         );
       }
-      setDescargandoMontaje(false);
-      setProgresoDescarga(0);
-      try { setOptimaEnDosFases(false); } catch (_) {}
+      if (entregaOk) {
+        const mi = miDescarga;
+        setTimeout(() => {
+          if (descargaSeqRef.current !== mi) return;
+          try { setDescargandoMontaje(false); } catch (_) {}
+          try { setProgresoDescarga(0); } catch (_) {}
+          try { setOptimaEnDosFases(false); } catch (_) {}
+        }, 1200);
+      } else {
+        setDescargandoMontaje(false);
+        setProgresoDescarga(0);
+        try { setOptimaEnDosFases(false); } catch (_) {}
+      }
       diagParar();
     }
   };
@@ -2808,6 +2885,7 @@ else {
     let logHandler = null;
     try {
       ffmpeg = await loadFFmpeg();
+      try { setProgresoOpt(1); } catch (_) {}
       const { fetchFile } = await import('@ffmpeg/util');
       const dur = await new Promise((res) => {
         let done = false;
@@ -2864,6 +2942,7 @@ else {
     try {
       if (await descargarDesdeServidor(lineas, nombre, destinoDisco)) return;
     } catch (_) {}
+    if (cancelarDescargaRef.current) { try { setAviso('Descarga cancelada.'); } catch (_) {} return; }
     await descargarLineas(lineas, nombre, false, false, basePreargada, true, destinoDisco);
   };
 
@@ -6589,6 +6668,10 @@ const terminar = () => {
                           for (let i = 0; i < clips.length; i++) {
                             const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
                             await descargarDesdeMontaje([clips[i]], nombre, baseMontaje);
+                            if (cancelarDescargaRef.current) break;
+                            // Pausa para que el 100% de cada corte se vea antes
+                            // de empezar el siguiente (si no, lo pisa al momento).
+                            if (i < clips.length - 1) await new Promise(r => setTimeout(r, 1000));
                           }
                         } finally {
                           try { baseMontaje && baseMontaje.pause(); } catch (_) {}
@@ -6643,6 +6726,18 @@ const terminar = () => {
             >
               {(descargandoMontaje || optimizando) && <span style={{ fontFamily: 'monospace' }}>{pctDescargaTotal()}%</span>}
               Descargar
+            </button>
+            <button
+              onClick={() => {
+                try { cancelarDescargaRef.current = true; } catch (_) {}
+                try { if (xhrDescargaRef.current) xhrDescargaRef.current.abort(); } catch (_) {}
+                try { setAviso('Cancelando descarga…'); } catch (_) {}
+              }}
+              disabled={!descargandoMontaje && !optimizando}
+              title="Cancelar la descarga en curso"
+              style={{ background: (!descargandoMontaje && !optimizando) ? '#475569' : '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: (!descargandoMontaje && !optimizando) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              Cancelar
             </button>
             {informeDescarga && (
               <div style={{ marginTop: '0.4rem', color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'Inter, sans-serif', lineHeight: 1.35 }}>
