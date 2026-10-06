@@ -589,6 +589,36 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
     if (clipTimerRef.current) clearTimeout(clipTimerRef.current);
   }, []);
 
+  // Al poner la hoja Cortes en pantalla completa el video se quedaba con su
+  // tamano natural y no llenaba la pantalla: el contenedor no tiene alto, asi que
+  // el alto del video salia de su proporcion y sobraba sitio en los laterales.
+  // Se resuelve con una regla :fullscreen, no tocando el estilo del elemento:
+  // asi React puede repintar lo que quiera sin deixar el video pequeno.
+  useEffect(() => {
+    const estilo = document.createElement('style');
+    estilo.textContent = [
+      '#cortes-video-wrap:fullscreen {',
+      '  background:#000 !important;',
+      '  height:100vh !important;',
+      '  width:100vw !important;',
+      '  justify-content:center !important;',
+      '  align-items:center !important;',
+      '  box-sizing:border-box !important;',
+      '}',
+      '#cortes-video-wrap:fullscreen video {',
+      '  width:100% !important;',
+      '  height:100% !important;',
+      '  flex:1 1 0 !important;',
+      '  min-height:0 !important;',
+      '  object-fit:contain !important;',
+      '  border:none !important;',
+      '  border-radius:0 !important;',
+      '}',
+    ].join('\n');
+    document.head.appendChild(estilo);
+    return () => { try { document.head.removeChild(estilo); } catch (_) {} };
+  }, []);
+
   const editorRef = useRef(null);
   useEffect(() => {
     const onFs = () => {
