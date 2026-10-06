@@ -610,7 +610,7 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
       '  height:100% !important;',
       '  flex:1 1 0 !important;',
       '  min-height:0 !important;',
-      '  object-fit:contain !important;',
+      '  object-fit:cover !important;',
       '  border:none !important;',
       '  border-radius:0 !important;',
       '}',
