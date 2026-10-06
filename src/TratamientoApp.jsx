@@ -1706,6 +1706,11 @@ const bdVideoTargetRef = useRef(null);
   // del contenido: si la misma animacion se usa en otro montaje no se vuelve a
   // subir.
 
+  // Por que la via rapida no se uso. Sin esto la descarga cae a la ruta de
+  // siempre sin decir nada, y hace falta un ciclo de varios minutos para
+  // enterarse de que faltaba algo. Se anade al informe al final.
+  const motivoViaRapida = useRef('');
+
   const nombreBaseDe = (nombreCustom) => (nombreCustom
     || (videosBD && videosBD.length > 0 && videosBD[0].nombre ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
     || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null)
@@ -1856,38 +1861,39 @@ const bdVideoTargetRef = useRef(null);
   };
 
   const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null) => {
+    motivoViaRapida.current = '';
     const t0 = performance.now();
     try {
       // El servidor siempre devuelve MP4: si el navegador solo sabe grabar WebM
       // el nombre del fichero no cuadra.
-      if (mimeDescarga().ext !== 'mp4') return false;
+      if (mimeDescarga().ext !== 'mp4') { motivoViaRapida.current = 'este navegador no graba MP4'; return false; }
       const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
-      if (!validas.length) return false;
+      if (!validas.length) { motivoViaRapida.current = 'no hay filas validas'; return false; }
       const baseSrc = videoUrlCortes || videoUrl;
-      if (!baseSrc && validas.some(l => l.inicio != null)) return false;
+      if (!baseSrc && validas.some(l => l.inicio != null)) { motivoViaRapida.current = 'no hay video base cargado'; return false; }
       // Sin transiciones en el servidor (Fase 3 descartada): se va por canvas.
-      if (validas.some(l => l.tipo === 'transicion')) return false;
+      if (validas.some(l => l.tipo === 'transicion')) { motivoViaRapida.current = 'el montaje lleva transiciones, que el servidor aun no hace'; return false; }
       const animsSinVideo = animsSinVideoDe(validas);
-      if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); return false; }
+      if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); motivoViaRapida.current = 'hay animaciones todavia sin video generado'; return false; }
 
       const salud = await estadoDelServidor();
-      if (!salud) return false;
+      if (!salud) { motivoViaRapida.current = 'el servidor del puerto 3001 no responde'; return false; }
       const plan = await construirPlanMontaje(validas);
-      if (!plan) return false;
+      if (!plan) { motivoViaRapida.current = 'no se pudo armar el plan (fila sin metraje, o un clip o imagen que no se pudo subir)'; return false; }
 
       // Los tramos salen de la cache del servidor: tiene que ser nuestro video.
       if (plan.items.some(it => it.tipo === 'fuente')) {
         const fuente = await fuenteDeTramos();
-        if (!fuente) return false;
+        if (!fuente) { motivoViaRapida.current = 'no se pudo localizar el video de partida en el navegador'; return false; }
         // Comparar por tamano con lo que ya tiene el servidor. Si coincide no se
         // sube nada, y si ya se conoce el tamano tampoco hace falta leer el video.
         const coincide = !!salud.fuente && Number(fuente.size) > 0 && Number(salud.fuenteBytes) === Number(fuente.size);
         if (!coincide) {
-          if (!fuente.blob) return false;
+          if (!fuente.blob) { motivoViaRapida.current = 'el navegador no tiene el video en memoria para subirlo'; return false; }
           setAviso('Subiendo el video de partida al servidor (solo la primera vez)...');
           const ok = await subirFuenteAlServidor(fuente, (p) => { try { setProgresoDescarga(Math.round(p * 35)); } catch (_) {} });
           setAviso('');
-          if (!ok) return false;
+          if (!ok) { motivoViaRapida.current = 'no se pudo subir el video de partida al servidor'; return false; }
         }
       }
 
@@ -1900,7 +1906,7 @@ const bdVideoTargetRef = useRef(null);
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ segmentos: plan.items, ancho: 1280, alto: 720 }),
         }, 20 * 60 * 1000);
-        if (!resp || !resp.ok) return false;
+        if (!resp || !resp.ok) { motivoViaRapida.current = 'el servidor no pudo componer el montaje'; return false; }
         if (destinoDisco) {
           destinoDisco.escribir(resp);
           await destinoDisco.cerrar();
@@ -1910,7 +1916,7 @@ const bdVideoTargetRef = useRef(null);
           return true;
         }
         const blob = await resp.blob();
-        if (!blob || blob.size < 2048) return false;
+        if (!blob || blob.size < 2048) { motivoViaRapida.current = 'el servidor devolvio un archivo vacio'; return false; }
         const contenido = Number(resp.headers.get('x-montaje-contenido')) || 0;
         descargarBlob(blob, nombreArchivo);
         try { setUltimoVideo({ blob, nombre: nombreArchivo, mime: 'video/mp4', ext: 'mp4' }); } catch (_) {}
@@ -2763,6 +2769,7 @@ else {
       if (await descargarDesdeServidor(lineas, nombre, destinoDisco)) return;
     } catch (_) {}
     await descargarLineas(lineas, nombre, false, false, basePreargada, true, destinoDisco);
+      try { if (motivoViaRapida.current) setInformeDescarga((prev) => (prev || '') + ' | VIA RAPIDA NO USADA: ' + motivoViaRapida.current); } catch (_) {}
   };
 
   // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
