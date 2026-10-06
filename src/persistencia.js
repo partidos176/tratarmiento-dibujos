@@ -185,6 +185,52 @@ export const limpiarSesion = () => {
   dbDelete('sesion', 'actual').catch(() => {});
 };
 
+const dbClear = async (store) => {
+  try {
+    const db = await openDB();
+    await new Promise((resolve) => {
+      try {
+        const tx = db.transaction(store, 'readwrite');
+        const rq = tx.objectStore(store).clear();
+        rq.onsuccess = () => resolve();
+        rq.onerror = () => resolve();
+      } catch (_) { resolve(); }
+    });
+    try { db.close(); } catch (_) {}
+  } catch (_) {}
+};
+
+// Borrado total al recargar: las hojas empiezan vacías. Limpia claves
+// locales y todos los almacenes (sesión, vídeos, imágenes, capturas y kv).
+// No toca diag_migaja: es el parte post-mortem y se lee al arrancar.
+export const borrarTodoLocal = async () => {
+  try {
+    for (const k of ['bd_archivos', 'bd_videos', 'fm_sesion', 'cap_sesion', 'preview_anim']) {
+      try { localStorage.removeItem(k); } catch (_) {}
+    }
+  } catch (_) {}
+  for (const s of ['sesion', 'videos', 'imagenes', 'capturas']) await dbClear(s);
+  try {
+    const db = await new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open('tratamiento-dibujos', 3);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      } catch (e) { reject(e); }
+    });
+    await new Promise((resolve) => {
+      try {
+        if (!db.objectStoreNames.contains('kv')) { resolve(); return; }
+        const tx = db.transaction('kv', 'readwrite');
+        const rq = tx.objectStore('kv').clear();
+        rq.onsuccess = () => resolve();
+        rq.onerror = () => resolve();
+      } catch (_) { resolve(); }
+    });
+    try { db.close(); } catch (_) {}
+  } catch (_) {}
+};
+
 export const guardarVideosBD = async (lista) => {
   try {
     const idx = [];
