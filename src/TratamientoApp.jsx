@@ -625,10 +625,20 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
       '  border:0 !important;',
       '  border-radius:0 !important;',
       '}',
-      // La barra de botones le quitaba alto al video y dejaba una franja negra
-      // debajo. En pantalla completa sobra: se sale con Escape.
+      // Los botones se quedan, pero flotando encima del video en vez de debajo.
+      // Debajo ocuparian alto, el video perderia ese tanto y volveria la franja
+      // negra; asi no ocupan sitio y no hay barra que colocar.
       '#cortes-video-wrap:fullscreen .barra-cortes {',
-      '  display:none !important;',
+      '  position:absolute !important;',
+      '  left:0 !important;',
+      '  right:0 !important;',
+      '  bottom:0 !important;',
+      '  z-index:2 !important;',
+      '  margin:0 !important;',
+      '  padding:0.5rem 0.75rem !important;',
+      '  background:rgba(2,6,23,0.55) !important;',
+      '  border-radius:0 !important;',
+      '  display:flex !important;',
       '}',
     ].join('\n');
     document.head.appendChild(estilo);
