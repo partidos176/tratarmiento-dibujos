@@ -2188,7 +2188,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
     const publicarInforme = () => {
       try {
         if (!diag.textoBase) return;
-        setInformeDescarga(diag.textoBase
+        setInformeDescarga((motivoViaRapida.current ? diag.textoBase + ' | VIA RAPIDA NO USADA: ' + motivoViaRapida.current : diag.textoBase)
           + ' | grabacion ' + (diag.grabacionMs / 1000).toFixed(1) + ' s'
           + ' | trim servidor ' + (diag.trimMs / 1000).toFixed(1) + ' s'
           + (diag.trimOk ? ' (nativo, ya reindexa)' : ' (no disponible)')
@@ -3115,7 +3115,6 @@ else {
     } catch (_) {}
     if (cancelarDescargaRef.current) { try { setAviso('Descarga cancelada.'); } catch (_) {} return; }
     await descargarLineas(lineas, nombre, false, false, basePreargada, true, destinoDisco);
-      try { if (motivoViaRapida.current) setInformeDescarga((prev) => (prev || '') + ' | VIA RAPIDA NO USADA: ' + motivoViaRapida.current); } catch (_) {}
   };
 
   // El core que usamos es el single-threaded de ffmpeg.wasm (WASM de 32 bits) y
