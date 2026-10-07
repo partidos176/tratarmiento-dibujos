@@ -65,10 +65,19 @@ export default defineConfig({
           });
           (async () => {
             if (await puertoAbierto()) { responder({ ok: true, ya: true }); return; }
-            exec('"C:\\Users\\uSer\\Documents\\Default Project\\futbol\\iniciar-servidor.bat"', () => {});
+            // Esta ruta apuntaba a otro proyecto de otra cuenta
+            // (C:\Users\uSer\Documents\Default Project\futbol), que aqui no
+            // existe. El exec llevaba un '() => {}' que se comia el fallo, asi
+            // que lo unico que se veia era 'el servidor no responde', que era
+            // el sintoma equivocado. Ahora el motivo real se devuelve.
+            const bat = 'C:\\Users\\Juan-Antonio\\analisis\\iniciar-servidor.bat';
+            const fallo = await new Promise((res) => {
+              if (!fs.existsSync(bat)) return res('no existe ' + bat);
+              exec(`"${bat}"`, (err) => res(err ? String((err && err.message) || err) : null));
+            });
             await new Promise((r) => setTimeout(r, 5000));
             if (await puertoAbierto()) responder({ ok: true, ya: false });
-            else responder({ ok: false, error: 'El servidor no responde en el puerto 3001' });
+            else responder({ ok: false, error: 'El servidor no responde en el puerto 3001' + (fallo ? ' (' + fallo + ')' : '') });
           })();
         });
       }
