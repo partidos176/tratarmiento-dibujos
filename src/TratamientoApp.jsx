@@ -3019,7 +3019,8 @@ else {
         if (tTrimMs > 0) fases.push('recorte servidor ' + s1(tTrimMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
         setInformeDescarga(
-          'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s'
+          'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s reales'
+          + (motivoViaRapida.current ? ' | VIA RAPIDA NO USADA: ' + motivoViaRapida.current : '')
         );
       }
       try { setDescargandoMontaje(false); } catch (_) {}
