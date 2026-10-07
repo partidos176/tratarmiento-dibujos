@@ -1824,27 +1824,57 @@ const bdVideoTargetRef = useRef(null);
   // con la version anterior es que los clips y las imagenes se suben antes a
   // /api/recurso y en el plan solo viaja su id, en vez de mandar los ficheros
   // dentro del POST del montaje.
+const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.ini)) : (it.tipo === 'imagen' ? Number(it.dur) : (Number(it.hasta) - Number(it.desde))));
+  const acortarCola = (it, m) => {
+    if (it.tipo === 'fuente') it.fin = Number(it.fin) - m;
+    else if (it.tipo === 'clip') it.hasta = Number(it.hasta) - m;
+  };
+  const avanzarCabeza = (it, m) => {
+    if (it.tipo === 'fuente') it.ini = Number(it.ini) + m;
+    else if (it.tipo === 'clip') it.desde = Number(it.desde) + m;
+  };
+  // El trozo de un item que se usa como operando de un fundido. 'cola' es la
+  // parte final (m milisegundos antes del final), 'cabeza' es la parte inicial.
+  const operandoDe = (it, colaMs) => {
+    if (it.tipo === 'fuente') return { origen: 'fuente', ini: colaMs ? Number(it.fin) - colaMs : Number(it.ini) };
+    return { origen: 'recurso', id: it.id, ext: it.ext, desde: colaMs ? Number(it.hasta) - colaMs : Number(it.desde) };
+  };
+
   const construirPlanMontaje = async (validas) => {
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) return null;
-    const items = [];
     const cache = new Map();
-    let durTotal = 0;
+    const asegurar = async (url) => {
+      if (cache.has(url)) return cache.get(url);
+      const r = await subirRecurso(url, cache);
+      if (!r) return null;
+      const v = { id: r.id, ext: r.ext };
+      cache.set(url, v);
+      return v;
+    };
+
+    // Fase 1: cada fila se convierte en sus trozos de contenido. Las
+    // transiciones se anotan en la posicion donde caen, entre dos trozos.
+    const trozos = [];
+    const transPorPos = new Map();
     for (const linea of validas) {
-      if (!linea || linea.tipo === 'transicion') return null;
+      if (!linea) return null;
+      if (linea.tipo === 'transicion') {
+        // transPorPos guarda en que indice de trozo cae la union
+        transPorPos.set(trozos.length - 1, Math.max(0.3, Number(linea.duracion) || 2));
+        continue;
+      }
       const nombre = (linea.concepto || '').trim();
       if (linea.tipo === 'imagen' && linea.imagenUrl) {
-        const r = await subirRecurso(linea.imagenUrl, cache);
+        const r = await asegurar(linea.imagenUrl);
         if (!r) return null;
-        items.push({ tipo: 'imagen', id: r.id, ext: r.ext, dur: 4, nombre });
-        durTotal += 4;
+        trozos.push({ tipo: 'imagen', id: r.id, ext: r.ext, dur: 4, desde: 0, hasta: 4, nombre });
       } else if (linea.videoUrl) {
-        const r = await subirRecurso(linea.videoUrl, cache);
+        const r = await asegurar(linea.videoUrl);
         if (!r) return null;
         const d = (await duracionDeVideo(linea.videoUrl)) || 5;
         if (!(d > 0.1)) return null;
-        items.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: d, nombre });
-        durTotal += d;
+        trozos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: d, nombre });
       } else if (linea.inicio != null && linea.fin != null && baseSrc) {
         const ini = Math.max(0, linea.inicio);
         const fin = Math.max(ini + 0.5, linea.fin);
@@ -1856,21 +1886,48 @@ const bdVideoTargetRef = useRef(null);
         for (const a of anims) {
           // Mismo filtro de bordes que en prepararSegmentos.
           if (!(a.en >= cursor && a.en <= fin)) continue;
-          if (a.en - cursor > 0.05) { items.push({ tipo: 'fuente', ini: cursor, fin: a.en, nombre }); durTotal += a.en - cursor; }
+          if (a.en - cursor > 0.05) trozos.push({ tipo: 'fuente', ini: cursor, fin: a.en, nombre });
           // URL regenerada en esta sesion: el estado puede seguir apuntando al
           // blob roto.
           try {
             if (a.cap && a.cap.id != null && animsRegenRef.current.has(a.cap.id)) a.src = animsRegenRef.current.get(a.cap.id);
           } catch (_) {}
-          const r = await subirRecurso(a.src, cache);
+          const r = await asegurar(a.src);
           if (!r) return null;
-          items.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: a.dur, nombre });
-          durTotal += a.dur;
+          trozos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: a.dur, nombre });
           cursor = a.en;
         }
-        if (fin - cursor > 0.05) { items.push({ tipo: 'fuente', ini: cursor, fin, nombre }); durTotal += fin - cursor; }
+        if (fin - cursor > 0.05) trozos.push({ tipo: 'fuente', ini: cursor, fin, nombre });
       } else {
         return null;
+      }
+    }
+    if (!trozos.length) return null;
+
+    // Fase 2: aplicar los fundidos. Cada uno se come media duracion del final
+    // del trozo anterior y media del principio del siguiente, y en su lugar se
+    // encaja el fundido, igual que hace el bucle de dibujo del navegador.
+    const items = [];
+    let durTotal = 0;
+    for (let i = 0; i < trozos.length; i++) {
+      const item = { ...trozos[i] };
+      let mitad = 0;
+      if (i + 1 < trozos.length) {
+        const bruto = transPorPos.get(i);
+        if (bruto) {
+          const d = Math.min(bruto, longitudDe(item), longitudDe(trozos[i + 1]));
+          if (d >= 0.2) {
+            mitad = d / 2;
+            trozos[i + 1] = { ...trozos[i + 1] };
+            avanzarCabeza(trozos[i + 1], mitad);
+          }
+        }
+      }
+      if (mitad > 0) acortarCola(item, mitad);
+      if (longitudDe(item) > 0.05) { items.push(item); durTotal += longitudDe(item); }
+      if (mitad > 0 && trozos[i + 1] && longitudDe(trozos[i + 1]) > 0.05) {
+        items.push({ tipo: 'transicion', dur: mitad * 2, a: operandoDe(item, mitad), b: operandoDe(trozos[i + 1], 0), nombre: '' });
+        durTotal += mitad * 2;
       }
     }
     if (!items.length) return null;
@@ -1981,8 +2038,6 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       if (!validas.length) { motivoViaRapida.current = 'no hay filas validas'; return false; }
       const baseSrc = videoUrlCortes || videoUrl;
       if (!baseSrc && validas.some(l => l.inicio != null)) { motivoViaRapida.current = 'no hay video base cargado'; return false; }
-      // Sin transiciones en el servidor (Fase 3 descartada): se va por canvas.
-      if (validas.some(l => l.tipo === 'transicion')) { motivoViaRapida.current = 'el montaje lleva transiciones, que el servidor aun no hace'; return false; }
       const animsSinVideo = animsSinVideoDe(validas);
       if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); motivoViaRapida.current = 'hay animaciones todavia sin video generado'; return false; }
 
