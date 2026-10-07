@@ -91,6 +91,9 @@ const [hoja, setHoja] = useState('Base de datos');
   };
   useEffect(() => {
     comprobarServidor();
+    // Al recargar se empieza de cero: lo que se hubiese copiado a la carpeta
+    // del servidor se borra antes de cargar nada.
+    try { borrarVideosCopiados(); } catch (_) {}
     try { loadFFmpeg().catch(() => {}); } catch (_) {}
     const iv = setInterval(comprobarServidor, 10000);
     return () => clearInterval(iv);
@@ -1960,6 +1963,55 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       const d = await r.json().catch(() => null);
       return d && d.ok ? d : null;
     } catch (_) { return null; }
+  };
+
+  // La carpeta fija del servidor ('futbol\videos') solo la puede escribir el
+  // servidor: el navegador no tiene acceso a la ruta. Al cargar un video en la
+  // hoja Base de datos se manda nombre y tamano, y el servidor lo busca en el
+  // disco y lo copia alli (de disco a disco, sin subir GB). Los nombres de lo
+  // copiado se apuntan en localStorage para poder borrarlos al limpiar o al
+  // recargar.
+  const COPIAS_KEY = 'videos_copiados';
+  const copiarVideoAlServidor = async (file) => {
+    try {
+      if (!file || !file.name || !(file.size > 0)) return;
+      const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/videos/copiar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: file.name, size: file.size }),
+      }, 120000);
+      if (!r || !r.ok) return;
+      const d = await r.json().catch(() => null);
+      if (!d) return;
+      if (d.ok) {
+        try {
+          const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
+          const lista = Array.isArray(prev) ? prev : [];
+          if (!lista.includes(file.name)) lista.push(file.name);
+          localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
+        } catch (_) {}
+        setAviso('Video en la carpeta del servidor: no hará falta subirlo'
+          + (d.ms ? ' (copiado en ' + (d.ms / 1000).toFixed(1) + ' s)' : ''));
+      } else {
+        setAviso('No encontré «' + file.name + '» en el disco: al descargar se subirá al servidor');
+      }
+    } catch (_) {}
+  };
+
+  const borrarVideosCopiados = async () => {
+    let nombres = [];
+    try { nombres = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]') || []; } catch (_) {}
+    if (!Array.isArray(nombres) || !nombres.length) return;
+    try {
+      const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/videos/borrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombres }),
+      }, 15000);
+      // La lista solo se olvida si el servidor confirmo: si esta apagado, el
+      // siguiente arranque o limpieza vuelve a intentarlo.
+      if (r && r.ok) localStorage.removeItem(COPIAS_KEY);
+    } catch (_) {}
   };
 
   // Vídeo de partida del que salen los tramos. Hace falta saber cuál es:
@@ -5546,6 +5598,7 @@ const terminar = () => {
                   setCapturas(prev => prev.map(c => c && c.id === tgt.id ? { ...c, videoUrl: url } : c));
                 }
                 cargarVideoEnCortes(url, f.name, f);
+                copiarVideoAlServidor(f);
                 bdVideoTargetRef.current = null;
               }}
             />
@@ -7010,7 +7063,9 @@ const terminar = () => {
                 // Limpiar lo deja TODO a cero en esta hoja: filas, selección,
                 // vista previa (pausada y reseteada), cortes, vídeo de cortes
                 // cargado, informe y avisos. No toca otras hojas (archivo,
-                // vídeos) ni el servidor.
+                // vídeos) ni el servidor. Lo copiado a la carpeta del servidor
+                // sí se borra: al limpiar ya no se va a descargar ese vídeo.
+                try { borrarVideosCopiados(); } catch (_) {}
                 try { if (previewVideoRef.current) previewVideoRef.current.pause(); } catch (_) {}
                 try { limpiarTimerAnim(); } catch (_) {}
                 try { animActualRef.current = null; } catch (_) {}
