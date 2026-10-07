@@ -1795,6 +1795,18 @@ const bdVideoTargetRef = useRef(null);
   // whole cycle. It gets appended to the report at the end.
   const motivoViaRapida = useRef('');
 
+  // El 100% se queda puesto a proposito para que se vea que la descarga ha
+  // terminado, pero antes se quedaba para siempre y el boton decia
+  // '100% Descargar' en lugar de 'Descargar'. A los 4 segundos de acabar, el
+  // progreso vuelve a cero.
+  useEffect(() => {
+    if (progresoDescarga < 100 || descargandoMontaje || optimizando) return;
+    const t = setTimeout(() => {
+      try { setProgresoDescarga(0); } catch (_) {}
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [progresoDescarga, descargandoMontaje, optimizando]);
+
   const nombreBaseDeMontaje = (nombreCustom) => (nombreCustom
     || (videosBD && videosBD.length > 0 && videosBD[0].nombre ? String(videosBD[0].nombre).replace(/\.[^.]+$/, '') : null)
     || (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null)
