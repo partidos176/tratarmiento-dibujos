@@ -1718,12 +1718,11 @@ const bdVideoTargetRef = useRef(null);
   const construirPlanMontaje = async (validas) => {
     const baseSrc = videoUrlCortes || videoUrl;
     const items = [];
-    const ficheros = [];
     const meter = (item, blob) => {
-      const idx = items.length;
+      // El blob viaja pegado al item: el servidor pide los clips/imagenes
+      // subidos aparte por su hash, no como ficheros numerados del plan.
+      if (blob) item.blob = blob;
       items.push(item);
-      // El servidor indexa los ficheros por el índice del item: f0, f1...
-      if (blob) ficheros.push({ campo: 'f' + idx, blob });
     };
     let durTotal = 0;
     for (const linea of validas) {
@@ -1767,7 +1766,7 @@ const bdVideoTargetRef = useRef(null);
       }
     }
     if (!items.length) return null;
-    return { items, ficheros, durTotal };
+    return { items, durTotal };
   };
 
   const saludarServidor = async () => {
@@ -1859,6 +1858,17 @@ const bdVideoTargetRef = useRef(null);
     });
   };
 
+  // Clips e imagenes van aparte del plan: el servidor los guarda por hash del
+  // contenido y devuelve el id con el que hay que referenciarlos en los
+  // segmentos. Si el mismo fichero ya estaba, lo reutiliza.
+  const subirRecurso = async (blob) => {
+    const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/recurso', { method: 'POST', body: blob }, 180000);
+    if (!r || !r.ok) throw new Error('No se pudo subir un segmento al servidor');
+    const d = await r.json().catch(() => null);
+    if (!d || !d.id) throw new Error('El servidor no devolvió el id del segmento');
+    return d;
+  };
+
   const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null) => {
     const t0 = performance.now();
     let entregaOk = false;
@@ -1884,22 +1894,28 @@ const bdVideoTargetRef = useRef(null);
       const tPlanMs = performance.now() - tPlan0;
       if (!plan || !plan.items.length) return false;
 
-      // Los tramos salen de la caché del servidor: tiene que ser nuestro vídeo.
+      // De donde sale el vídeo de partida para los tramos: primero la carpeta
+      // fija del servidor (mismo nombre y tamaño = cero subidas, todo local),
+      // luego su caché y solo como último recurso subir los GB.
       let tFuenteMs = 0;
       let tLecturaMs = 0;
       let tSubidaMs = 0;
       let tServidorMs = 0;
       let tEntregaMs = 0;
+      let tRecMs = 0;
       let bytes = 0;
       let subidaHecha = false;
+      let origen = null;
+      let fuente = null;
       if (plan.items.some(it => it.t === 'tramo')) {
-        const fuente = await fuenteDeTramos();
+        fuente = await fuenteDeTramos();
         if (!fuente) return false;
-        // Comparar por tamaño con lo que ya tiene el servidor. Si coincide no se
-        // sube nada (y si conocemos el tamaño tampoco se lee el vídeo).
         const tam = Number(fuente.size) || 0;
+        origen = { nombre: String(fuente.nombre || ''), size: tam };
+        const enCarpeta = (salud.videos || []).some(v => v && Number(v.size) === tam
+          && String(v.name || '').toLowerCase() === origen.nombre.toLowerCase());
         const coincide = !!salud.cached && tam > 0 && Number(salud.cachedSize) === tam;
-        if (!coincide) {
+        if (!enCarpeta && !coincide) {
           let blob = fuente.blob;
           if (!blob) {
             const tLec = performance.now();
@@ -1933,16 +1949,39 @@ const bdVideoTargetRef = useRef(null);
           || 'montaje';
         const nombreArchivo = `${nombreBase}.mp4`;
 
-        const res = await new Promise((resolve, reject) => {
-          const fd = new FormData();
-          fd.append('plan', JSON.stringify({ items: plan.items, conTransiciones: false }));
-          for (const f of plan.ficheros) fd.append(f.campo, f.blob, f.campo + extDeBlob(f.blob));
+        // El servidor pide los segmentos en JSON (tipo, tiempos y el nombre
+        // del rótulo) y los clips/imagenes subidos aparte por su hash.
+        const tRec0 = performance.now();
+        const segmentos = [];
+        for (let i = 0; i < plan.items.length; i++) {
+          if (cancelarDescargaRef.current) return false;
+          const it = plan.items[i] || {};
+          if (it.t === 'tramo') {
+            segmentos.push({ tipo: 'fuente', ini: Number(it.ini), fin: Number(it.fin), nombre: it.nombre || '' });
+            continue;
+          }
+          if (!it.blob) throw new Error('Falta el fichero del segmento ' + (i + 1));
+          setAviso('Subiendo segmento ' + (i + 1) + ' de ' + plan.items.length + '…');
+          const r = await subirRecurso(it.blob);
+          if (it.t === 'imagen') {
+            segmentos.push({ tipo: 'imagen', id: r.id, ext: r.ext, dur: Number(it.dur) || 4, nombre: it.nombre || '' });
+          } else {
+            segmentos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: Number(it.dur) || 5, nombre: it.nombre || '' });
+          }
+          setProgresoDescarga(Math.min(45, 35 + Math.round(((i + 1) / Math.max(1, plan.items.length)) * 10)));
+        }
+        setAviso('');
+        tRecMs = performance.now() - tRec0;
+        if (cancelarDescargaRef.current) return false;
+
+        const enviarMontaje = () => new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open('POST', SERVIDOR_MONTAJE + '/api/montaje');
           xhr.responseType = 'blob';
           xhr.timeout = 20 * 60 * 1000;
+          xhr.setRequestHeader('Content-Type', 'application/json');
           xhr.upload.onload = () => { tSubidaMs = performance.now() - tPrep0; };
-          xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(Math.round((e.loaded / e.total) * 50)); };
+          xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(45 + Math.round((e.loaded / e.total) * 5)); };
           xhr.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(50 + Math.round((e.loaded / e.total) * 49)); };
           xhr.onload = () => {
             tServidorMs = Number(xhr.getResponseHeader('X-Tiempo-Ms')) || 0;
@@ -1951,15 +1990,37 @@ const bdVideoTargetRef = useRef(null);
               if (!b || !b.size) { reject(new Error('El servidor devolvió un fichero vacío')); return; }
               resolve(b);
             } else {
-              reject(new Error('El servidor respondió ' + xhr.status));
+              const err = new Error('El servidor respondió ' + xhr.status);
+              err.status = xhr.status;
+              reject(err);
             }
           };
           xhr.onerror = () => reject(new Error('Sin conexión con el servidor'));
           xhr.ontimeout = () => reject(new Error('El montaje en el servidor tardó demasiado'));
           xhr.onabort = () => reject(new Error('Subida cancelada'));
           try { xhrDescargaRef.current = xhr; } catch (_) {}
-          xhr.send(fd);
+          xhr.send(JSON.stringify({ segmentos, ancho: 1280, alto: 720, origen }));
         });
+
+        let res;
+        try {
+          res = await enviarMontaje();
+        } catch (e) {
+          // 409 = el servidor no encontró el vídeo fuente (se cayó de la
+          // caché o no estaba en la carpeta): se sube y se reintenta una vez.
+          if (e && e.status === 409 && !subidaHecha && fuente) {
+            let blob = fuente.blob;
+            if (!blob) { blob = await blobDesdeUrl(baseSrc); if (!blob) throw e; }
+            const tSub = performance.now();
+            try {
+              await subirFuenteAlServidor(blob, fuente.nombre, (p) => setProgresoDescarga(Math.round(p * 35)));
+            } finally { tFuenteMs = performance.now() - tSub; }
+            subidaHecha = true;
+            res = await enviarMontaje();
+          } else {
+            throw e;
+          }
+        }
 
         bytes = res.size;
         const t0Entrega = performance.now();
@@ -1989,6 +2050,7 @@ const bdVideoTargetRef = useRef(null);
         if (tPlanMs > 0) fases.push('plan ' + s1(tPlanMs));
         if (tLecturaMs > 0) fases.push('lectura fuente ' + s1(tLecturaMs));
         if (tFuenteMs > 0) fases.push('subida fuente ' + s1(tFuenteMs));
+        if (tRecMs > 0) fases.push('segmentos ' + s1(tRecMs));
         if (tSubidaMs > 0) fases.push('subida plan ' + s1(tSubidaMs));
         if (tServidorMs > 0) fases.push('servidor ' + s1(tServidorMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
