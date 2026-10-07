@@ -2164,9 +2164,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
         if (tFuenteMs > 0) fases.push('subida fuente ' + s1(tFuenteMs));
         if (tServidorMs > 0) fases.push('servidor ' + s1(tServidorMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
-        setInformeDescarga('Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s reales'
-          + (fases.length ? ' | ' + fases.join(' / ') : '')
-          + ' | ' + plan.items.length + ' tramos | salida ' + Math.round(res.size / 1024) + ' KB, MP4/H.264 nativo');
+        setInformeDescarga('Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s reales');
         setAviso('');
         return true;
       } finally {
