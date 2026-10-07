@@ -2113,9 +2113,32 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
           xhr.responseType = 'blob';
           xhr.timeout = 20 * 60 * 1000;
           xhr.upload.onload = () => { tSubidaMs = performance.now() - tPrep0; };
-          xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(Math.round((e.loaded / e.total) * 50)); };
-          xhr.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(50 + Math.round((e.loaded / e.total) * 49)); };
+          // Mientras el servidor compone no llega ni un byte: la subida del plan
+          // termina en el acto (son unos bytes de JSON) y el progreso de la
+          // descarga no empieza hasta el final. Por eso la barra se quedaba
+          // clavada en 50% durante los minutos de composicion y luego saltaba
+          // de golpe al empezar a bajar el archivo.
+          //
+          // Ahora se mueve sola de forma estimada y asintotica: sube deprisa al
+          // principio, se acerca al 88% sin llegar, y en cuanto llegan bytes del
+          // archivo se pasa al 90% y ahi ya mide el descargon de verdad.
+          const tIniBarra = performance.now();
+          const msEstimados = Math.max(3000, (Number(plan.durTotal) || 10) / 2.5 * 1000);
+          const barra = setInterval(() => {
+            const t = (performance.now() - tIniBarra) / msEstimados;
+            const p = 5 + 83 * (1 - Math.exp(-t));
+            try { setProgresoDescarga(Math.min(88, Math.round(p))); } catch (_) {}
+          }, 350);
+          const pararBarra = () => { try { clearInterval(barra); } catch (_) {} };
+          xhr.upload.onload = () => { tSubidaMs = performance.now() - tPrep0; };
+          xhr.onprogress = (e) => {
+            if (e.lengthComputable && e.total && e.loaded > 0) {
+              pararBarra();
+              setProgresoDescarga(90 + Math.min(9, Math.round((e.loaded / e.total) * 9)));
+            }
+          };
           xhr.onload = async () => {
+                        pararBarra();
             tServidorMs = Number(xhr.getResponseHeader('X-Montaje-Ms')) || 0;
             if (xhr.status >= 200 && xhr.status < 300) {
               const b = xhr.response;
@@ -2132,9 +2155,9 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
               reject(new Error('El servidor respondio ' + xhr.status + (detalle ? ': ' + detalle : '')));
             }
           };
-          xhr.onerror = () => reject(new Error('Sin conexion con el servidor'));
-          xhr.ontimeout = () => reject(new Error('El montaje en el servidor tardo demasiado'));
-          xhr.onabort = () => reject(new Error('Subida cancelada'));
+          xhr.onerror = () => { pararBarra(); reject(new Error('Sin conexion con el servidor')); };
+          xhr.ontimeout = () => { pararBarra(); reject(new Error('El montaje en el servidor tardo demasiado')); };
+          xhr.onabort = () => { pararBarra(); reject(new Error('Subida cancelada')); };
           try { xhrDescargaRef.current = xhr; } catch (_) {}
           try { xhr.setRequestHeader('Content-Type', 'application/json'); } catch (_) {}
           xhr.send(JSON.stringify({ segmentos: plan.items, ancho: 1280, alto: 720 }));
