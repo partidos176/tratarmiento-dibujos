@@ -6765,19 +6765,36 @@ const terminar = () => {
                             setTimeout(fin, 4000);
                           });
                         }
-                        try {
-                          for (let i = 0; i < clips.length; i++) {
-                            const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
-                            await descargarDesdeMontaje([clips[i]], nombre, baseMontaje);
-                            if (cancelarDescargaRef.current) break;
-                            // Pausa para que el 100% de cada corte se vea antes
-                            // de empezar el siguiente (si no, lo pisa al momento).
-                            if (i < clips.length - 1) await new Promise(r => setTimeout(r, 1000));
-                          }
-                        } finally {
-                          try { baseMontaje && baseMontaje.pause(); } catch (_) {}
-                          try { if (baseMontaje && baseMontaje.parentNode) document.body.removeChild(baseMontaje); } catch (_) {}
-                        }
+        // Un clip que falle no puede tirar el resto: se anota y se sigue.
+        // Antes el bucle no tenia proteccion: un fallo en el segundo clip
+        // dejaba el resto sin descargar y no se decia nada.
+        const fallos = [];
+        let hechos = 0;
+        let cancelado = false;
+        try {
+          for (let i = 0; i < clips.length; i++) {
+            const nombre = (clips[i].concepto || '').trim() || `video_${i + 1}`;
+            try {
+              await descargarDesdeMontaje([clips[i]], nombre, baseMontaje);
+              if (cancelarDescargaRef.current) { cancelado = true; break; }
+              hechos++;
+            } catch (e) {
+              const m = String((e && e.message) || e || 'error desconocido').slice(0, 90);
+              fallos.push(`${i + 1} (${nombre}): ${m}`);
+              console.warn('Clip ' + (i + 1) + ' fallo:', e);
+            }
+            // Pausa para que el 100% de cada corte se vea antes
+            // de empezar el siguiente (si no, lo pisa al momento).
+            if (i < clips.length - 1) await new Promise(r => setTimeout(r, 1000));
+          }
+        } finally {
+          try { baseMontaje && baseMontaje.pause(); } catch (_) {}
+          try { if (baseMontaje && baseMontaje.parentNode) baseMontaje.parentNode.removeChild(baseMontaje); } catch (_) {}
+        }
+        try {
+          const resumen = `${hechos} de ${clips.length} descargados`;
+          setAviso(cancelado ? resumen + ' (cancelado)' : (fallos.length ? resumen + '. Fallos: ' + fallos.join(' | ') : resumen + '.'));
+        } catch (_) {}
                       }}
                       disabled={descargandoMontaje}
                       style={{ background: '#22c55e', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
