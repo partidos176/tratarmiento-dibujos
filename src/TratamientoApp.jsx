@@ -1926,16 +1926,17 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
     let durTotal = 0;
     for (let i = 0; i < trozos.length; i++) {
       const item = { ...trozos[i] };
+      // 'bruto' se declara aqui y no dentro del if de abajo: se usa mas abajo,
+      // al montar el tramo de transicion, y declarado dentro se quedaba fuera
+      // de su alcance.
+      const bruto = transPorPos.get(i);
       let mitad = 0;
-      if (i + 1 < trozos.length) {
-        const bruto = transPorPos.get(i);
-        if (bruto) {
-          const d = Math.min(bruto, longitudDe(item), longitudDe(trozos[i + 1]));
-          if (d >= 0.2) {
-            mitad = d / 2;
-            trozos[i + 1] = { ...trozos[i + 1] };
-            avanzarCabeza(trozos[i + 1], mitad);
-          }
+      if (i + 1 < trozos.length && bruto) {
+        const d = Math.min(bruto.dur, longitudDe(item), longitudDe(trozos[i + 1]));
+        if (d >= 0.2) {
+          mitad = d / 2;
+          trozos[i + 1] = { ...trozos[i + 1] };
+          avanzarCabeza(trozos[i + 1], mitad);
         }
       }
       if (mitad > 0) acortarCola(item, mitad);
