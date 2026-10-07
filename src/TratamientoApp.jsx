@@ -1710,6 +1710,16 @@ const bdVideoTargetRef = useRef(null);
   // Todo fallo devuelve false y la descarga sigue por la ruta de siempre
   // (canvas), así que nunca se pierde el trabajo.
   const SERVIDOR_MONTAJE = 'http://localhost:3001';
+  // Interruptor de la ruta que compone el montaje con ffmpeg en el servidor.
+  //
+  // Con el servidor encendido, cada descarga intentaba subir el video de partida
+  // entero (en este caso 8 GB) antes de poder componer nada. Con "descargar cada
+  // uno por separado" eso se repite por cada clip, y un corte de 10 s se quedaba
+  // esperando una subida de 8 GB.
+  //
+  // Esta apagado porque la via no se va a usar. Se deja el codigo puesto por si
+  // algun dia se retoma: basta con ponerlo a true con el servidor arrancado.
+  const VIA_NATIVA_ACTIVA = false;
 
   const animsSinVideoDe = (validas) => {
     const fuera = [];
@@ -1949,6 +1959,7 @@ const bdVideoTargetRef = useRef(null);
 
 const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null) => {
     const t0 = performance.now();
+    if (!VIA_NATIVA_ACTIVA) { motivoViaRapida.current = 'la via nativa esta desactivada'; return false; }
     let entregaOk = false;
     motivoViaRapida.current = '';
     try { cancelarDescargaRef.current = false; } catch (_) {}
