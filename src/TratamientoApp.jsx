@@ -57,7 +57,10 @@ function TratamientoApp({ videoInicial }) {
   const [tiempoCortes, setTiempoCortes] = useState(0);
   const [durCortes, setDurCortes] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [hoja, setHoja] = useState('Cortes');
+  // Arranca siempre en Base de datos, tambien al recargar la pagina. El nombre
+// tiene que coincidir exactamente con el de la hoja en 'hojas', que es donde
+// se decide que se dibuja.
+const [hoja, setHoja] = useState('Base de datos');
   const [progreso, setProgreso] = useState(0);
   const [duracion, setDuracion] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(false);
