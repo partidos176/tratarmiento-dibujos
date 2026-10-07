@@ -2065,8 +2065,8 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
           xhr.ontimeout = () => reject(new Error('El montaje en el servidor tardo demasiado'));
           xhr.onabort = () => reject(new Error('Subida cancelada'));
           try { xhrDescargaRef.current = xhr; } catch (_) {}
-          xhr.send(JSON.stringify({ segmentos: plan.items, ancho: 1280, alto: 720 }));
           try { xhr.setRequestHeader('Content-Type', 'application/json'); } catch (_) {}
+          xhr.send(JSON.stringify({ segmentos: plan.items, ancho: 1280, alto: 720 }));
         });
 
         const t0Entrega = performance.now();
