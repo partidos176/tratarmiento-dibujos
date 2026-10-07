@@ -614,6 +614,15 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
       '  border:none !important;',
       '  border-radius:0 !important;',
       '}',
+      // La barra de botones hacia que el video no llegue a ocupar todo el alto y
+      // quedara una franja negra debajo. En pantalla completa sobra: se sale con
+      // Escape, asi que no hace falta ningun boton a la vista.
+      '#cortes-video-wrap:fullscreen .barra-cortes {',
+      '  display:none !important;',
+      '}',
+      '#cortes-video-wrap:fullscreen {',
+      '  gap:0 !important;',
+      '}',
     ].join('\n');
     document.head.appendChild(estilo);
     return () => { try { document.head.removeChild(estilo); } catch (_) {} };
