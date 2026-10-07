@@ -79,6 +79,10 @@ const [hoja, setHoja] = useState('Base de datos');
   const [arrastrandoMarcaId, setArrastrandoMarcaId] = useState(null);
   const [arrastrePos, setArrastrePos] = useState(null);
   const [aviso, setAviso] = useState(null);
+  // Aviso de la copia del vídeo a la carpeta del servidor: se enseña pegado a
+  // la tabla de la hoja Base de datos, no como ventana emergente, para que no
+  // interrumpa al cargar los vídeos.
+  const [avisoCopia, setAvisoCopia] = useState(null);
   const [serverOn, setServerOn] = useState(null);
   const comprobarServidor = async () => {
     try {
@@ -1975,14 +1979,15 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
   const copiarVideoAlServidor = async (file) => {
     try {
       if (!file || !file.name || !(file.size > 0)) return;
+      setAvisoCopia({ estado: 'copiando', texto: 'Copiando «' + file.name + '» para el servidor…' });
       const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/videos/copiar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: file.name, size: file.size }),
       }, 120000);
-      if (!r || !r.ok) return;
+      if (!r || !r.ok) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no respondió para copiar el vídeo' }); return; }
       const d = await r.json().catch(() => null);
-      if (!d) return;
+      if (!d) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no devolvió nada al copiar el vídeo' }); return; }
       if (d.ok) {
         try {
           const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
@@ -1990,12 +1995,13 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
           if (!lista.includes(file.name)) lista.push(file.name);
           localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
         } catch (_) {}
-        setAviso('Video en la carpeta del servidor: no hará falta subirlo'
-          + (d.ms ? ' (copiado en ' + (d.ms / 1000).toFixed(1) + ' s)' : ''));
+        setAvisoCopia({ estado: 'ok', texto: 'Vídeo copiado para el servidor' + (d.ms ? ' (' + (d.ms / 1000).toFixed(1) + ' s)' : '') });
       } else {
-        setAviso('No encontré «' + file.name + '» en el disco: al descargar se subirá al servidor');
+        setAvisoCopia({ estado: 'mal', texto: 'No encontré «' + file.name + '» en el disco: al descargar se subirá al servidor' });
       }
-    } catch (_) {}
+    } catch (_) {
+      setAvisoCopia({ estado: 'mal', texto: 'No se pudo copiar el vídeo para el servidor' });
+    }
   };
 
   const borrarVideosCopiados = async () => {
@@ -5574,7 +5580,8 @@ const terminar = () => {
             style={{ display: 'none' }}
             onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
           />
-          <div style={{ width: '100%', maxWidth: '800px' }}>
+            <div style={{ display: 'flex', gap: '1rem', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ width: '100%', maxWidth: '800px', flex: '1 1 520px' }}>
             <input
               ref={bdVideoRef}
               type="file"
@@ -5695,7 +5702,29 @@ const terminar = () => {
                     </tr>
               </tbody>
             </table>
-          </div>
+            </div>
+            {avisoCopia && (
+              <div
+                title={avisoCopia.texto}
+                style={{
+                  flex: '0 1 280px',
+                  minWidth: '200px',
+                  background: avisoCopia.estado === 'ok' ? 'rgba(34,197,94,0.12)' : avisoCopia.estado === 'mal' ? 'rgba(220,38,38,0.12)' : 'rgba(56,189,248,0.12)',
+                  border: '1px solid ' + (avisoCopia.estado === 'ok' ? '#22c55e' : avisoCopia.estado === 'mal' ? '#dc2626' : '#38bdf8'),
+                  borderRadius: '10px',
+                  padding: '0.7rem 0.9rem',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  lineHeight: 1.35,
+                  color: avisoCopia.estado === 'ok' ? '#4ade80' : avisoCopia.estado === 'mal' ? '#f87171' : '#7dd3fc'
+                }}
+              >
+                {avisoCopia.estado === 'copiando' ? '… ' : avisoCopia.estado === 'ok' ? '✓ ' : '⚠ '}
+                {avisoCopia.texto}
+              </div>
+            )}
+            </div>
         </div>
       ) : hoja === 'Cortes' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
@@ -7096,6 +7125,7 @@ const terminar = () => {
                 setShowTransiciones(false);
                 setShowModalDescarga(false);
                 setAviso(null);
+                setAvisoCopia(null);
               }}
               style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
