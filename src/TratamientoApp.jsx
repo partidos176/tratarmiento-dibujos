@@ -1873,7 +1873,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       if (!linea) return null;
       if (linea.tipo === 'transicion') {
         // transPorPos guarda en que indice de trozo cae la union
-        transPorPos.set(trozos.length - 1, Math.max(0.3, Number(linea.duracion) || 2));
+        transPorPos.set(trozos.length - 1, { dur: Math.max(0.3, Number(linea.duracion) || 2), modelo: linea.modelo || 'crossfade' });
         continue;
       }
       const nombre = (linea.concepto || '').trim();
@@ -1938,7 +1938,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       if (mitad > 0) acortarCola(item, mitad);
       if (longitudDe(item) > 0.05) { items.push(item); durTotal += longitudDe(item); }
       if (mitad > 0 && trozos[i + 1] && longitudDe(trozos[i + 1]) > 0.05) {
-        items.push({ tipo: 'transicion', dur: mitad * 2, a: operandoDe(item, mitad), b: operandoDe(trozos[i + 1], 0), nombre: '' });
+        items.push({ tipo: 'transicion', dur: mitad * 2, modelo: (bruto && bruto.modelo) || 'crossfade', a: operandoDe(item, mitad), b: operandoDe(trozos[i + 1], 0), nombre: '' });
         durTotal += mitad * 2;
       }
     }
