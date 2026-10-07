@@ -2134,13 +2134,12 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       let tServidorMs = 0;
       let tEntregaMs = 0;
       let origen = null;
-      let enCarpetaFuente = false;
       if (plan.items.some(it => it.tipo === 'fuente')) {
         const fuente = await fuenteDeTramos();
         if (!fuente) { motivoViaRapida.current = 'no se encontro el video de partida en el navegador'; return false; }
         const tam = Number(fuente.size) || 0;
         origen = { nombre: String(fuente.nombre || ''), size: tam };
-        enCarpetaFuente = (salud.videos || []).some(v => v && Number(v.size) === tam
+        const enCarpetaFuente = (salud.videos || []).some(v => v && Number(v.size) === tam
           && String(v.name || '').toLowerCase() === origen.nombre.toLowerCase());
         // Comparar por tamano con lo que ya tiene el servidor. Si coincide no se
         // sube nada, y si ya se conoce el tamano tampoco hace falta leer el video.
@@ -2165,7 +2164,6 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
         }
       }
 
-      if (enCarpetaFuente) setAviso('Video en la carpeta del servidor: no se sube nada');
       setDescargandoMontaje(true);
       setOptimaEnDosFases(false);
       setProgresoDescarga(0);
