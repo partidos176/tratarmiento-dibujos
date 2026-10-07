@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { guardarSesion, guardarVideosBD, borrarTodoLocal } from './persistencia';
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
+// fetchFile sale solo de aqui. Antes ademas se hacia un await import('@ffmpeg/util')
+// en cuatro sitios mas, pero como el modulo ya se carga de forma estatica ese await
+// no ahorraba nada: Vite lo avisa con INEFFECTIVE_DYNAMIC_IMPORT.
 import { fetchFile } from '@ffmpeg/util';
 
 // Al recargar se empieza de cero en todas las hojas: se borran las claves
@@ -3095,7 +3098,6 @@ else {
     try {
       ffmpeg = await loadFFmpeg();
       try { setProgresoOpt(1); } catch (_) {}
-      const { fetchFile } = await import('@ffmpeg/util');
       const dur = await new Promise((res) => {
         let done = false;
         const fin = (v) => { if (done) return; done = true; res(v); };
@@ -3200,7 +3202,6 @@ else {
     let descargado = false;
     try {
       ffmpeg = await loadFFmpeg();
-      const { fetchFile } = await import('@ffmpeg/util');
       const dur = await new Promise((res) => {
         let done = false;
         const fin = (v) => { if (done) return; done = true; res(v); };
@@ -3275,11 +3276,10 @@ else {
     const todosTrimsSimple = !tieneAnimaciones && !tieneTransiciones && !tieneImagenes && !tieneVideosExternos && baseSrc && validas.every(l => l.inicio != null && l.fin != null);
     if (todosTrimsSimple) {
       const ffmpeg = await loadFFmpeg();
-      const { fetchFile: ffFetchFile } = await import('@ffmpeg/util');
       const resp = await fetch(baseSrc);
       const videoBlob = await resp.blob();
       const inputName = `input.${ext === 'mp4' ? 'mp4' : 'webm'}`;
-      await ffmpeg.writeFile(inputName, new Uint8Array(await ffFetchFile(videoBlob)));
+      await ffmpeg.writeFile(inputName, new Uint8Array(await fetchFile(videoBlob)));
       let count = 0;
       for (const linea of validas) {
         if (linea.inicio == null || linea.fin == null) continue;
@@ -3328,7 +3328,6 @@ else {
         setProgresoDescarga(10);
         try {
           const ffmpeg = await loadFFmpeg();
-          const { fetchFile } = await import('@ffmpeg/util');
           const resp = await fetch(baseSrc);
           const videoBlob = await resp.blob();
           setProgresoDescarga(30);
