@@ -2164,9 +2164,9 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
     let bpsSolicitado = 0;
     const lastProgRef = { current: -1 };
     const { mime, ext } = mimeDescarga();
+    let entregaOk = false;
     try {
       tPrepDesde = performance.now();
-      let entregaOk = false;
       try { cancelarDescargaRef.current = false; } catch (_) {}
       try { setInformeDescarga(''); } catch (_) {}
       diagFase('Iniciando descarga…');
