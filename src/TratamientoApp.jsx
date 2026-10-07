@@ -2044,14 +2044,21 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
           xhr.upload.onload = () => { tSubidaMs = performance.now() - tPrep0; };
           xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(Math.round((e.loaded / e.total) * 50)); };
           xhr.onprogress = (e) => { if (e.lengthComputable && e.total) setProgresoDescarga(50 + Math.round((e.loaded / e.total) * 49)); };
-          xhr.onload = () => {
+          xhr.onload = async () => {
             tServidorMs = Number(xhr.getResponseHeader('X-Montaje-Ms')) || 0;
             if (xhr.status >= 200 && xhr.status < 300) {
               const b = xhr.response;
               if (!b || !b.size) { reject(new Error('El servidor devolvio un fichero vacio')); return; }
               resolve(b);
             } else {
-              reject(new Error('El servidor respondio ' + xhr.status));
+              // El body lleva el motivo del rechazo; sin esto solo se sabia el
+              // codigo, que no dice nada de por que se rechazo el plan.
+              let detalle = '';
+              try {
+                const t = xhr.response && typeof xhr.response.text === 'function' ? await xhr.response.text() : '';
+                if (t) { const j = JSON.parse(t); detalle = (j && j.error) ? j.error : t; }
+              } catch (_) {}
+              reject(new Error('El servidor respondio ' + xhr.status + (detalle ? ': ' + detalle : '')));
             }
           };
           xhr.onerror = () => reject(new Error('Sin conexion con el servidor'));
