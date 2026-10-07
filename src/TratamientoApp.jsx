@@ -1717,9 +1717,18 @@ const bdVideoTargetRef = useRef(null);
   // uno por separado" eso se repite por cada clip, y un corte de 10 s se quedaba
   // esperando una subida de 8 GB.
   //
-  // Esta apagado porque la via no se va a usar. Se deja el codigo puesto por si
-  // algun dia se retoma: basta con ponerlo a true con el servidor arrancado.
-  const VIA_NATIVA_ACTIVA = false;
+  // Encendida de nuevo: la descarga por canvas graba en tiempo real, asi que un
+  // corte de 10 s tarda 10 s. Con el servidor, el corte se hace con ffmpeg
+  // nativo y son segundos.
+  //
+  // La contrapartida es que el servidor necesita el video de partida. Se sube
+  // ENTERO una sola vez (unos 8 GB por localhost, unos minutos) y a partir de ahi
+  // se compara por tamano y no se vuelve a subir. El fallo anterior era que
+  // "descargar cada uno por separado" repetia la subida por cada clip.
+  //
+  // Con el servidor apagado (o apagando este interruptor) se vuelve a la
+  // grabacion por canvas y no se sube nada.
+  const VIA_NATIVA_ACTIVA = true;
 
   const animsSinVideoDe = (validas) => {
     const fuera = [];
