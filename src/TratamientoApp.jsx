@@ -597,31 +597,38 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   useEffect(() => {
     const estilo = document.createElement('style');
     estilo.textContent = [
+      // El video se saca del flujo y se pega a la pantalla. Asi da igual lo
+      // que haya alrededor: no queda hueco posible para una franja, ni al
+      // espirar el alto entre los hijos del contenedor.
       '#cortes-video-wrap:fullscreen {',
-      '  background:#000 !important;',
-      '  height:100vh !important;',
+      '  position:fixed !important;',
+      '  inset:0 !important;',
       '  width:100vw !important;',
-      '  justify-content:center !important;',
-      '  align-items:center !important;',
-      '  box-sizing:border-box !important;',
+      '  height:100vh !important;',
+      '  margin:0 !important;',
+      '  padding:0 !important;',
+      '  border:0 !important;',
+      '  gap:0 !important;',
+      '  background:#000000 !important;',
+      '  overflow:hidden !important;',
       '}',
       '#cortes-video-wrap:fullscreen video {',
-      '  width:100% !important;',
-      '  height:100% !important;',
-      '  flex:1 1 0 !important;',
+      '  position:absolute !important;',
+      '  top:0 !important;',
+      '  left:0 !important;',
+      '  width:100vw !important;',
+      '  height:100vh !important;',
+      '  max-width:none !important;',
+      '  max-height:none !important;',
       '  min-height:0 !important;',
       '  object-fit:cover !important;',
-      '  border:none !important;',
+      '  border:0 !important;',
       '  border-radius:0 !important;',
       '}',
-      // La barra de botones hacia que el video no llegue a ocupar todo el alto y
-      // quedara una franja negra debajo. En pantalla completa sobra: se sale con
-      // Escape, asi que no hace falta ningun boton a la vista.
+      // La barra de botones le quitaba alto al video y dejaba una franja negra
+      // debajo. En pantalla completa sobra: se sale con Escape.
       '#cortes-video-wrap:fullscreen .barra-cortes {',
       '  display:none !important;',
-      '}',
-      '#cortes-video-wrap:fullscreen {',
-      '  gap:0 !important;',
       '}',
     ].join('\n');
     document.head.appendChild(estilo);
