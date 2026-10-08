@@ -1989,15 +1989,22 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       const d = await r.json().catch(() => null);
       if (!d) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no devolvió nada al copiar el vídeo' }); return; }
       if (d.ok) {
-        try {
-          const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
-          const lista = Array.isArray(prev) ? prev : [];
-          if (!lista.includes(file.name)) lista.push(file.name);
-          localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
-        } catch (_) {}
-        setAvisoCopia({ estado: 'ok', texto: 'Vídeo copiado para el servidor' + (d.ms ? ' (' + (d.ms / 1000).toFixed(1) + ' s)' : '') });
+        // Solo se apunta lo que la app copio desde fuera: un fichero que ya
+        // estaba en la biblioteca de Videos no se borra al limpiar ni al
+        // recargar (seria borrar un vídeo del usuario).
+        if (!d.yaEstaba) {
+          try {
+            const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
+            const lista = Array.isArray(prev) ? prev : [];
+            if (!lista.includes(file.name)) lista.push(file.name);
+            localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
+          } catch (_) {}
+          setAvisoCopia({ estado: 'ok', texto: 'Vídeo copiado para el servidor' + (d.ms ? ' (' + (d.ms / 1000).toFixed(1) + ' s)' : '') });
+        } else {
+          setAvisoCopia({ estado: 'ok', texto: 'El vídeo ya está en la carpeta del servidor' });
+        }
       } else {
-        setAvisoCopia({ estado: 'mal', texto: 'No encontré «' + file.name + '» en el disco: al descargar se subirá al servidor' });
+        setAvisoCopia({ estado: 'mal', texto: d.motivo ? ('No se pudo copiar: ' + d.motivo) : ('No encontré «' + file.name + '» en el disco: al descargar se subirá al servidor') });
       }
     } catch (_) {
       setAvisoCopia({ estado: 'mal', texto: 'No se pudo copiar el vídeo para el servidor' });
