@@ -154,19 +154,7 @@ const [hoja, setHoja] = useState('Base de datos');
       if (aa !== bb) return aa.localeCompare(bb, 'es');
       return a.inicio - b.inicio;
     });
-    setFilasMontaje(prev => {
-      const todas = [...prev, ...nuevas].filter(f => f.inicio != null && f.fin != null && f.tipo !== 'transicion').sort((a, b) => a.inicio - b.inicio);
-      const ajustadas = new Map();
-      for (let i = 0; i < todas.length - 1; i++) {
-        const f = todas[i];
-        const sig = todas[i + 1];
-        if (sig.inicio > f.inicio && f.fin !== sig.inicio) ajustadas.set(f.id, { fin: sig.inicio, duracion: sig.inicio - f.inicio });
-      }
-      if (ajustadas.size === 0) return [...prev, ...nuevas];
-      const nuevasAjust = nuevas.map(f => (ajustadas.has(f.id) ? { ...f, ...ajustadas.get(f.id) } : f));
-      const prevAjust = prev.map(f => (ajustadas.has(f.id) ? { ...f, ...ajustadas.get(f.id) } : f));
-      return [...prevAjust, ...nuevasAjust];
-    });
+    setFilasMontaje(prev => [...prev, ...nuevas]);
     setDuracionCortes(prev => {
       const c = { ...prev };
       nuevas.forEach(f => { c[String(f.inicio)] = f.duracion; });
