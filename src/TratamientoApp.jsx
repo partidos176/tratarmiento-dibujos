@@ -1912,6 +1912,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
     // transiciones se anotan en la posicion donde caen, entre dos trozos.
     const trozos = [];
     const transPorPos = new Map();
+    const diag = { lineas: validas.length, lineasSinTrozos: [], trozosDescartados: 0 };
     for (const linea of validas) {
       if (!linea) return null;
       if (linea.tipo === 'transicion') {
@@ -1920,6 +1921,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
         continue;
       }
       const nombre = (linea.concepto || '').trim();
+      const trozosAntes = trozos.length;
       if (linea.tipo === 'imagen' && linea.imagenUrl) {
         const r = await asegurar(linea.imagenUrl);
         if (!r) return null;
@@ -1956,6 +1958,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       } else {
         return null;
       }
+      if (trozos.length === trozosAntes) diag.lineasSinTrozos.push(nombre || ('#' + (linea.inicio != null ? Math.round(linea.inicio) + 's' : '?')));
     }
     if (!trozos.length) return null;
 
@@ -1987,7 +1990,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       }
     }
     if (!items.length) return null;
-    return { items, durTotal };
+    return { items, durTotal, diag };
   };
 
   const saludarServidor = async () => {
@@ -2295,7 +2298,9 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
         if (tFuenteMs > 0) fases.push('subida fuente ' + s1(tFuenteMs));
         if (tServidorMs > 0) fases.push('servidor ' + s1(tServidorMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
-        setInformeDescarga('Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s reales');
+        setInformeDescarga('Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s reales'
+          + (plan.diag ? ' | ' + plan.diag.lineas + ' lineas → ' + plan.items.length + ' tramos'
+            + (plan.diag.lineasSinTrozos.length ? ' (SIN METRAJE: ' + plan.diag.lineasSinTrozos.join(', ') + ')' : '') : ''));
         setAviso('');
         return true;
       } finally {
@@ -5763,7 +5768,7 @@ const terminar = () => {
               onClick={() => exportarMontaje()}
               style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
             >
-              Exportar
+              Exportar BASE DATOS
             </button>
             </div>
         </div>
@@ -6979,7 +6984,9 @@ const terminar = () => {
                 <div onClick={() => setShowModalDescarga(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
                   <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1.2rem 1.4rem', width: '380px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                     <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>Descargar</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>{marcadas.length} {marcadas.length === 1 ? 'linea marcada' : 'lineas marcadas'}</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.75rem', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>{marcadas.length} {marcadas.length === 1 ? 'linea marcada' : 'lineas marcadas'}
+                      {' · '}{marcadas.filter(l => l.tipo === 'transicion').length} fundidos · {marcadas.filter(l => l.tipo === 'imagen').length} imagenes · {marcadas.filter(l => l.tipo !== 'transicion' && l.tipo !== 'imagen').length} clips
+                    </div>
                     <button
                       onClick={async () => {
                         setShowModalDescarga(false);
