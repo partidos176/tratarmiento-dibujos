@@ -127,16 +127,36 @@ const [hoja, setHoja] = useState('Base de datos');
     const ord = [...cortes].sort((a, b) => b - a);
     const dur = duracionCortes[String(ct)] ?? 15;
     const nombre = (nombreCortes[String(ct)] || '').trim() || `P${ord.length - ord.indexOf(ct)}`;
+    const accion = (accionCortes[String(ct)] || '').trim();
     const ini = Math.max(0, ct);
     const fin = ini + dur;
     if (filasMontaje.some(f => f.inicio === ini && f.fin === fin)) return null;
-    return { id: Date.now() + ini, videoUrl: null, concepto: nombre, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
+    return { id: Date.now() + ini, videoUrl: null, concepto: nombre, accion, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
   };
   // Pasa una lista de cortes a la hoja Montaje, sin cambiar de hoja.
+  // Las lineas se ajustan para que una empiece donde acaba la siguiente (sin huecos).
   const pasarCortesAMontaje = (lista) => {
     const nuevas = lista.map(filaMontajeDeCorte).filter(Boolean);
     if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
-    setFilasMontaje(prev => [...prev, ...nuevas]);
+    setFilasMontaje(prev => {
+      const todas = [...prev, ...nuevas].filter(f => f.inicio != null && f.fin != null && f.tipo !== 'transicion').sort((a, b) => a.inicio - b.inicio);
+      const ajustadas = new Map();
+      for (let i = 0; i < todas.length - 1; i++) {
+        const f = todas[i];
+        const sig = todas[i + 1];
+        if (sig.inicio > f.inicio && f.fin !== sig.inicio) ajustadas.set(f.id, { fin: sig.inicio, duracion: sig.inicio - f.inicio });
+      }
+      if (ajustadas.size === 0) return [...prev, ...nuevas];
+      const prevMap = new Map(prev.map(f => [f.id, f]));
+      const nuevasAjust = nuevas.map(f => (ajustadas.has(f.id) ? { ...f, ...ajustadas.get(f.id) } : f));
+      const prevAjust = prev.map(f => (ajustadas.has(f.id) ? { ...f, ...ajustadas.get(f.id) } : f));
+      return [...prevAjust, ...nuevasAjust];
+    });
+    setDuracionCortes(prev => {
+      const c = { ...prev };
+      nuevas.forEach(f => { c[String(f.inicio)] = f.duracion; });
+      return c;
+    });
   };
   const [cortesEditados, setCortesEditados] = useState({});
   const [fotoPorCorte, setFotoPorCorte] = useState({});
@@ -7175,7 +7195,7 @@ const terminar = () => {
                 }}
                 onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
                 title="Arrastra para mover la fila (clic para seleccionar)"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 10rem 0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: (fila.tipo === 'imagen' || fila.tipo === 'transicion') ? 'auto' : 'fit-content', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: '100%', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
                 {fila.tipo !== 'transicion' && (() => { const k = claveNumCorte(fila); return (<span onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul(k); }} title={corteNumAzul[k] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'} style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul[k] ? '#38bdf8' : 'transparent', color: corteNumAzul[k] ? '#0f172a' : '#e2e8f0' }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>); })()}
                 <div
                   data-sq="1"
@@ -7259,12 +7279,17 @@ const terminar = () => {
                     }} style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.8rem', border: 'none', borderRadius: '6px', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}>+</button>
                   </div>
                 )}
+                {fila.accion && (
+                  <span title="Tipo de acción (viene de futbol)" style={{ background: '#334155', color: '#38bdf8', borderRadius: '4px', padding: '0.15rem 0.35rem', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {fila.accion}
+                  </span>
+                )}
                 {fila.tipo !== 'imagen' && fila.tipo !== 'transicion' && (
                 <input
                   value={fila.concepto || ''}
                   onChange={(e) => { setFilasMontaje(prev => prev.map((f) => f.id === fila.id ? { ...f, concepto: e.target.value } : f)); }}
                   placeholder="Escribe nombre o concepto..."
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 800, fontFamily: 'Inter, sans-serif', outline: 'none', width: '220px' }}
+                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.5rem', color: '#e2e8f0', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', outline: 'none', width: '180px' }}
                 />
                 )}
                 {fila.tipo === 'transicion' && (
@@ -7323,7 +7348,7 @@ const terminar = () => {
                     setFilasMontaje(prev => prev.filter((f) => f.id !== fila.id));
                   }}
                   title="Eliminar línea"
-                  style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+                  style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0, marginLeft: 'auto' }}
                 >×</button>
               </div>
             ))}
