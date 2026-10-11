@@ -835,6 +835,13 @@ const bdVideoTargetRef = useRef(null);
     const total = Math.max(0, Math.floor(s || 0));
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   };
+  const parsearTiempo = (str) => {
+    const partes = String(str).trim().split(':').map(Number);
+    if (partes.some(n => Number.isNaN(n))) return null;
+    if (partes.length === 2) return partes[0] * 60 + partes[1];
+    if (partes.length === 1) return partes[0];
+    return null;
+  };
 
   const fijarDuracion = (v) => {
     const d = v ? v.duration : 0;
@@ -7250,9 +7257,44 @@ const terminar = () => {
                 {fila.inicio != null && fila.fin != null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                      <span onClick={() => { setSelPeriodoMontaje(p => ({ ...p, [fila.id]: p[fila.id] === 'ini' ? null : 'ini' })); abrirPreviewLinea(fila, fila.inicio, false); }} title="Seleccionar inicio" style={{ cursor: 'pointer', color: selPeriodoMontaje[fila.id] === 'ini' ? '#ef4444' : '#ffffff', textDecoration: selPeriodoMontaje[fila.id] === 'ini' ? 'underline' : 'none' }}>{formatoTiempo(fila.inicio)}</span>
+                      <input
+                        key={`ini-${fila.id}-${fila.inicio}`}
+                        defaultValue={formatoTiempo(fila.inicio)}
+                        onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(p => ({ ...p, [fila.id]: 'ini' })); }}
+                        onBlur={(e) => {
+                          e.stopPropagation();
+                          const segs = parsearTiempo(e.target.value);
+                          if (segs == null || segs < 0 || segs >= fila.fin) { e.target.value = formatoTiempo(fila.inicio); return; }
+                          if (segs === fila.inicio) return;
+                          const nuevo = segs;
+                          const dur = fila.fin - nuevo;
+                          const oldKey = String(fila.inicio);
+                          const cortesIdx = cortes.indexOf(fila.inicio);
+                          if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                          setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
+                          requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = nuevo; } catch (_) {} } });
+                        }}
+                        title="Inicio del corte (escribe MM:SS)"
+                        style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '4px', color: selPeriodoMontaje[fila.id] === 'ini' ? '#ef4444' : '#ffffff', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.75rem', width: '48px', textAlign: 'center', padding: '0.1rem 0.2rem', outline: 'none', cursor: 'text' }}
+                      />
                       —
-                      <span onClick={() => { setSelPeriodoMontaje(p => ({ ...p, [fila.id]: p[fila.id] === 'fin' ? null : 'fin' })); abrirPreviewLinea(fila, fila.fin, false); }} title="Seleccionar fin" style={{ cursor: 'pointer', color: selPeriodoMontaje[fila.id] === 'fin' ? '#ef4444' : '#ffffff', textDecoration: selPeriodoMontaje[fila.id] === 'fin' ? 'underline' : 'none' }}>{formatoTiempo(fila.fin)}</span>
+                      <input
+                        key={`fin-${fila.id}-${fila.fin}`}
+                        defaultValue={formatoTiempo(fila.fin)}
+                        onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(p => ({ ...p, [fila.id]: 'fin' })); }}
+                        onBlur={(e) => {
+                          e.stopPropagation();
+                          const segs = parsearTiempo(e.target.value);
+                          if (segs == null || segs <= fila.inicio) { e.target.value = formatoTiempo(fila.fin); return; }
+                          if (segs === fila.fin) return;
+                          const dur = segs - fila.inicio;
+                          setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, fin: segs, duracion: dur }));
+                          setDuracionCortes(prev => ({ ...prev, [String(fila.inicio)]: dur }));
+                          requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = segs; } catch (_) {} } });
+                        }}
+                        title="Fin del corte (escribe MM:SS)"
+                        style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '4px', color: selPeriodoMontaje[fila.id] === 'fin' ? '#ef4444' : '#ffffff', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.75rem', width: '48px', textAlign: 'center', padding: '0.1rem 0.2rem', outline: 'none', cursor: 'text' }}
+                      />
                     </span>
                     <button onClick={(e) => {
                       e.stopPropagation();
