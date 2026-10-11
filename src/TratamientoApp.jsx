@@ -287,15 +287,19 @@ const [selPeriodoMontaje, setSelPeriodoMontaje] = useState({});
   };
 
   const aplicarCortes = async (data) => {
-    if (!data || !Array.isArray(data.cortes)) throw new Error('Archivo no válido');
-    const lista = data.cortes.filter((c) => Number.isFinite(Number(c))).map((c) => Number(c)).sort((a, b) => a - b);
+    if (!data) throw new Error('Archivo no válido');
+    // Formato de futbol: data.cortes es un objeto { cortes, duracionCortes, ... }
+    // Formato propio: data.cortes es un array plano de números
+    const dc = Array.isArray(data.cortes) ? { cortes: data.cortes, duracionCortes: data.duracionCortes, nombreCortes: data.nombreCortes, accionCortes: data.accionCortes, cortesEditados: data.cortesEditados, fotoPorCorte: data.fotoPorCorte } : data.cortes;
+    if (!dc || !Array.isArray(dc.cortes)) throw new Error('Archivo no válido');
+    const lista = dc.cortes.filter((c) => Number.isFinite(Number(c))).map((c) => Number(c)).sort((a, b) => a - b);
     const objStr = (o) => (o && typeof o === 'object' ? { ...o } : {});
     setCortes(lista);
-    setDuracionCortes(objStr(data.duracionCortes));
-    setNombreCortes(objStr(data.nombreCortes));
-    setAccionCortes(objStr(data.accionCortes));
-    setCortesEditados(objStr(data.cortesEditados));
-    setFotoPorCorte(objStr(data.fotoPorCorte));
+    setDuracionCortes(objStr(dc.duracionCortes));
+    setNombreCortes(objStr(dc.nombreCortes));
+    setAccionCortes(objStr(dc.accionCortes));
+    setCortesEditados(objStr(dc.cortesEditados));
+    setFotoPorCorte(objStr(dc.fotoPorCorte));
     if (Array.isArray(data.fotos)) {
       const limpias = await Promise.all(
         data.fotos.filter(f => f && f.id != null && f.dataUrl).map(async (f) => {
@@ -5751,6 +5755,16 @@ const terminar = () => {
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {archivoCortes ? archivoCortes.name : '-'}
               </span>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '0.8rem 1.5rem', cursor: 'pointer' }}>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0' }}>CARGAR JSON:</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => { importarCortes(e.target.files && e.target.files[0]); e.target.value = ''; }}
+              />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8' }}>elegir…</span>
             </label>
             {archivoCortes && (
               <button
