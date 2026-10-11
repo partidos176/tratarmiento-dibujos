@@ -153,7 +153,7 @@ const [hoja, setHoja] = useState('Base de datos');
       const bb = (b.accion || '').trim();
       if (aa !== bb) return aa.localeCompare(bb, 'es');
       return a.inicio - b.inicio;
-    }).forEach((f, i) => { f.numCorte = i + 1; });
+    });
     setFilasMontaje(prev => {
       const todas = [...prev, ...nuevas].filter(f => f.inicio != null && f.fin != null && f.tipo !== 'transicion').sort((a, b) => a.inicio - b.inicio);
       const ajustadas = new Map();
