@@ -5759,6 +5759,12 @@ const terminar = () => {
                 {avisoCopia.texto}
               </div>
             )}
+            <button
+              onClick={() => exportarMontaje()}
+              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Exportar
+            </button>
             </div>
         </div>
       ) : hoja === 'Cortes' ? (
