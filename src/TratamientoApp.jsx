@@ -134,10 +134,17 @@ const [hoja, setHoja] = useState('Base de datos');
     return { id: Date.now() + ini, videoUrl: null, concepto: nombre, accion, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
   };
   // Pasa una lista de cortes a la hoja Montaje, sin cambiar de hoja.
-  // Las lineas se ajustan para que una empiece donde acaba la siguiente (sin huecos).
+  // Las lineas se agrupan por tipo de accion (no por numero) y se ajustan
+  // para que una empiece donde acaba la siguiente (sin huecos).
   const pasarCortesAMontaje = (lista) => {
     const nuevas = lista.map(filaMontajeDeCorte).filter(Boolean);
     if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
+    nuevas.sort((a, b) => {
+      const aa = (a.accion || '').trim();
+      const bb = (b.accion || '').trim();
+      if (aa !== bb) return aa.localeCompare(bb, 'es');
+      return a.inicio - b.inicio;
+    }).forEach((f, i) => { f.numCorte = i + 1; });
     setFilasMontaje(prev => {
       const todas = [...prev, ...nuevas].filter(f => f.inicio != null && f.fin != null && f.tipo !== 'transicion').sort((a, b) => a.inicio - b.inicio);
       const ajustadas = new Map();
@@ -147,7 +154,6 @@ const [hoja, setHoja] = useState('Base de datos');
         if (sig.inicio > f.inicio && f.fin !== sig.inicio) ajustadas.set(f.id, { fin: sig.inicio, duracion: sig.inicio - f.inicio });
       }
       if (ajustadas.size === 0) return [...prev, ...nuevas];
-      const prevMap = new Map(prev.map(f => [f.id, f]));
       const nuevasAjust = nuevas.map(f => (ajustadas.has(f.id) ? { ...f, ...ajustadas.get(f.id) } : f));
       const prevAjust = prev.map(f => (ajustadas.has(f.id) ? { ...f, ...ajustadas.get(f.id) } : f));
       return [...prevAjust, ...nuevasAjust];
