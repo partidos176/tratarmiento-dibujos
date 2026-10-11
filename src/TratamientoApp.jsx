@@ -6889,14 +6889,15 @@ const terminar = () => {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataUrl = reader.result;
-                  const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '', duracion: 4 };
-                  setFilasMontaje(prev => {
-                    const ix = prev.findIndex(f => lineasSelMontaje[f.id]);
-                    if (ix < 0) return [...prev, nueva];
-                    const copy = [...prev];
-                    copy.splice(ix, 0, nueva);
-                    return copy;
-                  });
+                const nueva = { id: Date.now(), tipo: 'imagen', imagenUrl: dataUrl, videoUrl: null, concepto: '', duracion: 4 };
+                setFilasMontaje(prev => {
+                  const ixSel = filaSelMontaje != null ? prev.findIndex(f => f.id === filaSelMontaje) : -1;
+                  const ixChk = ixSel >= 0 ? ixSel : prev.findIndex(f => lineasSelMontaje[f.id]);
+                  if (ixChk < 0) return [...prev, nueva];
+                  const copy = [...prev];
+                  copy.splice(ixChk + 1, 0, nueva);
+                  return copy;
+                });
                 };
                 reader.readAsDataURL(file);
                 e.target.value = '';
