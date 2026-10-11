@@ -4155,7 +4155,7 @@ const terminar = () => {
             if (!copia.imagenUrl && copia.imagenDataUrl) { copia.imagenUrl = copia.imagenDataUrl; delete copia.imagenDataUrl; }
             filasRestauradas.push(copia);
           }
-          setFilasMontaje(filasRestauradas.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: f.tipo === 'transicion' ? null : filasRestauradas.slice(0, idx + 1).filter(x => x.tipo !== 'transicion').length }));
+          setFilasMontaje(filasRestauradas.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: (f.tipo === 'transicion' || f.tipo === 'imagen') ? null : filasRestauradas.slice(0, idx + 1).filter(x => x.tipo !== 'transicion' && x.tipo !== 'imagen').length }));
           setLineasSelMontaje({});
           setPreviewMontaje(null);
         }
@@ -7207,7 +7207,7 @@ const terminar = () => {
                 onDragEnd={() => { lineaArrastrandoRef.current = false; setLineaArrastre(null); }}
                 title="Arrastra para mover la fila (clic para seleccionar)"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: (filaSelMontaje === fila.id || lineaArrastre === i) ? 'rgba(250,204,21,0.45)' : fila.tipo === 'transicion' ? 'rgba(209,213,219,0.7)' : (fila.imagenUrl || fila.tipo === 'imagen' || capsEditadasDeLinea(fila).length > 0) ? 'rgba(236,72,153,0.35)' : '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 0.8rem', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', width: '100%', cursor: 'grab', opacity: lineaArrastre === i ? 0.5 : 1 }}>
-                {fila.tipo !== 'transicion' && (() => { const k = claveNumCorte(fila); return (<span onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul(k); }} title={corteNumAzul[k] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'} style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul[k] ? '#38bdf8' : 'transparent', color: corteNumAzul[k] ? '#0f172a' : '#e2e8f0' }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion').length}</span>); })()}
+                {fila.tipo !== 'transicion' && fila.tipo !== 'imagen' && (() => { const k = claveNumCorte(fila); return (<span onClick={(e) => { e.stopPropagation(); toggleCorteNumAzul(k); }} title={corteNumAzul[k] ? 'Pulsar para quitar el círculo azul' : 'Pulsar para marcar el corte'} style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul[k] ? '#38bdf8' : 'transparent', color: corteNumAzul[k] ? '#0f172a' : '#e2e8f0' }}>{fila.numCorte ?? filasMontaje.slice(0, i + 1).filter(f => f.tipo !== 'transicion' && f.tipo !== 'imagen').length}</span>); })()}
                 <div
                   data-sq="1"
                   onClick={(e) => { e.stopPropagation(); setLineasSelMontaje(prev => ({ ...prev, [fila.id]: !prev[fila.id] })); }}
