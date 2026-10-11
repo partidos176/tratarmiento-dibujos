@@ -7326,7 +7326,7 @@ const terminar = () => {
                   </div>
                 )}
                 {fila.accion && (
-                  <span title="Tipo de acción (viene de futbol)" style={{ background: '#334155', color: '#38bdf8', borderRadius: '4px', padding: '0.15rem 0.35rem', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  <span title="Tipo de acción (viene de futbol)" style={{ background: '#334155', color: '#ffffff', borderRadius: '4px', padding: '0.15rem 0.35rem', fontSize: '0.6rem', fontWeight: 700, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     {fila.accion}
                   </span>
                 )}
