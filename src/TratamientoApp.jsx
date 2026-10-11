@@ -133,13 +133,22 @@ const [hoja, setHoja] = useState('Base de datos');
     if (filasMontaje.some(f => f.inicio === ini && f.fin === fin)) return null;
     return { id: Date.now() + ini, videoUrl: null, concepto: nombre, accion, inicio: ini, fin, duracion: dur, numCorte: ord.length - ord.indexOf(ct) };
   };
+  // Orden fijo de colocación de acciones al cargar cortes en Montaje.
+  const ORDEN_ACCIONES_MONTAJE = ['INICIO PROPIO', 'CENTRO IZQUIERDA', 'CENTRO DERECHA', 'TIRO AREA', 'TIRO DERECHA', 'TIRO IZQUIERDA', 'TRANSICION', 'INICIO RIVAL', 'CORNER DERECHA', 'CORNER IZQUIERDA', 'RIVAL CORNER DERECHA', 'RIVAL CORNER IZQUIERDA', 'GOL', 'GOL RIVAL'];
   // Pasa una lista de cortes a la hoja Montaje, sin cambiar de hoja.
-  // Las lineas se agrupan por tipo de accion (no por numero) y se ajustan
+  // Las lineas se agrupan por tipo de accion (orden fijo) y se ajustan
   // para que una empiece donde acaba la siguiente (sin huecos).
   const pasarCortesAMontaje = (lista) => {
     const nuevas = lista.map(filaMontajeDeCorte).filter(Boolean);
     if (nuevas.length === 0) { setAviso('Ese corte ya está en Montaje'); return; }
+    const peso = (acc) => {
+      const ix = ORDEN_ACCIONES_MONTAJE.indexOf((acc || '').trim().toUpperCase());
+      return ix === -1 ? ORDEN_ACCIONES_MONTAJE.length : ix;
+    };
     nuevas.sort((a, b) => {
+      const pa = peso(a.accion);
+      const pb = peso(b.accion);
+      if (pa !== pb) return pa - pb;
       const aa = (a.accion || '').trim();
       const bb = (b.accion || '').trim();
       if (aa !== bb) return aa.localeCompare(bb, 'es');
