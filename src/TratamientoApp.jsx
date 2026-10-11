@@ -5495,27 +5495,6 @@ const terminar = () => {
               </div>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
                   <button
-                    onClick={() => { const el = document.getElementById('video-container'); if (!el) return; if (!document.fullscreenElement) { el.requestFullscreen?.() || el.webkitRequestFullscreen?.(); } else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); } }}
-                    title="Pantalla completa"
-                    style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    FULL
-                  </button>
-                  <button
-                    onClick={() => { const v = videoRef.current; if (!v) return; try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (_) {} }}
-                    title="Retroceder 5 segundos"
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    −5 SEG
-                  </button>
-                  <button
-                    onClick={() => { const v = videoRef.current; if (!v) return; try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (_) {} }}
-                    title="Avanzar 5 segundos"
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
-                  >
-                    +5 SEG
-                  </button>
-                  <button
                     onClick={togglePlay}
                     style={{ background: reproduciendo ? '#f59e0b' : '#16a34a', border: 'none', borderRadius: '12px', padding: '0.7rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
                   >
@@ -7479,6 +7458,29 @@ const terminar = () => {
                   <span style={{ background: 'rgba(0,0,0,0.65)', color: '#ffffff', fontWeight: 800, fontSize: '1rem', fontFamily: 'Inter, sans-serif', padding: '0.25rem 0.9rem', borderRadius: '0 0 8px 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90%' }}>{previewMontaje.concepto}</span>
                 </div>
               )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                <button
+                  onClick={() => { const el = previewVideoRef.current && previewVideoRef.current.parentElement; if (!el) return; if (!document.fullscreenElement) { el.requestFullscreen?.() || el.webkitRequestFullscreen?.(); } else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); } }}
+                  title="Pantalla completa"
+                  style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  FULL
+                </button>
+                <button
+                  onClick={() => { const v = previewVideoRef.current; if (!v) return; try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (_) {} }}
+                  title="Retroceder 5 segundos"
+                  style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  −5 SEG
+                </button>
+                <button
+                  onClick={() => { const v = previewVideoRef.current; if (!v) return; try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (_) {} }}
+                  title="Avanzar 5 segundos"
+                  style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  +5 SEG
+                </button>
               </div>
             </div>
           )}
