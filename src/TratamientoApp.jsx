@@ -676,6 +676,42 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       '  border-radius:0 !important;',
       '  display:flex !important;',
       '}',
+      // Mismo tratamiento para el preview de Montaje: el video ocupa toda la
+      // pantalla y los botones FULL / -5 / +5 quedan flotando abajo.
+      '#preview-video-wrap:fullscreen {',
+      '  position:fixed !important;',
+      '  inset:0 !important;',
+      '  width:100vw !important;',
+      '  height:100vh !important;',
+      '  margin:0 !important;',
+      '  padding:0 !important;',
+      '  border:0 !important;',
+      '  background:#000000 !important;',
+      '  display:flex !important;',
+      '  flex-direction:column !important;',
+      '  justify-content:center !important;',
+      '}',
+      '#preview-video-wrap:fullscreen video {',
+      '  width:100vw !important;',
+      '  height:calc(100vh - 60px) !important;',
+      '  max-width:none !important;',
+      '  max-height:none !important;',
+      '  border-radius:0 !important;',
+      '  flex:1 1 auto !important;',
+      '}',
+      '#preview-video-wrap:fullscreen .barra-preview {',
+      '  position:absolute !important;',
+      '  left:0 !important;',
+      '  right:0 !important;',
+      '  bottom:0 !important;',
+      '  z-index:2 !important;',
+      '  margin:0 !important;',
+      '  padding:0.5rem 0.75rem !important;',
+      '  background:rgba(2,6,23,0.55) !important;',
+      '  display:flex !important;',
+      '  justify-content:center !important;',
+      '  gap:2rem !important;',
+      '}',
     ].join('\n');
     document.head.appendChild(estilo);
     return () => { try { document.head.removeChild(estilo); } catch (_) {} };
@@ -7440,6 +7476,7 @@ const terminar = () => {
                 )}
                 <button onClick={() => { try { localStorage.removeItem('preview_anim'); } catch (_) {} limpiarTimerAnim(); setPreviewMontaje(null); }} title="Cerrar" style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '26px', height: '26px', cursor: 'pointer', lineHeight: 1 }}>×</button>
               </div>
+              <div id="preview-video-wrap">
               <div style={{ position: 'relative' }}>
               <video
                 ref={previewVideoRef}
@@ -7459,28 +7496,78 @@ const terminar = () => {
                 </div>
               )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', alignItems: 'center', marginTop: '0.5rem' }}>
+              <div className="barra-preview" style={{ display: 'flex', justifyContent: 'center', gap: '2rem', alignItems: 'center', marginTop: '0.5rem' }}>
                 <button
-                  onClick={() => { const el = previewVideoRef.current && previewVideoRef.current.parentElement; if (!el) return; if (!document.fullscreenElement) { el.requestFullscreen?.() || el.webkitRequestFullscreen?.(); } else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); } }}
+                  onClick={() => { const el = document.getElementById('preview-video-wrap'); if (!el) return; if (!document.fullscreenElement) { el.requestFullscreen?.() || el.webkitRequestFullscreen?.(); } else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); } }}
                   title="Pantalla completa"
                   style={{ background: '#334155', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', cursor: 'pointer', flexShrink: 0 }}
                 >
                   FULL
                 </button>
                 <button
-                  onClick={() => { const v = previewVideoRef.current; if (!v) return; try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (_) {} }}
-                  title="Retroceder 5 segundos"
+                  onClick={() => {
+                    // Ajustar el periodo seleccionado de la fila activa (±5 s).
+                    // Si no hay periodo seleccionado, solo mueve el vídeo.
+                    const v = previewVideoRef.current;
+                    if (!selPeriodoMontaje) { if (v) { try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (_) {} } return; }
+                    const sep = selPeriodoMontaje.lastIndexOf('-');
+                    const filaId = Number(selPeriodoMontaje.slice(0, sep));
+                    const esIni = selPeriodoMontaje.slice(sep + 1) === 'ini';
+                    const fila = filasMontaje.find(f => f.id === filaId);
+                    if (!fila || fila.inicio == null || fila.fin == null) return;
+                    if (esIni) {
+                      const nuevo = Math.max(0, fila.inicio - 5);
+                      const dur = fila.fin - nuevo;
+                      const oldKey = String(fila.inicio);
+                      const cortesIdx = cortes.indexOf(fila.inicio);
+                      if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                      setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
+                      requestAnimationFrame(() => { const v2 = previewVideoRef.current; if (v2) { try { v2.currentTime = nuevo; } catch (_) {} } });
+                    } else {
+                      const dur = Math.max(1, (fila.duracion ?? (fila.fin - fila.inicio)) - 5);
+                      const newFin = fila.inicio + dur;
+                      setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, fin: newFin, duracion: dur }));
+                      setDuracionCortes(prev => ({ ...prev, [String(fila.inicio)]: dur }));
+                      requestAnimationFrame(() => { const v2 = previewVideoRef.current; if (v2) { try { v2.currentTime = newFin; } catch (_) {} } });
+                    }
+                  }}
+                  title="Retroceder 5 segundos el periodo seleccionado"
                   style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
                 >
                   −5 SEG
                 </button>
                 <button
-                  onClick={() => { const v = previewVideoRef.current; if (!v) return; try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (_) {} }}
-                  title="Avanzar 5 segundos"
+                  onClick={() => {
+                    const v = previewVideoRef.current;
+                    if (!selPeriodoMontaje) { if (v) { try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (_) {} } return; }
+                    const sep = selPeriodoMontaje.lastIndexOf('-');
+                    const filaId = Number(selPeriodoMontaje.slice(0, sep));
+                    const esIni = selPeriodoMontaje.slice(sep + 1) === 'ini';
+                    const fila = filasMontaje.find(f => f.id === filaId);
+                    if (!fila || fila.inicio == null || fila.fin == null) return;
+                    if (esIni) {
+                      const nuevo = fila.inicio + 5;
+                      if (nuevo >= fila.fin) return;
+                      const dur = fila.fin - nuevo;
+                      const oldKey = String(fila.inicio);
+                      const cortesIdx = cortes.indexOf(fila.inicio);
+                      if (cortesIdx !== -1) { setCortes(prev => prev.map((c, idx) => idx === cortesIdx ? nuevo : c)); setDuracionCortes(prev => { const c = { ...prev }; delete c[oldKey]; c[String(nuevo)] = dur; return c; }); setNombreCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setAccionCortes(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setCortesEditados(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); setFotoPorCorte(prev => { const c = { ...prev }; if (oldKey in c) { c[String(nuevo)] = c[oldKey]; delete c[oldKey]; } return c; }); }
+                      setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, inicio: nuevo, duracion: dur }));
+                      requestAnimationFrame(() => { const v2 = previewVideoRef.current; if (v2) { try { v2.currentTime = nuevo; } catch (_) {} } });
+                    } else {
+                      const dur = (fila.duracion ?? (fila.fin - fila.inicio)) + 5;
+                      const newFin = fila.inicio + dur;
+                      setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, fin: newFin, duracion: dur }));
+                      setDuracionCortes(prev => ({ ...prev, [String(fila.inicio)]: dur }));
+                      requestAnimationFrame(() => { const v2 = previewVideoRef.current; if (v2) { try { v2.currentTime = newFin; } catch (_) {} } });
+                    }
+                  }}
+                  title="Avanzar 5 segundos el periodo seleccionado"
                   style={{ background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
                 >
                   +5 SEG
                 </button>
+              </div>
               </div>
             </div>
           )}
