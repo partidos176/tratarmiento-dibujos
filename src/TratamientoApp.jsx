@@ -216,6 +216,17 @@ const limpiarTimerAnim = () => { if (animTimerRef.current) { clearTimeout(animTi
 const [previewT, setPreviewT] = useState(null);
 const [previewDur, setPreviewDur] = useState(0);
 const [previewPlaying, setPreviewPlaying] = useState(false);
+// Ancho del panel de previsualización de Montaje. Se puede agrandar arrastrando
+// la esquina inferior derecha; se guarda en localStorage para que al volver se
+// quede como se dejó.
+const [previewAncho, setPreviewAncho] = useState(() => { try { return Number(localStorage.getItem('preview_ancho_montaje')) || 380; } catch (_) { return 380; } });
+// Posición fija del panel de previsualización en pantalla. Se arrastra desde la
+// barra superior y se guarda para que al volver quede donde se dejó.
+const [previewPos, setPreviewPos] = useState(() => { try { const g = JSON.parse(localStorage.getItem('preview_pos_montaje') || 'null'); return g && g.x != null ? g : { x: null, y: null }; } catch (_) { return { x: null, y: null }; } });
+// Ocultar las líneas de los cortes para que el reproductor flotante tenga más
+// sitio libre en pantalla.
+const [ocultarLineasMontaje, setOcultarLineasMontaje] = useState(false);
+const arrastrePreviewRef = useRef(null);
 const [lineasSelMontaje, setLineasSelMontaje] = useState({});
 const [lineaArrastre, setLineaArrastre] = useState(null);
 const lineaArrastrandoRef = useRef(false);
@@ -7232,8 +7243,15 @@ const terminar = () => {
                 style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: (filasMontaje.length > 0 && filasMontaje.every(f => lineasSelMontaje[f.id])) ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
               />
               <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
+              <button
+                onClick={() => setOcultarLineasMontaje(p => !p)}
+                title={ocultarLineasMontaje ? 'Mostrar las líneas de los cortes' : 'Ocultar las líneas para ver mejor el reproductor'}
+                style={{ background: ocultarLineasMontaje ? '#22c55e' : '#334155', border: 'none', borderRadius: '6px', padding: '0.25rem 0.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.65rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto', whiteSpace: 'nowrap' }}
+              >
+                {ocultarLineasMontaje ? 'Mostrar líneas' : 'Ocultar líneas'}
+              </button>
             </div>
-            {filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
+            {!ocultarLineasMontaje && (filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
               <div key={fila.id} draggable
                 onClick={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setFilaSelMontaje(prev => prev === fila.id ? null : fila.id); }}
                 onMouseDown={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setLineaArrastre(i); }}
@@ -7407,7 +7425,7 @@ const terminar = () => {
                   style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0, marginLeft: 'auto' }}
                 >×</button>
               </div>
-            ))}
+            )))}
           {lineaArrastre !== null && (
             <div
               onDragOver={(e) => { e.preventDefault(); }}
@@ -7430,8 +7448,36 @@ const terminar = () => {
           )}
           </div>
           {previewMontaje && (
-            <div style={{ flex: '1 1 auto', background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', position: 'sticky', top: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.6rem', minHeight: '26px' }}>
+            <div style={{ width: previewAncho, background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '1rem', boxSizing: 'border-box', overflow: 'hidden', position: 'fixed', zIndex: 90, top: previewPos.y != null ? previewPos.y : '1rem', right: previewPos.x != null ? previewPos.x : '1rem', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
+              <div
+                onMouseDown={(e) => {
+                  // Arrastrar todo el panel desde la barra superior.
+                  if (e.target.closest('button')) return;
+                  e.preventDefault();
+                  const panel = e.currentTarget.parentElement;
+                  const rect = panel.getBoundingClientRect();
+                  const offX = e.clientX - rect.left;
+                  const offY = e.clientY - rect.top;
+                  let ultimo = { x: previewPos.x, y: previewPos.y };
+                  const onMove = (ev) => {
+                    // El panel se ancla por la derecha: x = distancia al borde derecho.
+                    // left = ev.clientX - offX, right = left + width, x = innerWidth - right.
+                    const nx = Math.max(0, Math.min(window.innerWidth - 80, window.innerWidth - (ev.clientX - offX) - rect.width));
+                    const ny = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - offY));
+                    ultimo = { x: nx, y: ny };
+                    setPreviewPos(ultimo);
+                  };
+                  const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    try { localStorage.setItem('preview_pos_montaje', JSON.stringify(ultimo)); } catch (_) {}
+                  };
+                  document.addEventListener('mousemove', onMove);
+                  document.addEventListener('mouseup', onUp);
+                }}
+                title="Arrastra para mover"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.6rem', minHeight: '26px', cursor: 'move', userSelect: 'none' }}
+              >
                   {fasePreview === 'anim' && (
                   <span style={{ background: '#8b5cf6', color: '#ffffff', fontWeight: 800, fontSize: '0.7rem', padding: '0.2rem 0.6rem', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Animación</span>
                 )}
@@ -7529,6 +7575,67 @@ const terminar = () => {
                   +1 SEG
                 </button>
               </div>
+              </div>
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startW = previewAncho;
+                  const onMove = (ev) => { setPreviewAncho(Math.max(260, Math.min(window.innerWidth - 40, startW + (ev.clientX - startX)))); };
+                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); try { localStorage.setItem('preview_ancho_montaje', String(previewAncho)); } catch (_) {} };
+                  document.addEventListener('mousemove', onMove);
+                  document.addEventListener('mouseup', onUp);
+                }}
+                title="Arrastra para agrandar o reducir"
+                style={{ position: 'absolute', bottom: 0, right: 0, width: '22px', height: '22px', cursor: 'nwse-resize', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: '3px', zIndex: 5 }}
+              >
+                <div style={{ width: 0, height: 0, borderLeft: '10px solid transparent', borderBottom: '10px solid #475569' }} />
+              </div>
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startW = previewAncho;
+                  // El panel se ancla por la derecha: arrastrar a la izquierda agranda.
+                  const onMove = (ev) => { setPreviewAncho(Math.max(260, Math.min(window.innerWidth - 40, startW - (ev.clientX - startX)))); };
+                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); try { localStorage.setItem('preview_ancho_montaje', String(previewAncho)); } catch (_) {} };
+                  document.addEventListener('mousemove', onMove);
+                  document.addEventListener('mouseup', onUp);
+                }}
+                title="Arrastra para agrandar o reducir"
+                style={{ position: 'absolute', bottom: 0, left: 0, width: '22px', height: '22px', cursor: 'nesw-resize', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start', padding: '3px', zIndex: 5 }}
+              >
+                <div style={{ width: 0, height: 0, borderRight: '10px solid transparent', borderBottom: '10px solid #475569' }} />
+              </div>
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startW = previewAncho;
+                  const onMove = (ev) => { setPreviewAncho(Math.max(260, Math.min(window.innerWidth - 40, startW + (ev.clientX - startX)))); };
+                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); try { localStorage.setItem('preview_ancho_montaje', String(previewAncho)); } catch (_) {} };
+                  document.addEventListener('mousemove', onMove);
+                  document.addEventListener('mouseup', onUp);
+                }}
+                title="Arrastra para agrandar o reducir"
+                style={{ position: 'absolute', top: 0, right: 0, width: '22px', height: '22px', cursor: 'nesw-resize', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '3px', zIndex: 5 }}
+              >
+                <div style={{ width: 0, height: 0, borderLeft: '10px solid transparent', borderTop: '10px solid #475569' }} />
+              </div>
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startW = previewAncho;
+                  const onMove = (ev) => { setPreviewAncho(Math.max(260, Math.min(window.innerWidth - 40, startW - (ev.clientX - startX)))); };
+                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); try { localStorage.setItem('preview_ancho_montaje', String(previewAncho)); } catch (_) {} };
+                  document.addEventListener('mousemove', onMove);
+                  document.addEventListener('mouseup', onUp);
+                }}
+                title="Arrastra para agrandar o reducir"
+                style={{ position: 'absolute', top: 0, left: 0, width: '22px', height: '22px', cursor: 'nwse-resize', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '3px', zIndex: 5 }}
+              >
+                <div style={{ width: 0, height: 0, borderRight: '10px solid transparent', borderTop: '10px solid #475569' }} />
               </div>
             </div>
           )}
