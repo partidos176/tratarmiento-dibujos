@@ -7315,7 +7315,7 @@ const terminar = () => {
                       <input
                         key={`ini-${fila.id}-${fila.inicio}`}
                         defaultValue={formatoTiempo(fila.inicio)}
-                        onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(`${fila.id}-ini`); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); } catch (_) {} } }}
+                        onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(`${fila.id}-ini`); setPreviewMontaje(prev => prev ? { ...prev, inicio: Math.max(0, fila.inicio), fin: fila.fin } : prev); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); } catch (_) {} } }}
                         onBlur={(e) => {
                           e.stopPropagation();
                           const segs = parsearTiempo(e.target.value);
