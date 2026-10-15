@@ -4220,6 +4220,11 @@ const terminar = () => {
 
   const exportarMontaje = async () => {
     try {
+      const videoNameBD = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : 'montaje');
+      const nombreDefecto = `resumen_${videoNameBD}`;
+      const entrada = window.prompt('Nombre del archivo a descargar (sin extensión):', nombreDefecto);
+      if (entrada === null) return;
+      const nombreLimpio = entrada.trim().replace(/[\\/:*?"<>|]+/g, '_') || nombreDefecto;
       const incrustar = async (url) => {
         if (!url || typeof url !== 'string') return null;
         if (url.startsWith('data:')) return url;
@@ -4255,8 +4260,7 @@ const terminar = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const videoNameBD = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : 'montaje');
-      a.download = `resumen_${videoNameBD}.json`;
+      a.download = `${nombreLimpio}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
