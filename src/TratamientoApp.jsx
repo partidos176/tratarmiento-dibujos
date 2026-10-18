@@ -4112,17 +4112,32 @@ const terminar = () => {
 
   // A partir del registro de acciones de un partido (app futbol) genera la
   // misma estructura que el "Exportar base datos" de futbol: filas de cortes y
-  // los mapas de cortes (inicio -> duracion / nombre / accion). Asi una copia
-  // de partido (datos J*.json) tambien se puede cargar aqui.
-  const filasDesdeActionLog = (actionLog) => {
-    const log = Array.isArray(actionLog) ? actionLog : [];
+  // los mapas de cortes (inicio -> duracion / nombre / accion). El tiempo de
+  // cada accion se pasa a tiempo de video sumando el offset de sincronizacion
+  // de su parte (inicio 1ª / 2ª parte), para que coincida con el video.
+  const filasDesdeActionLog = (actionLog, off1, off2) => {
+    const log = Array.isArray(actionLog) ? actionLog : (actionLog && typeof actionLog === 'object' ? Object.values(actionLog) : []);
+    const aOff = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) ? null : Math.floor(Number(v));
+    const n1 = aOff(off1), n2 = aOff(off2);
+    const o1 = n1 != null ? n1 : (n2 != null ? n2 : 0);
+    const o2 = n2 != null ? n2 : o1;
+    const periodoDe = (entry) => {
+      let p = '1ª PARTE';
+      for (const e of [...log].reverse()) {
+        if (!e) continue;
+        if (e.name === '2ª PARTE') p = '2ª PARTE';
+        if (e === entry) return p;
+      }
+      return p;
+    };
     const excluidas = ['1ª PARTE', '2ª PARTE', 'FIN', 'FIN 1ª PARTE', 'FIN 2ª PARTE', 'ON PROPIO', 'OFF PROPIO', 'ON RIVAL', 'OFF RIVAL'];
     const accionesConTiempo = log.filter(e => e && e.time && e.type === 'accion' && !excluidas.includes(e.name));
     const filas = [];
     accionesConTiempo.forEach((e, i) => {
       const parts = String(e.time).split(':').map(Number);
       const secs = (parts[0] || 0) * 60 + (parts[1] || 0);
-      const videoSecs = Math.max(0, secs);
+      const off = periodoDe(e) === '2ª PARTE' ? o2 : o1;
+      const videoSecs = Math.max(0, off + secs);
       const duracion = 10;
       const accionIdx = log.findIndex(a => a === e);
       const fins = [];
@@ -4167,7 +4182,7 @@ const terminar = () => {
           const alRaw = origen && origen.actionLog;
           const actionLog = Array.isArray(alRaw) ? alRaw : (alRaw && typeof alRaw === 'object' ? Object.values(alRaw) : null);
           if (Array.isArray(actionLog) && actionLog.length) {
-            data = { app: 'tratamiento-dibujos', version: 5, guardado: new Date().toISOString(), ...filasDesdeActionLog(actionLog) };
+            data = { app: 'tratamiento-dibujos', version: 5, guardado: new Date().toISOString(), ...filasDesdeActionLog(actionLog, origen.videoTimeOffset, origen.videoTimeOffset2) };
           }
         }
         const filas = Array.isArray(data) ? data : data.filas;
