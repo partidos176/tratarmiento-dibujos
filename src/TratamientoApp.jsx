@@ -223,9 +223,6 @@ const [previewAncho, setPreviewAncho] = useState(() => { try { return Number(loc
 // Posición fija del panel de previsualización en pantalla. Se arrastra desde la
 // barra superior y se guarda para que al volver quede donde se dejó.
 const [previewPos, setPreviewPos] = useState(() => { try { const g = JSON.parse(localStorage.getItem('preview_pos_montaje') || 'null'); return g && g.x != null ? g : { x: null, y: null }; } catch (_) { return { x: null, y: null }; } });
-// Ocultar las líneas de los cortes para que el reproductor flotante tenga más
-// sitio libre en pantalla.
-const [ocultarLineasMontaje, setOcultarLineasMontaje] = useState(false);
 const arrastrePreviewRef = useRef(null);
 const [lineasSelMontaje, setLineasSelMontaje] = useState({});
 const [lineaArrastre, setLineaArrastre] = useState(null);
@@ -7247,15 +7244,8 @@ const terminar = () => {
                 style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid #64748b', background: (filasMontaje.length > 0 && filasMontaje.every(f => lineasSelMontaje[f.id])) ? '#22c55e' : 'transparent', cursor: 'pointer', flexShrink: 0 }}
               />
               <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Todas</span>
-              <button
-                onClick={() => setOcultarLineasMontaje(p => !p)}
-                title={ocultarLineasMontaje ? 'Mostrar las líneas de los cortes' : 'Ocultar las líneas para ver mejor el reproductor'}
-                style={{ background: ocultarLineasMontaje ? '#22c55e' : '#334155', border: 'none', borderRadius: '6px', padding: '0.25rem 0.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.65rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto', whiteSpace: 'nowrap' }}
-              >
-                {ocultarLineasMontaje ? 'Mostrar líneas' : 'Ocultar líneas'}
-              </button>
             </div>
-            {!ocultarLineasMontaje && (filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
+            {(filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
               <div key={fila.id} draggable
                 onClick={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setFilaSelMontaje(prev => prev === fila.id ? null : fila.id); }}
                 onMouseDown={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setLineaArrastre(i); }}

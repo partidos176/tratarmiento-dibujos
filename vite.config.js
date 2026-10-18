@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { exec } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
@@ -70,7 +73,10 @@ export default defineConfig({
             // existe. El exec llevaba un '() => {}' que se comia el fallo, asi
             // que lo unico que se veia era 'el servidor no responde', que era
             // el sintoma equivocado. Ahora el motivo real se devuelve.
-            const bat = 'C:\\Users\\Juan-Antonio\\analisis\\iniciar-servidor.bat';
+            // El servidor vive en el proyecto vecino 'futbol'. La ruta se
+            // calcula a partir de este propio archivo, asi que funciona en
+            // cualquier equipo sin escribir usuarios ni rutas a mano.
+            const bat = path.join(__dirname, '..', 'futbol', 'iniciar-servidor.bat');
             const fallo = await new Promise((res) => {
               if (!fs.existsSync(bat)) return res('no existe ' + bat);
               exec(`"${bat}"`, (err) => res(err ? String((err && err.message) || err) : null));
