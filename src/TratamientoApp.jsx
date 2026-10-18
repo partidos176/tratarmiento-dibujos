@@ -115,6 +115,10 @@ const [hoja, setHoja] = useState('Base de datos');
   const [nombreCortes, setNombreCortes] = useState({});
   const [accionCortes, setAccionCortes] = useState({});
   const [filtroAccionCortes, setFiltroAccionCortes] = useState('');
+  // Desfase de sincronizacion del video (minutos de PARTIDO -> minutos de VIDEO)
+  // que trae el archivo. En la hoja CORTES el tiempo se muestra en minuto de
+  // PARTIDO: se le resta el offset de su parte.
+  const [offsetCortes, setOffsetCortes] = useState({ off1: null, off2: null, seg2: null });
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [corteNumAzul, setCorteNumAzul] = useState({});
   const toggleCorteNumAzul = (k) => setCorteNumAzul(prev => { const c = { ...prev }; if (c[k]) delete c[k]; else c[k] = true; return c; });
@@ -282,6 +286,14 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     cortesEditados: { ...cortesEditados },
     fotoPorCorte: { ...fotoPorCorte }
   });
+  // Los tiempos se guardan en minutos de VIDEO; los offsets van solo para poder
+  // mostrar el minuto de PARTIDO al volver a cargar el archivo (cortesEnVideo).
+  const syncCortes = () => ({
+    videoTimeOffset: offsetCortes.off1,
+    videoTimeOffset2: offsetCortes.off2,
+    segundaParteDesde: offsetCortes.seg2,
+    cortesEnVideo: (offsetCortes.off1 != null || offsetCortes.off2 != null)
+  });
 
   const normalizarFiguras = (lista) => {
     const arr = Array.isArray(lista) ? lista : [];
@@ -365,7 +377,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
         capturaConImagen.videoDataUrl = await videoBlobADataUrl(capturaSeleccionada.videoUrl);
         if (!fotos.some(f => f.id === capturaConImagen.id)) fotos.push(capturaConImagen);
       }
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 3, guardado: new Date().toISOString(), ...datosCortes(), fotos, edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 3, guardado: new Date().toISOString(), ...datosCortes(), ...syncCortes(), fotos, edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
       const baseVideo = (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'cortes';
       const nombreArchivo = `${baseVideo}.json`;
       const url = URL.createObjectURL(blob);
@@ -866,6 +878,23 @@ const bdVideoTargetRef = useRef(null);
   const formatoTiempo = (s) => {
     const total = Math.max(0, Math.floor(s || 0));
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  };
+  // Offset que se le aplico a un tiempo de VIDEO segun su parte (1ª o 2ª).
+  const offsetDeVideo = (t) => {
+    const n = Number(t);
+    const { off1, off2, seg2 } = offsetCortes;
+    if (off1 == null && off2 == null) return 0;
+    const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
+    const f2 = off2 != null ? off2 : f1;
+    const esSegunda = (seg2 != null && off2 != null) ? n >= (seg2 + f2) : false;
+    return esSegunda ? f2 : f1;
+  };
+  // Pasa un tiempo de VIDEO a minuto de PARTIDO restando el offset de su parte
+  // (1ª o 2ª). Si el archivo no traia offsets, lo deja igual.
+  const aMinutoPartido = (t) => {
+    const n = Number(t);
+    if (!Number.isFinite(n)) return n;
+    return Math.max(0, n - offsetDeVideo(n));
   };
   const parsearTiempo = (str) => {
     const partes = String(str).trim().split(':').map(Number);
@@ -4181,9 +4210,15 @@ const terminar = () => {
         const off1 = aOff(data && data.videoTimeOffset);
         const off2 = aOff(data && data.videoTimeOffset2);
         const seg2 = (data && Number.isFinite(Number(data.segundaParteDesde))) ? Number(data.segundaParteDesde) : null;
-        const hayOff = off1 != null || off2 != null;
+        const tieneOffsets = off1 != null || off2 != null;
+        // Un export de montaje/cortes guarda los tiempos en minutos de VIDEO y
+        // solo trae los offsets para poder mostrar el minuto de PARTIDO: hay que
+        // NO volver a convertirlos (si no, se desfasarian dos veces).
+        const cortesEnVideo = !!(data && data.cortesEnVideo === true);
+        const hayOff = tieneOffsets && !cortesEnVideo;
         const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
         const f2 = off2 != null ? off2 : f1;
+        setOffsetCortes(tieneOffsets ? { off1: f1, off2: f2, seg2 } : { off1: null, off2: null, seg2: null });
         const aplicar = (t) => {
           const n = Number(t);
           if (!Number.isFinite(n)) return t;
@@ -4202,7 +4237,7 @@ const terminar = () => {
         // Si es un fichero de cortes/partido pero no trae los offsets de
         // sincronizacion, los cortes iran con los minutos de partido tal cual
         // (se irian al minuto de PARTIDO de la grabacion). Avisamos.
-        if (!hayOff && filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'))) {
+        if (!tieneOffsets && filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'))) {
           setAviso('Este archivo no trae los offsets de sincronizacion (inicio 1ª y 2ª parte): los cortes se colocan con el minuto de partido, no el de la grabacion. Abrelo en futbol, sincroniza el video y vuelve a exportarlo.');
         }
         const ids = new Set();
@@ -4340,7 +4375,7 @@ const terminar = () => {
       const fotos = (capturas || [])
         .filter(c => c && c.dataUrl)
         .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl, duracionAnim: c.duracionAnim || 4, figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }));
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), filas, animaciones, fotos }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), ...syncCortes(), filas, animaciones, fotos }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -6048,7 +6083,7 @@ const terminar = () => {
                         style={{ width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.8rem', background: corteNumAzul['c' + ct] ? '#38bdf8' : 'transparent', color: corteNumAzul['c' + ct] ? '#0f172a' : '#e2e8f0' }}
                       >{ord.length - i}</span>
                       <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)' }}>
-                        <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
+                        <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(aMinutoPartido(ct))}</span> — <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(aMinutoPartido(ct) + (duracionCortes[String(ct)] ?? 15))}</span>
                       </span>
                       <input
                         value={nombreCortes[String(ct)] ?? ''}
@@ -6064,7 +6099,7 @@ const terminar = () => {
                       </div>
                         <button
                           onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setAccionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); setFilasMontaje(prev => prev.filter(f => f.inicio != null && Math.abs(f.inicio - ct) > 0.01)); }}
-                          title={`Eliminar corte en ${formatoTiempo(ct)}`}
+                            title={`Eliminar corte en ${formatoTiempo(aMinutoPartido(ct))}`}
                           style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '24px', height: '24px', cursor: 'pointer', lineHeight: 1 }}
                         >
                           ×
@@ -7395,12 +7430,13 @@ const terminar = () => {
                     <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
                       <input
                         key={`ini-${fila.id}-${fila.inicio}`}
-                        defaultValue={formatoTiempo(fila.inicio)}
+                        defaultValue={formatoTiempo(aMinutoPartido(fila.inicio))}
                         onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(`${fila.id}-ini`); setPreviewMontaje(prev => prev ? { ...prev, inicio: Math.max(0, fila.inicio), fin: fila.fin } : prev); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); } catch (_) {} } }}
                         onBlur={(e) => {
                           e.stopPropagation();
-                          const segs = parsearTiempo(e.target.value);
-                          if (segs == null || segs < 0 || segs >= fila.fin) { e.target.value = formatoTiempo(fila.inicio); return; }
+                          const segsMin = parsearTiempo(e.target.value);
+                          const segs = segsMin == null ? null : segsMin + offsetDeVideo(fila.inicio);
+                          if (segs == null || segs < 0 || segs >= fila.fin) { e.target.value = formatoTiempo(aMinutoPartido(fila.inicio)); return; }
                           if (segs === fila.inicio) return;
                           const nuevo = segs;
                           const dur = fila.fin - nuevo;
@@ -7416,12 +7452,13 @@ const terminar = () => {
                       —
                       <input
                         key={`fin-${fila.id}-${fila.fin}`}
-                        defaultValue={formatoTiempo(fila.fin)}
+                        defaultValue={formatoTiempo(aMinutoPartido(fila.fin))}
                         onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(`${fila.id}-fin`); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); } catch (_) {} } }}
                         onBlur={(e) => {
                           e.stopPropagation();
-                          const segs = parsearTiempo(e.target.value);
-                          if (segs == null || segs <= fila.inicio) { e.target.value = formatoTiempo(fila.fin); return; }
+                          const segsMin = parsearTiempo(e.target.value);
+                          const segs = segsMin == null ? null : segsMin + offsetDeVideo(fila.fin);
+                          if (segs == null || segs <= fila.inicio) { e.target.value = formatoTiempo(aMinutoPartido(fila.fin)); return; }
                           if (segs === fila.fin) return;
                           const dur = segs - fila.inicio;
                           setFilasMontaje(prev => prev.map(f => f.id !== fila.id ? f : { ...f, fin: segs, duracion: dur }));
