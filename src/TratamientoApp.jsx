@@ -4112,32 +4112,18 @@ const terminar = () => {
 
   // A partir del registro de acciones de un partido (app futbol) genera la
   // misma estructura que el "Exportar base datos" de futbol: filas de cortes y
-  // los mapas de cortes (inicio -> duracion / nombre / accion). El tiempo de
-  // cada accion se pasa a tiempo de video sumando el offset de sincronizacion
-  // de su parte (inicio 1ª / 2ª parte), para que coincida con el video.
-  const filasDesdeActionLog = (actionLog, off1, off2) => {
+  // los mapas de cortes (inicio -> duracion / nombre / accion). Asi una copia
+  // de partido (datos J*.json) tambien se puede cargar aqui. Los inicios son
+  // minutos de PARTIDO; el desfase de sincronizacion se aplica al importar.
+  const filasDesdeActionLog = (actionLog) => {
     const log = Array.isArray(actionLog) ? actionLog : (actionLog && typeof actionLog === 'object' ? Object.values(actionLog) : []);
-    const aOff = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) ? null : Math.floor(Number(v));
-    const n1 = aOff(off1), n2 = aOff(off2);
-    const o1 = n1 != null ? n1 : (n2 != null ? n2 : 0);
-    const o2 = n2 != null ? n2 : o1;
-    const periodoDe = (entry) => {
-      let p = '1ª PARTE';
-      for (const e of [...log].reverse()) {
-        if (!e) continue;
-        if (e.name === '2ª PARTE') p = '2ª PARTE';
-        if (e === entry) return p;
-      }
-      return p;
-    };
     const excluidas = ['1ª PARTE', '2ª PARTE', 'FIN', 'FIN 1ª PARTE', 'FIN 2ª PARTE', 'ON PROPIO', 'OFF PROPIO', 'ON RIVAL', 'OFF RIVAL'];
     const accionesConTiempo = log.filter(e => e && e.time && e.type === 'accion' && !excluidas.includes(e.name));
     const filas = [];
     accionesConTiempo.forEach((e, i) => {
       const parts = String(e.time).split(':').map(Number);
       const secs = (parts[0] || 0) * 60 + (parts[1] || 0);
-      const off = periodoDe(e) === '2ª PARTE' ? o2 : o1;
-      const videoSecs = Math.max(0, off + secs);
+      const videoSecs = Math.max(0, secs);
       const duracion = 10;
       const accionIdx = log.findIndex(a => a === e);
       const fins = [];
@@ -4182,11 +4168,37 @@ const terminar = () => {
           const alRaw = origen && origen.actionLog;
           const actionLog = Array.isArray(alRaw) ? alRaw : (alRaw && typeof alRaw === 'object' ? Object.values(alRaw) : null);
           if (Array.isArray(actionLog) && actionLog.length) {
-            data = { app: 'tratamiento-dibujos', version: 5, guardado: new Date().toISOString(), ...filasDesdeActionLog(actionLog, origen.videoTimeOffset, origen.videoTimeOffset2) };
+            const m2 = actionLog.find(x => x && x.name === '2ª PARTE' && x.time);
+            const seg2 = m2 ? (() => { const p = String(m2.time).split(':').map(Number); return (p[0] || 0) * 60 + (p[1] || 0); })() : null;
+            data = { app: 'tratamiento-dibujos', version: 5, guardado: new Date().toISOString(), videoTimeOffset: origen.videoTimeOffset, videoTimeOffset2: origen.videoTimeOffset2, segundaParteDesde: seg2, ...filasDesdeActionLog(actionLog) };
           }
         }
+        // El archivo guarda los inicios como minutos de PARTIDO. Si trae el
+        // desfase de sincronizacion (inicio 1ª / 2ª parte), aqui se pasa todo a
+        // minutos de VIDEO sumando el offset de su parte, para que los cortes
+        // caigan en el punto correcto de la grabacion.
+        const aOff = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) ? null : Math.floor(Number(v));
+        const off1 = aOff(data && data.videoTimeOffset);
+        const off2 = aOff(data && data.videoTimeOffset2);
+        const seg2 = (data && Number.isFinite(Number(data.segundaParteDesde))) ? Number(data.segundaParteDesde) : null;
+        const hayOff = off1 != null || off2 != null;
+        const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
+        const f2 = off2 != null ? off2 : f1;
+        const aplicar = (t) => {
+          const n = Number(t);
+          if (!Number.isFinite(n)) return t;
+          if (!hayOff) return n;
+          const off = (seg2 != null && n >= seg2) ? f2 : f1;
+          return Math.round((n + off) * 1000) / 1000;
+        };
+        const remapaClaves = (obj) => {
+          const o = {};
+          if (obj && typeof obj === 'object') for (const k of Object.keys(obj)) o[String(aplicar(k))] = obj[k];
+          return o;
+        };
         const filas = Array.isArray(data) ? data : data.filas;
         if (!Array.isArray(filas)) { window.alert('El archivo no tiene cortes que se puedan cargar (no es un export de cortes/montaje ni una copia de partido).'); return; }
+        if (hayOff) filas.forEach(f => { if (f) { if (f.inicio != null) f.inicio = aplicar(f.inicio); if (f.fin != null) f.fin = aplicar(f.fin); } });
         const ids = new Set();
         const filasUnicas = filas.filter(f => {
           if (!f || ids.has(f.id)) return false;
@@ -4242,16 +4254,16 @@ const terminar = () => {
         // ambos casos. Solo las filas se tratan segun el tipo de archivo.
         const dc = Array.isArray(data.cortes) ? { cortes: data.cortes } : (data.cortes || {});
         if (Array.isArray(dc.cortes) && dc.cortes.length) {
-          const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(c)).sort((a, b) => a - b);
+          const lista = dc.cortes.filter(c => Number.isFinite(Number(c))).map(c => Number(aplicar(c))).sort((a, b) => a - b);
           if (lista.length) {
             setCortes(lista);
             setFiltroAccionCortes('');
-            if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes({ ...dc.duracionCortes });
-            if (dc.nombreCortes && typeof dc.nombreCortes === 'object') setNombreCortes({ ...dc.nombreCortes });
-            if (dc.accionCortes && typeof dc.accionCortes === 'object') setAccionCortes({ ...dc.accionCortes });
+            if (dc.duracionCortes && typeof dc.duracionCortes === 'object') setDuracionCortes(hayOff ? remapaClaves(dc.duracionCortes) : { ...dc.duracionCortes });
+            if (dc.nombreCortes && typeof dc.nombreCortes === 'object') setNombreCortes(hayOff ? remapaClaves(dc.nombreCortes) : { ...dc.nombreCortes });
+            if (dc.accionCortes && typeof dc.accionCortes === 'object') setAccionCortes(hayOff ? remapaClaves(dc.accionCortes) : { ...dc.accionCortes });
             else setAccionCortes({});
-            if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados({ ...dc.cortesEditados });
-            if (dc.fotoPorCorte && typeof dc.fotoPorCorte === 'object') setFotoPorCorte({ ...dc.fotoPorCorte });
+            if (dc.cortesEditados && typeof dc.cortesEditados === 'object') setCortesEditados(hayOff ? remapaClaves(dc.cortesEditados) : { ...dc.cortesEditados });
+            if (dc.fotoPorCorte && typeof dc.fotoPorCorte === 'object') setFotoPorCorte(hayOff ? remapaClaves(dc.fotoPorCorte) : { ...dc.fotoPorCorte });
           }
         }
         // Un export de cortes (por ejemplo *_para_tratamiento_bd.json, generado
