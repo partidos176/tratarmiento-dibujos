@@ -4199,6 +4199,12 @@ const terminar = () => {
         const filas = Array.isArray(data) ? data : data.filas;
         if (!Array.isArray(filas)) { window.alert('El archivo no tiene cortes que se puedan cargar (no es un export de cortes/montaje ni una copia de partido).'); return; }
         if (hayOff) filas.forEach(f => { if (f) { if (f.inicio != null) f.inicio = aplicar(f.inicio); if (f.fin != null) f.fin = aplicar(f.fin); } });
+        // Si es un fichero de cortes/partido pero no trae los offsets de
+        // sincronizacion, los cortes iran con los minutos de partido tal cual
+        // (se irian al minuto de PARTIDO de la grabacion). Avisamos.
+        if (!hayOff && filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'))) {
+          setAviso('Este archivo no trae los offsets de sincronizacion (inicio 1ª y 2ª parte): los cortes se colocan con el minuto de partido, no el de la grabacion. Abrelo en futbol, sincroniza el video y vuelve a exportarlo.');
+        }
         const ids = new Set();
         const filasUnicas = filas.filter(f => {
           if (!f || ids.has(f.id)) return false;
