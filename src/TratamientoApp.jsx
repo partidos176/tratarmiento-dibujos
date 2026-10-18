@@ -4110,14 +4110,68 @@ const terminar = () => {
     }
   }, [videosBD.length]);
 
+  // A partir del registro de acciones de un partido (app futbol) genera la
+  // misma estructura que el "Exportar base datos" de futbol: filas de cortes y
+  // los mapas de cortes (inicio -> duracion / nombre / accion). Asi una copia
+  // de partido (datos J*.json) tambien se puede cargar aqui.
+  const filasDesdeActionLog = (actionLog) => {
+    const log = Array.isArray(actionLog) ? actionLog : [];
+    const excluidas = ['1ª PARTE', '2ª PARTE', 'FIN', 'FIN 1ª PARTE', 'FIN 2ª PARTE', 'ON PROPIO', 'OFF PROPIO', 'ON RIVAL', 'OFF RIVAL'];
+    const accionesConTiempo = log.filter(e => e && e.time && e.type === 'accion' && !excluidas.includes(e.name));
+    const filas = [];
+    accionesConTiempo.forEach((e, i) => {
+      const parts = String(e.time).split(':').map(Number);
+      const secs = (parts[0] || 0) * 60 + (parts[1] || 0);
+      const videoSecs = Math.max(0, secs);
+      const duracion = 10;
+      const accionIdx = log.findIndex(a => a === e);
+      const fins = [];
+      for (let fi = accionIdx - 1; fi >= 0; fi--) {
+        const prev = log[fi];
+        if (!prev) break;
+        if (prev.type === 'finalizacion') { if (prev.name) fins.push(prev.name); continue; }
+        if (prev.type === 'accion') break;
+      }
+      fins.reverse();
+      filas.push({ id: Date.now() + i, concepto: fins.length ? fins.join(' - ') : e.name, accion: e.name, finalizacion: fins.join(' - '), finalizaciones: fins, inicio: videoSecs, fin: videoSecs + duracion, duracion, numCorte: 0, videoUrl: null });
+    });
+    const ordenadas = filas.sort((a, b) => a.inicio - b.inicio).map((f, i) => ({ ...f, numCorte: i + 1 }));
+    const cortes = [];
+    const duracionCortes = {};
+    const nombreCortes = {};
+    const accionCortes = {};
+    const iniciosUsados = new Set();
+    ordenadas.forEach(f => {
+      let ini = Math.round(Number(f.inicio) * 1000) / 1000;
+      while (iniciosUsados.has(ini)) ini = Math.round((ini + 0.04) * 1000) / 1000;
+      iniciosUsados.add(ini);
+      cortes.push(ini);
+      duracionCortes[String(ini)] = f.duracion;
+      nombreCortes[String(ini)] = f.concepto;
+      accionCortes[String(ini)] = f.accion;
+    });
+    return { cortes: { cortes, duracionCortes, nombreCortes, accionCortes, cortesEditados: {} }, filas: ordenadas };
+  };
+
   const importarMontaje = (file) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const data = JSON.parse(reader.result);
+        let data = JSON.parse(reader.result);
+        // Una copia de partido de la app futbol (app='futboltotal-copia-partido')
+        // no trae la lista 'filas'. Se derivan los cortes de su registro de
+        // acciones (payload.actionLog / actionLog) para poder cargarla aqui.
+        if (data && !Array.isArray(data.filas)) {
+          const origen = (data.payload && typeof data.payload === 'object') ? data.payload : data;
+          const alRaw = origen && origen.actionLog;
+          const actionLog = Array.isArray(alRaw) ? alRaw : (alRaw && typeof alRaw === 'object' ? Object.values(alRaw) : null);
+          if (Array.isArray(actionLog) && actionLog.length) {
+            data = { app: 'tratamiento-dibujos', version: 5, guardado: new Date().toISOString(), ...filasDesdeActionLog(actionLog) };
+          }
+        }
         const filas = Array.isArray(data) ? data : data.filas;
-        if (!Array.isArray(filas)) return;
+        if (!Array.isArray(filas)) { window.alert('El archivo no tiene cortes que se puedan cargar (no es un export de cortes/montaje ni una copia de partido).'); return; }
         const ids = new Set();
         const filasUnicas = filas.filter(f => {
           if (!f || ids.has(f.id)) return false;
