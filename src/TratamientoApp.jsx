@@ -5825,6 +5825,18 @@ const terminar = () => {
               <div key="offsets" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Sincronización mitad/fin</span>
+                  <button
+                    onClick={() => {
+                      const v = videoRef.current;
+                      if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
+                      const min = Math.round((v.currentTime / 60) * 10) / 10;
+                      setOffsetCortes(prev => ({ ...prev, off1: min }));
+                      setAviso('Inicio 1ª parte fijado en ' + min + ' min');
+                    }}
+                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer' }}
+                  >
+                    Inicio 1ª parte
+                  </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '0.5rem' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 1ª parte (min):</label>
