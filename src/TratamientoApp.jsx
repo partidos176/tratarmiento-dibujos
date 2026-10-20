@@ -5869,6 +5869,7 @@ const terminar = () => {
                 </div>
                 <video
                   ref={videoRef}
+                  src={videoUrlCortes}
                   style={{ width: '100%', maxWidth: '640', background: 'black' }}
                   autoPlay
                   muted
