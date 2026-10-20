@@ -857,7 +857,7 @@ const bdVideoTargetRef = useRef(null);
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
-  const hojas = ['Base de datos', 'Cortes', 'Edición', 'Montaje'];
+  const hojas = ['Sincronización', 'Base de datos', 'Cortes', 'Edición', 'Montaje'];
   // Panel de sincronización mitad/fin (siempre visible por petición del usuario)
   const [mostrarOffsets, setMostrarOffsets] = useState(true);
 
@@ -5782,6 +5782,10 @@ const terminar = () => {
                 )}
             </>
           )}
+        </div>
+      ) : hoja === 'Sincronización' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+          <span style={{ color: '#94a3b8', fontSize: '1rem', fontFamily: 'Inter, sans-serif' }}>Sincronización</span>
         </div>
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
