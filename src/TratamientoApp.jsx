@@ -6122,6 +6122,7 @@ const terminar = () => {
                   if (cortesVideoUrl) URL.revokeObjectURL(cortesVideoUrl);
                   setCortesArchivo(file);
                   setCortesVideoUrl(URL.createObjectURL(file));
+                  setOffsetCortes({ off1: null, off2: null, seg2: null });
                 }}
               />
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -6134,6 +6135,7 @@ const terminar = () => {
                   if (cortesVideoUrl) URL.revokeObjectURL(cortesVideoUrl);
                   setCortesArchivo(null);
                   setCortesVideoUrl('');
+                  setOffsetCortes({ off1: null, off2: null, seg2: null });
                   corteCargadoRef.current = null;
                 }}
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
