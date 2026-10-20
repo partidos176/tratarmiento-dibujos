@@ -6123,6 +6123,7 @@ const terminar = () => {
                   setCortesArchivo(file);
                   setCortesVideoUrl(URL.createObjectURL(file));
                   setOffsetCortes({ off1: null, off2: null, seg2: null });
+                  corteCargadoRef.current = null;
                 }}
               />
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -6163,7 +6164,7 @@ const terminar = () => {
                   controls
                   playsInline
                   preload="metadata"
-                  onLoadedMetadata={(e) => fijarDuracion(e.currentTarget)}
+                  onLoadedMetadata={(e) => { fijarDuracion(e.currentTarget); if (corteCargadoRef.current == null) { try { e.currentTarget.currentTime = 0; } catch (_) {} corteCargadoRef.current = true; } }}
                   onTimeUpdate={(e) => { setTiempoCortes(e.currentTarget.currentTime || 0); setDurCortes(e.currentTarget.duration || 0); }}
                   style={{ width: '100%', borderRadius: '12px', background: '#000000', border: '1px solid #334155' }}
                 />
