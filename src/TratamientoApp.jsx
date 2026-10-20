@@ -5870,7 +5870,7 @@ const terminar = () => {
                 <video
                   ref={videoRef}
                   src={videoUrlCortes}
-                  style={{ width: '100%', maxWidth: '480', background: 'black' }}
+                  style={{ width: '100%', maxWidth: '480px', background: 'black' }}
                   autoPlay
                   muted
                   controls
