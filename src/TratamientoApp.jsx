@@ -5784,8 +5784,97 @@ const terminar = () => {
           )}
         </div>
       ) : hoja === 'Sincronización' ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-          <span style={{ color: '#94a3b8', fontSize: '1rem', fontFamily: 'Inter, sans-serif' }}>Sincronización</span>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+          {/* Botón independiente para cargar video para offset */}
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              onClick={() => { bdVideoRef.current?.click(); }}
+              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+            >
+              Cargar video para offset
+            </button>
+            <input
+              ref={bdVideoRef}
+              type="file"
+              accept="video/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                if (!f) return;
+                if (videoUrl) URL.revokeObjectURL(videoUrl);
+                setVideoUrl(URL.createObjectURL(f));
+                setArchivo(f);
+                setProgreso(0);
+                corteCargadoRef.current = null;
+                clipOrigenRef.current = null;
+                clipResumeRef.current = null;
+                clipMainRef.current = null;
+                if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                setClipActivo(null);
+                setAviso('Video cargado para offsets');
+              }}
+            />
+          </div>
+          {/* Panel de sincronización mitad/fin */}
+          {mostrarOffsets && (
+            <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Sincronización mitad/fin</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '0.5rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 1ª parte (min):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={offsetCortes.off1 != null ? offsetCortes.off1 : ''}
+                  onChange={(e) => setOffsetCortes(prev => ({ ...prev, off1: e.target.value === '' ? null : Number(e.target.value) }))}
+                  style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
+                />
+                <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 2ª parte (min):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={offsetCortes.off2 != null ? offsetCortes.off2 : ''}
+                  onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: e.target.value === '' ? null : Number(e.target.value) }))}
+                  style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
+                />
+                <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>2ª parte desde min:</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={offsetCortes.seg2 != null ? offsetCortes.seg2 : ''}
+                  onChange={(e) => setOffsetCortes(prev => ({ ...prev, seg2: e.target.value === '' ? null : Number(e.target.value) }))}
+                  style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
+                />
+              </div>
+            </div>
+          )}
+          {/* Reproductor de video */}
+          {videoUrlCortes && (
+            <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Previsualización de vídeo</span>
+                <button
+                  onClick={() => { if (videoRef.current) { if (videoRef.current.paused) videoRef.current.play(); else videoRef.current.pause(); } }}
+                  style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.8rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}
+                >
+                  {videoRef.current && videoRef.current.paused ? 'Play' : 'Pause'}
+                </button>
+                </div>
+                <video
+                  ref={videoRef}
+                  style={{ width: '100%', maxWidth: '640', background: 'black' }}
+                  autoPlay
+                  muted
+                  controls
+                  playsInline
+                />
+                <div style={{ marginTop: '0.5rem', fontSize: '0.65rem', color: '#94a3b8', fontFamily: 'var(--font-mono, monospace)' }}>
+                  Tiempo: {videoRef.current && videoRef.current.currentTime != null ? Math.round(videoRef.current.currentTime) : '—'} / {videoRef.current && videoRef.current.duration != null ? Math.round(videoRef.current.duration) : '—'} s
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
@@ -5919,70 +6008,6 @@ const terminar = () => {
               </tbody>
             </table>
             </div>
-            {/* Botón independiente para cargar video para offset */}
-            <div style={{ marginTop: '1rem' }}>
-              <button
-                onClick={() => { bdVideoRef.current?.click(); }}
-                style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
-              >
-                Cargar video para offset
-              </button>
-              <input
-                ref={bdVideoRef}
-                type="file"
-                accept="video/*"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const f = e.target.files && e.target.files[0];
-                  if (!f) return;
-                  if (videoUrl) URL.revokeObjectURL(videoUrl);
-                  setVideoUrl(URL.createObjectURL(f));
-                  setArchivo(f);
-                  setProgreso(0);
-                  corteCargadoRef.current = null;
-                  clipOrigenRef.current = null;
-                  clipResumeRef.current = null;
-                  clipMainRef.current = null;
-                  if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
-                  setClipActivo(null);
-                  setAviso('Video cargado para offsets');
-                }}
-              />
-            </div>
-            {/* Panel de sincronización mitad/fin */}
-            {mostrarOffsets && (
-              <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Sincronización mitad/fin</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '0.5rem' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 1ª parte (min):</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={offsetCortes.off1 != null ? offsetCortes.off1 : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off1: e.target.value === '' ? null : Number(e.target.value) }))}
-                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
-                  />
-                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 2ª parte (min):</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={offsetCortes.off2 != null ? offsetCortes.off2 : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: e.target.value === '' ? null : Number(e.target.value) }))}
-                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
-                  />
-                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>2ª parte desde min:</label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={offsetCortes.seg2 != null ? offsetCortes.seg2 : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, seg2: e.target.value === '' ? null : Number(e.target.value) }))}
-                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
-                  />
-                </div>
-              </div>
-            )}
             {avisoCopia && (
               <div
                 title={avisoCopia.texto}
