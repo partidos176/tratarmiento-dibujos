@@ -5827,6 +5827,12 @@ const terminar = () => {
               >
                 Cargar video para offset
               </button>
+              <button
+                onClick={borrarSincronizacion}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', textTransform: 'uppercase', marginLeft: '0.5rem' }}
+              >
+                Borrar
+              </button>
               <input
                 ref={bdVideoRef}
                 type="file"
@@ -5898,14 +5904,6 @@ const terminar = () => {
                     onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: mmssAMinutos(e.target.value) }))}
                     style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
                   />
-                </div>
-                <div style={{ marginTop: '1rem' }}>
-                  <button
-                    onClick={borrarSincronizacion}
-                    style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', textTransform: 'uppercase' }}
-                  >
-                    Borrar
-                  </button>
                 </div>
               </div>
             );
