@@ -5784,10 +5784,9 @@ const terminar = () => {
           )}
         </div>
       ) : hoja === 'Sincronización' ? (
-        <>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-            {/* Botón independiente para cargar video para offset */}
-            <div style={{ marginTop: '1rem' }}>
+        (() => {
+          const children = [
+            <div key="btn" style={{ marginTop: '1rem' }}>
               <button
                 onClick={() => { bdVideoRef.current?.click(); }}
                 style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
@@ -5816,9 +5815,10 @@ const terminar = () => {
                 }}
               />
             </div>
-            {/* Panel de sincronización mitad/fin */}
-            {mostrarOffsets && (
-              <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+          ];
+          if (mostrarOffsets) {
+            children.push(
+              <div key="offsets" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Sincronización mitad/fin</span>
                 </div>
@@ -5849,10 +5849,11 @@ const terminar = () => {
                   />
                 </div>
               </div>
-            )}
-            {/* Reproductor de video */}
-            {videoUrlCortes && (
-              <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+            );
+          }
+          if (videoUrlCortes) {
+            children.push(
+              <div key="player" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                   <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Previsualización de vídeo</span>
                   <button
@@ -5861,23 +5862,27 @@ const terminar = () => {
                   >
                     {videoRef.current && videoRef.current.paused ? 'Play' : 'Pause'}
                   </button>
-                  </div>
-                  <video
-                    ref={videoRef}
-                    style={{ width: '100%', maxWidth: '640', background: 'black' }}
-                    autoPlay
-                    muted
-                    controls
-                    playsInline
-                  />
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.65rem', color: '#94a3b8', fontFamily: 'var(--font-mono, monospace)' }}>
-                    Tiempo: {videoRef.current && videoRef.current.currentTime != null ? Math.round(videoRef.current.currentTime) : '—'} / {videoRef.current && videoRef.current.duration != null ? Math.round(videoRef.current.duration) : '—'} s
-                  </div>
+                </div>
+                <video
+                  ref={videoRef}
+                  style={{ width: '100%', maxWidth: '640', background: 'black' }}
+                  autoPlay
+                  muted
+                  controls
+                  playsInline
+                />
+                <div style={{ marginTop: '0.5rem', fontSize: '0.65rem', color: '#94a3b8', fontFamily: 'var(--font-mono, monospace)' }}>
+                  Tiempo: {videoRef.current && videoRef.current.currentTime != null ? Math.round(videoRef.current.currentTime) : '—'} / {videoRef.current && videoRef.current.duration != null ? Math.round(videoRef.current.duration) : '—'} s
                 </div>
               </div>
-            )}
-          </div>
-        </>
+            );
+          }
+          return (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
+              {children}
+            </div>
+          );
+        })()
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
           <input
