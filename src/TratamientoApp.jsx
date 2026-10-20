@@ -5877,6 +5877,15 @@ const terminar = () => {
               </div>
             );
           }
+          children.push(
+            <button
+              key="export"
+              onClick={() => exportarMontaje()}
+              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginTop: '1rem' }}
+            >
+              Exportar BASE DATOS
+            </button>
+          );
           return (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
               {children}
@@ -6036,12 +6045,6 @@ const terminar = () => {
                 {avisoCopia.texto}
               </div>
             )}
-            <button
-              onClick={() => exportarMontaje()}
-              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
-            >
-              Exportar BASE DATOS
-            </button>
             </div>
         </div>
       ) : hoja === 'Cortes' ? (
