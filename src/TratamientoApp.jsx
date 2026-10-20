@@ -5802,8 +5802,12 @@ const terminar = () => {
                   const f = e.target.files && e.target.files[0];
                   if (!f) return;
                   if (videoUrl) URL.revokeObjectURL(videoUrl);
-                  setVideoUrl(URL.createObjectURL(f));
+                  if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
+                  const url = URL.createObjectURL(f);
+                  setVideoUrl(url);
+                  setVideoUrlCortes(url);
                   setArchivo(f);
+                  setArchivoCortes(f);
                   setProgreso(0);
                   corteCargadoRef.current = null;
                   clipOrigenRef.current = null;
