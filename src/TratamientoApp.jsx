@@ -57,6 +57,8 @@ function TratamientoApp({ videoInicial }) {
   const [videoUrl, setVideoUrl] = useState('');
   const [archivoCortes, setArchivoCortes] = useState(null);
   const [videoUrlCortes, setVideoUrlCortes] = useState('');
+  const [cortesArchivo, setCortesArchivo] = useState(null);
+  const [cortesVideoUrl, setCortesVideoUrl] = useState('');
   const [syncVideoUrl, setSyncVideoUrl] = useState('');
   const [syncArchivo, setSyncArchivo] = useState(null);
   const [tiempoCortes, setTiempoCortes] = useState(0);
@@ -1600,10 +1602,11 @@ const bdVideoTargetRef = useRef(null);
   const cargarVideoEnCortes = (url, nombre, blob) => {
     if (!url) return;
     setVideoUrlCortes(url);
-    // Se guarda el blob (o al menos su tamaño) para que la descarga por servidor
-    // sepa si la caché ya tiene este vídeo sin tener que leerlo entero en
-    // memoria: esa lectura costaba un minuto en cada descarga.
     setArchivoCortes(blob && blob.size
+      ? { name: nombre || 'video', size: blob.size, blob }
+      : { name: nombre || 'video' });
+    setCortesVideoUrl(url);
+    setCortesArchivo(blob && blob.size
       ? { name: nombre || 'video', size: blob.size, blob }
       : { name: nombre || 'video' });
   };
@@ -6376,21 +6379,21 @@ const terminar = () => {
                 onChange={(e) => {
                   const file = e.target.files && e.target.files[0];
                   if (!file) return;
-                  if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
-                  setArchivoCortes(file);
-                  setVideoUrlCortes(URL.createObjectURL(file));
+                  if (cortesVideoUrl) URL.revokeObjectURL(cortesVideoUrl);
+                  setCortesArchivo(file);
+                  setCortesVideoUrl(URL.createObjectURL(file));
                 }}
               />
               <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#38bdf8', maxWidth: '260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {archivoCortes ? archivoCortes.name : '-'}
+                {cortesArchivo ? cortesArchivo.name : '-'}
               </span>
             </label>
-            {archivoCortes && (
+            {cortesArchivo && (
               <button
                 onClick={() => {
-                  if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
-                  setArchivoCortes(null);
-                  setVideoUrlCortes('');
+                  if (cortesVideoUrl) URL.revokeObjectURL(cortesVideoUrl);
+                  setCortesArchivo(null);
+                  setCortesVideoUrl('');
                   corteCargadoRef.current = null;
                 }}
                 style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
@@ -6408,7 +6411,7 @@ const terminar = () => {
               </button>
             )}
           </div>
-          {videoUrlCortes && (
+          {cortesVideoUrl && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
               <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
                 <video
@@ -6588,7 +6591,7 @@ const terminar = () => {
                 <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <video
                     ref={videoRefVideos}
-                    src={videoUrlCortes}
+                  src={cortesVideoUrl}
                     controls
                     playsInline
                     controlsList="nofullscreen"
