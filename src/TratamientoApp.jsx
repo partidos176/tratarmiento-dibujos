@@ -57,6 +57,8 @@ function TratamientoApp({ videoInicial }) {
   const [videoUrl, setVideoUrl] = useState('');
   const [archivoCortes, setArchivoCortes] = useState(null);
   const [videoUrlCortes, setVideoUrlCortes] = useState('');
+  const [syncVideoUrl, setSyncVideoUrl] = useState('');
+  const [syncArchivo, setSyncArchivo] = useState(null);
   const [tiempoCortes, setTiempoCortes] = useState(0);
   const [durCortes, setDurCortes] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -122,6 +124,13 @@ const [hoja, setHoja] = useState('Base de datos');
   const [selPeriodo, setSelPeriodo] = useState(null); // 'ct-ini' | 'ct-fin'
   const [corteNumAzul, setCorteNumAzul] = useState({});
   const toggleCorteNumAzul = (k) => setCorteNumAzul(prev => { const c = { ...prev }; if (c[k]) delete c[k]; else c[k] = true; return c; });
+  const [videosVarios, setVideosVarios] = useState([]);
+  const [videosClips, setVideosClips] = useState({});
+  const [videosGenerando, setVideosGenerando] = useState(null);
+  const [videosError, setVideosError] = useState('');
+  const [videosTiempo, setVideosTiempo] = useState(0);
+  const [videosDur, setVideosDur] = useState(0);
+  const videoRefVideos = useRef(null);
   // Un corte se marca con una sola clave, compartida por las hojas CORTES y
   // MONTAJE, para que el circulo azul se vea igual en las dos. Las filas sin
   // inicio (imagenes, transiciones) usan su propia clave.
@@ -857,7 +866,7 @@ const bdVideoTargetRef = useRef(null);
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
-  const hojas = ['Sincronización', 'Base de datos', 'Cortes', 'Edición', 'Montaje'];
+  const hojas = ['Sincronización', 'Base de datos', 'Cortes', 'Edición', 'Montaje', 'Vídeos'];
   // Panel de sincronización mitad/fin (siempre visible por petición del usuario)
   const [mostrarOffsets, setMostrarOffsets] = useState(true);
 
@@ -905,6 +914,19 @@ const bdVideoTargetRef = useRef(null);
     if (partes.length === 1) return partes[0];
     return null;
   };
+  const minutosAMmss = (m) => {
+    const s = Math.max(0, Math.round(Number(m) * 60));
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const mmssAMinutos = (str) => {
+    const s = String(str).trim();
+    if (s === '') return null;
+    const partes = s.split(':');
+    if (partes.length !== 2) return null;
+    const a = Number(partes[0]), b = Number(partes[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return a + b / 60;
+  };
 
   const fijarDuracion = (v) => {
     const d = v ? v.duration : 0;
@@ -920,6 +942,282 @@ const bdVideoTargetRef = useRef(null);
     };
     v.addEventListener('durationchange', onDur);
     try { v.currentTime = Number.MAX_SAFE_INTEGER; } catch (_) { setDuracion(0); }
+  };
+
+  const limpiarClipsVideos = () => {
+    setVideosClips(prev => {
+      Object.values(prev).forEach(c => { if (c && c.url) URL.revokeObjectURL(c.url); });
+      return {};
+    });
+  };
+
+  const cargarVideoVideos = (file) => {
+    if (!file) return;
+    const viejoPrincipal = videoUrl;
+    const viejoCortes = videoUrlCortes;
+    limpiarClipsVideos();
+    const url = URL.createObjectURL(file);
+    setArchivo(file);
+    setArchivoCortes(file);
+    setVideoUrl(url);
+    setVideoUrlCortes(url);
+    if (viejoPrincipal && viejoPrincipal !== viejoCortes) URL.revokeObjectURL(viejoPrincipal);
+    if (viejoCortes) URL.revokeObjectURL(viejoCortes);
+    setVideosTiempo(0);
+    setVideosDur(0);
+    setVideosError('');
+  };
+
+  const clipVideosBlob = async (inicio, dur) => {
+    const ffmpeg = await loadFFmpeg();
+    const resp = await fetch(videoUrlCortes);
+    const videoBlob = await resp.blob();
+    const esWebm = (videoBlob.type && videoBlob.type.includes('webm')) || /\.webm$/i.test((archivoCortes && archivoCortes.name) || '');
+    const ext = esWebm ? 'webm' : 'mp4';
+    const marca = Date.now() + '_' + Math.floor(Math.random() * 100000);
+    const inName = `videos_in_${marca}.${ext}`;
+    const outName = `videos_out_${marca}.${ext}`;
+    await ffmpeg.writeFile(inName, new Uint8Array(await fetchFile(videoBlob)));
+    try {
+      const args = ['-ss', String(Math.max(0, Number(inicio) || 0)), '-i', inName, '-t', String(Math.max(1, Number(dur) || 1)), '-c', 'copy', '-avoid_negative_ts', 'make_zero'];
+      if (ext === 'mp4') args.push('-movflags', '+faststart');
+      args.push(outName);
+      await ffmpeg.exec(args);
+      const data = await ffmpeg.readFile(outName);
+      return new Blob([data.buffer], { type: ext === 'mp4' ? 'video/mp4' : 'video/webm' });
+    } finally {
+      try { await ffmpeg.deleteFile(inName); } catch (_) {}
+      try { await ffmpeg.deleteFile(outName); } catch (_) {}
+    }
+  };
+
+  const generarClipVideos = async (key, inicio, dur, nombre) => {
+    if (!videoUrlCortes) { setVideosError('Carga primero un video'); return; }
+    if (videosGenerando) return;
+    setVideosGenerando(key);
+    setVideosError('');
+    try {
+      let blob = null;
+      try { blob = await clipVideosBlob(inicio, dur); } catch (_) { blob = null; }
+      if (!blob || !blob.size) {
+        try { blob = await generarClipCorte(videoUrlCortes, inicio, dur); } catch (_) { blob = null; }
+      }
+      if (!blob || !blob.size) throw new Error('No se pudo generar el clip');
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const url = URL.createObjectURL(blob);
+      setVideosClips(prev => {
+        const anterior = prev[key];
+        if (anterior && anterior.url && anterior.url !== url) URL.revokeObjectURL(anterior.url);
+        return { ...prev, [key]: { url, blob, name: nombre || 'corte', ext } };
+      });
+    } catch (e) {
+      setVideosError((e && e.message) || 'No se pudo generar el clip');
+    } finally {
+      setVideosGenerando(null);
+    }
+  };
+
+  const descargarClipVideos = (key) => {
+    const clip = videosClips[key];
+    if (!clip || !clip.blob) return;
+    const url = URL.createObjectURL(clip.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${String(clip.name || 'corte').replace(/[^\w\-]+/gi, '_')}.${clip.ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  };
+
+  const borrarClipVideos = (key) => {
+    setVideosClips(prev => {
+      const copia = { ...prev };
+      const clip = copia[key];
+      if (clip && clip.url) URL.revokeObjectURL(clip.url);
+      delete copia[key];
+      return copia;
+    });
+  };
+
+  const renderClipVideos = (key) => {
+    const clip = videosClips[key];
+    if (!clip) return null;
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start', margin: '0.25rem 0 0.35rem 0.5rem' }}>
+        <video src={clip.url} controls style={{ display: 'block', width: '260px', borderRadius: '8px', background: '#000000' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <button onClick={() => descargarClipVideos(key)} style={{ background: '#22c55e', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '0.5rem 0.9rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' }}>Descargar</button>
+          <button onClick={() => borrarClipVideos(key)} style={{ background: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '0.5rem 0.9rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' }}>Borrar</button>
+        </div>
+      </div>
+    );
+  };
+
+  const moverInicioVideos = (ct, delta) => {
+    const k = String(ct);
+    const dur = Number(duracionCortes[k] ?? 10);
+    const nuevo = Math.max(0, Math.round((Number(ct) + delta) * 1000) / 1000);
+    if (Math.abs(nuevo - Number(ct)) < 0.001) return true;
+    if ((cortes || []).some(c => Math.abs(Number(c) - nuevo) < 0.001)) return false;
+    const nuevaDur = Math.max(1, Math.round((Number(ct) + dur - nuevo) * 1000) / 1000);
+    const nk = String(nuevo);
+    const moverClave = (setter) => setter(prev => {
+      const copia = { ...prev };
+      if (k in copia) { copia[nk] = copia[k]; delete copia[k]; }
+      return copia;
+    });
+    setCortes(prev => prev.map(c => Number(c) === Number(ct) ? nuevo : c).sort((a, b) => a - b));
+    setDuracionCortes(prev => { const copia = { ...prev }; delete copia[k]; copia[nk] = nuevaDur; return copia; });
+    moverClave(setNombreCortes);
+    moverClave(setAccionCortes);
+    moverClave(setCortesEditados);
+    moverClave(setFotoPorCorte);
+    setVideosClips(prev => {
+      const copia = { ...prev };
+      if (k in copia) { copia[nk] = copia[k]; delete copia[k]; }
+      return copia;
+    });
+    setFilasMontaje(prev => prev.map(f => (f && f.inicio != null && Math.abs(Number(f.inicio) - Number(ct)) < 0.001) ? { ...f, inicio: nuevo, fin: nuevo + nuevaDur, duracion: nuevaDur } : f));
+    return true;
+  };
+
+  const cambiarFinVideos = (ct, delta) => {
+    const k = String(ct);
+    const dur = Number(duracionCortes[k] ?? 10);
+    setDuracionCortes(prev => ({ ...prev, [k]: Math.max(1, Math.round((dur + delta) * 1000) / 1000) }));
+  };
+
+  const commitInicioVideos = (ct, txt) => {
+    const parsed = parsearTiempo(txt);
+    if (parsed == null) return false;
+    const offset = offsetDeVideo(ct) || 0;
+    return moverInicioVideos(ct, parsed + offset - Number(ct));
+  };
+
+  const commitFinVideos = (ct, txt) => {
+    const parsed = parsearTiempo(txt);
+    if (parsed == null) return false;
+    const k = String(ct);
+    const dur = Number(duracionCortes[k] ?? 10);
+    const offset = offsetDeVideo(Number(ct) + dur) || 0;
+    const fin = parsed + offset;
+    if (fin <= Number(ct) + 0.5) return false;
+    setDuracionCortes(prev => ({ ...prev, [k]: Math.round((fin - Number(ct)) * 1000) / 1000 }));
+    return true;
+  };
+
+  const anadirVarioVideos = () => {
+    const v = videoRefVideos.current;
+    const inicio = Math.max(0, Math.floor((v && v.currentTime) || 0) - 2);
+    setVideosVarios(prev => [...prev, { id: 'v' + Date.now() + '_' + prev.length, inicio, fin: inicio + 5 }]);
+    setVideosFiltro('__varios__');
+  };
+
+  const cambiarVarioVideos = (id, campo, delta) => {
+    setVideosVarios(prev => prev.map(v => {
+      if (v.id !== id) return v;
+      if (campo === 'inicio') {
+        const inicio = Math.max(0, Math.round((v.inicio + delta) * 1000) / 1000);
+        return { ...v, inicio, fin: Math.max(inicio + 1, v.fin) };
+      }
+      return { ...v, fin: Math.max(v.inicio + 1, Math.round((v.fin + delta) * 1000) / 1000) };
+    }));
+  };
+
+  const commitVarioVideos = (id, campo, txt) => {
+    const parsed = parsearTiempo(txt);
+    if (parsed == null) return false;
+    setVideosVarios(prev => prev.map(v => {
+      if (v.id !== id) return v;
+      if (campo === 'inicio') {
+        const inicio = Math.max(0, parsed);
+        return { ...v, inicio, fin: Math.max(inicio + 1, v.fin) };
+      }
+      return { ...v, fin: Math.max(v.inicio + 1, parsed) };
+    }));
+    return true;
+  };
+
+  const borrarVarioVideos = (id) => {
+    borrarClipVideos('vario:' + id);
+    setVideosVarios(prev => prev.filter(v => v.id !== id));
+  };
+
+  const irAVideos = (seg) => {
+    const v = videoRefVideos.current;
+    if (v) { try { v.currentTime = Math.max(0, seg); } catch (_) {} }
+  };
+
+  const syncVideosParte = (parte) => {
+    const v = videoRefVideos.current;
+    if (!v || v.currentTime == null) { setVideosError('Carga un video antes de sincronizar'); return; }
+    const t = Math.max(0, Math.round(v.currentTime * 1000) / 1000);
+    if (parte === 1) setOffsetCortes(prev => ({ ...prev, off1: t }));
+    else setOffsetCortes(prev => ({ ...prev, off2: Math.max(0, Math.round((prev.seg2 != null ? t - prev.seg2 : t) * 1000) / 1000) }));
+    setVideosError('');
+  };
+
+  const borrarSyncVideos = (parte) => {
+    if (parte === 1) setOffsetCortes(prev => ({ ...prev, off1: null }));
+    else setOffsetCortes(prev => ({ ...prev, off2: null }));
+  };
+
+  const exportarBaseDatosVideos = () => {
+    try {
+      const usados = new Set();
+      const cortesExp = [];
+      const durExp = {};
+      const nomExp = {};
+      const accExp = {};
+      const editExp = {};
+      const fotoExp = {};
+      const filas = [];
+      const baseId = Date.now();
+      const agregar = (inicio, dur, nombre, accion) => {
+        let ini = Math.round(Number(inicio) * 1000) / 1000;
+        if (!Number.isFinite(ini) || ini < 0) return null;
+        while (usados.has(ini)) ini = Math.round((ini + 0.04) * 1000) / 1000;
+        usados.add(ini);
+        const d = Math.max(1, Math.round((Number(dur) || 10) * 1000) / 1000);
+        const k = String(ini);
+        cortesExp.push(ini);
+        durExp[k] = d;
+        nomExp[k] = nombre || '';
+        accExp[k] = accion || '';
+        filas.push({ id: baseId + filas.length, concepto: nombre || '', accion: accion || '', finalizacion: '', finalizaciones: [], inicio: ini, fin: Math.round((ini + d) * 1000) / 1000, duracion: d, numCorte: 0, videoUrl: null });
+        return k;
+      };
+      const orden = [...(cortes || [])].map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      orden.forEach(ct => {
+        const k = String(ct);
+        const nk = agregar(ct, duracionCortes[k] ?? 10, nombreCortes[k] || '', accionCortes[k] || '');
+        if (nk && cortesEditados[k]) editExp[nk] = cortesEditados[k];
+        if (nk && fotoPorCorte[k]) fotoExp[nk] = fotoPorCorte[k];
+      });
+      videosVarios.forEach((v, i) => agregar(v.inicio, Math.max(1, v.fin - v.inicio), `VARIOS ${i + 1}`, 'VARIOS'));
+      filas.sort((a, b) => a.inicio - b.inicio).forEach((f, i) => { f.numCorte = i + 1; });
+      const data = {
+        app: 'tratamiento-dibujos',
+        version: 5,
+        guardado: new Date().toISOString(),
+        ...syncCortes(),
+        cortes: { cortes: cortesExp, duracionCortes: durExp, nombreCortes: nomExp, accionCortes: accExp, cortesEditados: editExp, fotoPorCorte: fotoExp },
+        filas
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const base = ((archivoCortes && archivoCortes.name) || 'acciones').replace(/\.[^.]+$/, '');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${base}_para_tratamiento_bd.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch (e) {
+      setVideosError((e && e.message) || 'No se pudo exportar la base de datos');
+    }
   };
 
   const periodo = 0;
@@ -4216,8 +4514,7 @@ const terminar = () => {
         // Un export de montaje/cortes guarda los tiempos en minutos de VIDEO y
         // solo trae los offsets para poder mostrar el minuto de PARTIDO: hay que
         // NO volver a convertirlos (si no, se desfasarian dos veces).
-        const cortesEnVideo = !!(data && data.cortesEnVideo === true);
-        const hayOff = tieneOffsets && !cortesEnVideo;
+        const hayOff = tieneOffsets;
         const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
         const f2 = off2 != null ? off2 : f1;
         setOffsetCortes(tieneOffsets ? { off1: f1, off2: f2, seg2 } : { off1: null, off2: null, seg2: null });
@@ -5801,13 +6098,10 @@ const terminar = () => {
                 onChange={(e) => {
                   const f = e.target.files && e.target.files[0];
                   if (!f) return;
-                  if (videoUrl) URL.revokeObjectURL(videoUrl);
-                  if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
+                  if (syncVideoUrl) URL.revokeObjectURL(syncVideoUrl);
                   const url = URL.createObjectURL(f);
-                  setVideoUrl(url);
-                  setVideoUrlCortes(url);
-                  setArchivo(f);
-                  setArchivoCortes(f);
+                  setSyncVideoUrl(url);
+                  setSyncArchivo(f);
                   setProgreso(0);
                   corteCargadoRef.current = null;
                   clipOrigenRef.current = null;
@@ -5815,7 +6109,6 @@ const terminar = () => {
                   clipMainRef.current = null;
                   if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
                   setClipActivo(null);
-                  setAviso('Video cargado para offsets');
                 }}
               />
             </div>
@@ -5831,65 +6124,72 @@ const terminar = () => {
                       if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
                       const min = Math.round((v.currentTime / 60) * 10) / 10;
                       setOffsetCortes(prev => ({ ...prev, off1: min }));
-                      setAviso('Inicio 1ª parte fijado en ' + min + ' min');
                     }}
                     style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer' }}
                   >
                     Inicio 1ª parte
                   </button>
+                  <button
+                    onClick={() => {
+                      const v = videoRef.current;
+                      if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
+                      const min = Math.round((v.currentTime / 60) * 10) / 10;
+                      const seg2default = 45;
+                      setOffsetCortes(prev => ({
+                        ...prev,
+                        seg2: prev.seg2 != null ? prev.seg2 : seg2default,
+                        off2: Math.max(0, Math.round(min * 10) / 10)
+                      }));
+                    }}
+                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer', marginLeft: '0.5rem' }}
+                  >
+                    Inicio 2ª parte
+                  </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '0.5rem' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 1ª parte (min):</label>
                   <input
-                    type="number"
-                    step="0.1"
-                    value={offsetCortes.off1 != null ? offsetCortes.off1 : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off1: e.target.value === '' ? null : Number(e.target.value) }))}
+                    type="text"
+                    value={offsetCortes.off1 != null ? minutosAMmss(offsetCortes.off1) : ''}
+                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off1: mmssAMinutos(e.target.value) }))}
                     style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
                   />
                   <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 2ª parte (min):</label>
                   <input
-                    type="number"
-                    step="0.1"
-                    value={offsetCortes.off2 != null ? offsetCortes.off2 : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: e.target.value === '' ? null : Number(e.target.value) }))}
-                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
-                  />
-                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>2ª parte desde min:</label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={offsetCortes.seg2 != null ? offsetCortes.seg2 : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, seg2: e.target.value === '' ? null : Number(e.target.value) }))}
+                    type="text"
+                    value={offsetCortes.off2 != null ? minutosAMmss(offsetCortes.off2) : ''}
+                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: mmssAMinutos(e.target.value) }))}
                     style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
                   />
                 </div>
               </div>
             );
           }
-          if (videoUrlCortes) {
+          if (syncVideoUrl) {
             children.push(
-              <div key="player" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Previsualización de vídeo</span>
-                  <button
-                    onClick={() => { if (videoRef.current) { if (videoRef.current.paused) videoRef.current.play(); else videoRef.current.pause(); } }}
-                    style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', padding: '0.4rem 0.8rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}
-                  >
-                    {videoRef.current && videoRef.current.paused ? 'Play' : 'Pause'}
-                  </button>
-                </div>
+              <div key="player" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <video
                   ref={videoRef}
-                  src={videoUrlCortes}
-                  style={{ width: '100%', maxWidth: '480px', background: 'black' }}
+                  src={syncVideoUrl}
+                  style={{ width: '100%', maxWidth: '480px', background: 'black', flexShrink: 0 }}
                   autoPlay
                   muted
                   controls
                   playsInline
-                />
-                <div style={{ marginTop: '0.5rem', fontSize: '0.65rem', color: '#94a3b8', fontFamily: 'var(--font-mono, monospace)' }}>
-                  Tiempo: {videoRef.current && videoRef.current.currentTime != null ? Math.round(videoRef.current.currentTime) : '—'} / {videoRef.current && videoRef.current.duration != null ? Math.round(videoRef.current.duration) : '—'} s
+                ></video>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
+                  <button
+                    onClick={() => { const v = videoRef.current; if (v) v.currentTime = Math.min((v.duration || 0), Math.max(0, v.currentTime + 5)); }}
+                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', padding: '0.35rem 0.85rem', color: '#ffffff', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    +5 seg.
+                  </button>
+                  <button
+                    onClick={() => { const v = videoRef.current; if (v) v.currentTime = Math.max(0, v.currentTime - 5); }}
+                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', padding: '0.35rem 0.85rem', color: '#ffffff', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    -5 seg.
+                  </button>
                 </div>
               </div>
             );
@@ -6237,7 +6537,141 @@ const terminar = () => {
             </div>
           )}
         </div>
-      ) : hoja === 'Edición' ? (
+      ) : hoja === 'Vídeos' ? (() => {
+        const ord = [...(cortes || [])].map(Number).filter(Number.isFinite).sort((a, b) => b - a);
+        const accionDeCorte = (ct) => {
+          const k = String(ct);
+          const accion = String(accionCortes[k] || '').trim();
+          if (accion) return accion;
+          return String(nombreCortes[k] || '').split(' - ')[0].trim() || 'ACCIÓN';
+        };
+        const visibles = ord;
+        const variosVisibles = videosVarios;
+        const tieneOff1 = offsetCortes.off1 != null;
+        const tieneOff2 = offsetCortes.off2 != null && (offsetCortes.seg2 != null || !tieneOff1 || Number(offsetCortes.off2) !== Number(offsetCortes.off1));
+        const btnMini = { background: '#1f2937', color: '#e5e7eb', border: '1px solid #4b5563', borderRadius: '6px', width: '1.8rem', height: '1.8rem', cursor: 'pointer', fontWeight: 800, padding: 0, lineHeight: 1 };
+        const inputTiempo = { width: '4.4rem', background: '#0b1220', color: '#e5e7eb', border: '1px solid #4b5563', borderRadius: '6px', padding: '0.3rem 0.35rem', textAlign: 'center', fontFamily: 'monospace', fontSize: '0.8rem' };
+        const boton = { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '0.5rem 0.9rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' };
+        const aviso = { background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '0.75rem 1rem', color: '#9ca3af', fontSize: '0.85rem' };
+        const chip = { display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '0.45rem 0.6rem', color: '#e5e7eb', fontSize: '0.78rem', fontWeight: 700 };
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }}>
+              <label style={{ ...chip, cursor: 'pointer' }}>
+                <span>CARGAR VÍDEO:</span>
+                <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; cargarVideoVideos(f); }} />
+                <span style={{ color: archivoCortes ? '#22c55e' : '#9ca3af', fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{archivoCortes ? archivoCortes.name : 'Seleccionar...'}</span>
+              </label>
+              <button onClick={exportarBaseDatosVideos} style={boton}>EXPORTAR BASE DE DATOS</button>
+            </div>
+
+            {videoUrlCortes && (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }}>
+                  {!tieneOff1 ? (
+                    <button onClick={() => syncVideosParte(1)} style={boton}>SINCRONIZA 1ª PARTE</button>
+                  ) : (
+                    <span style={chip}>
+                      <span>1ª parte: {formatoTiempo(offsetCortes.off1)}</span>
+                      <button onClick={() => borrarSyncVideos(1)} style={{ ...btnMini, width: '1.4rem', height: '1.4rem' }}>x</button>
+                    </span>
+                  )}
+                  {!tieneOff2 ? (
+                    <button onClick={() => syncVideosParte(2)} style={boton}>SINCRONIZA 2ª PARTE</button>
+                  ) : (
+                    <span style={chip}>
+                      <span>2ª parte: {formatoTiempo(offsetCortes.off2)}</span>
+                      <button onClick={() => borrarSyncVideos(2)} style={{ ...btnMini, width: '1.4rem', height: '1.4rem' }}>x</button>
+                    </span>
+                  )}
+                </div>
+                <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <video
+                    ref={videoRefVideos}
+                    src={videoUrlCortes}
+                    controls
+                    playsInline
+                    controlsList="nofullscreen"
+                    onLoadedMetadata={(e) => { fijarDuracion(e.currentTarget); setVideosDur(e.currentTarget.duration || 0); }}
+                    onTimeUpdate={(e) => { setVideosTiempo(e.currentTarget.currentTime || 0); setVideosDur(e.currentTarget.duration || 0); }}
+                    style={{ display: 'block', width: '640px', maxWidth: '100%', maxHeight: '36vh', background: '#000000', borderRadius: '8px' }}
+                  />
+                  <div className="barra-cortes" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '2rem', alignItems: 'center' }}>
+                    <span style={{ color: '#e5e7eb', fontFamily: 'monospace', fontWeight: 700, fontSize: '0.9rem' }}>{formatoTiempo(aMinutoPartido(videosTiempo))} / {formatoTiempo(aMinutoPartido(videosDur))}</span>
+                    <button onClick={() => { const v = videoRefVideos.current; if (v) v.currentTime = Math.max(0, v.currentTime - 5); }} style={btnMini}>-5</button>
+                    <button onClick={() => { const v = videoRefVideos.current; if (v) v.currentTime = Math.min(videosDur || v.duration || 0, v.currentTime + 5); }} style={btnMini}>+5</button>
+                    <button onClick={() => { const el = document.getElementById('cortes-video-wrap'); if (!el) return; if (!document.fullscreenElement) { el.requestFullscreen?.() || el.webkitRequestFullscreen?.(); } else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); } }} style={{ ...boton, padding: '0.35rem 0.7rem' }}>FULL</button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {videosError && <div style={{ ...aviso, color: '#fca5a5', borderColor: '#7f1d1d' }}>{videosError}</div>}
+
+            {videosGenerando && <div style={{ ...aviso, color: '#93c5fd' }}>Generando clip... espera un momento.</div>}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {visibles.map((ct, i) => {
+                const k = String(ct);
+                const dur = Number(duracionCortes[k] ?? 10);
+                const fin = Number(ct) + dur;
+                const generando = videosGenerando === k;
+                return (
+                  <div key={'videos_' + k} style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div onClick={() => irAVideos(ct)} style={{ display: 'grid', gridTemplateColumns: '2rem minmax(90px, 1fr) auto auto auto auto', gap: '0.4rem', alignItems: 'center', background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '0.45rem 0.6rem', color: '#e5e7eb', cursor: 'pointer' }}>
+                      <span style={{ color: '#93c5fd', fontWeight: 800, textAlign: 'center' }}>{i + 1}</span>
+                      <span title={nombreCortes[k] || ''} style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{accionDeCorte(ct)}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); moverInicioVideos(ct, -1); }}>-</button>
+                        <input key={'vi_' + k + '_' + ct} defaultValue={formatoTiempo(aMinutoPartido(ct))} onClick={(e) => e.stopPropagation()} onBlur={(e) => { if (!commitInicioVideos(ct, e.target.value)) e.target.value = formatoTiempo(aMinutoPartido(ct)); }} style={inputTiempo} title="Inicio (mm:ss)" />
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); moverInicioVideos(ct, 1); }}>+</button>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); cambiarFinVideos(ct, -1); }}>-</button>
+                        <input key={'vf_' + k + '_' + fin} defaultValue={formatoTiempo(aMinutoPartido(fin))} onClick={(e) => e.stopPropagation()} onBlur={(e) => { if (!commitFinVideos(ct, e.target.value)) e.target.value = formatoTiempo(aMinutoPartido(fin)); }} style={inputTiempo} title="Fin (mm:ss)" />
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); cambiarFinVideos(ct, 1); }}>+</button>
+                      </div>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#9ca3af' }}>{formatoTiempo(dur)}</span>
+                      <button disabled={!!videosGenerando} style={{ ...boton, opacity: videosGenerando ? 0.6 : 1 }} onClick={(e) => { e.stopPropagation(); generarClipVideos(k, ct, dur, `${accionDeCorte(ct)} ${i + 1}`); }}>{generando ? 'GENERANDO...' : 'GENERAR'}</button>
+                    </div>
+                    {renderClipVideos(k)}
+                  </div>
+                );
+              })}
+
+              {variosVisibles.map((v, i) => {
+                const key = 'vario:' + v.id;
+                const dur = Math.max(1, v.fin - v.inicio);
+                const generando = videosGenerando === key;
+                return (
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div onClick={() => irAVideos(v.inicio)} style={{ display: 'grid', gridTemplateColumns: '2rem minmax(90px, 1fr) auto auto auto auto', gap: '0.4rem', alignItems: 'center', background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '0.45rem 0.6rem', color: '#e5e7eb', cursor: 'pointer' }}>
+                      <span style={{ color: '#fbbf24', fontWeight: 800, textAlign: 'center' }}>{i + 1}</span>
+                      <span style={{ fontWeight: 700 }}>VARIOS {i + 1}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); cambiarVarioVideos(v.id, 'inicio', -1); }}>-</button>
+                        <input key={'vvi_' + v.id + '_' + v.inicio} defaultValue={formatoTiempo(v.inicio)} onClick={(e) => e.stopPropagation()} onBlur={(e) => { if (!commitVarioVideos(v.id, 'inicio', e.target.value)) e.target.value = formatoTiempo(v.inicio); }} style={inputTiempo} title="Inicio de vídeo (mm:ss)" />
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); cambiarVarioVideos(v.id, 'inicio', 1); }}>+</button>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); cambiarVarioVideos(v.id, 'fin', -1); }}>-</button>
+                        <input key={'vvf_' + v.id + '_' + v.fin} defaultValue={formatoTiempo(v.fin)} onClick={(e) => e.stopPropagation()} onBlur={(e) => { if (!commitVarioVideos(v.id, 'fin', e.target.value)) e.target.value = formatoTiempo(v.fin); }} style={inputTiempo} title="Fin de vídeo (mm:ss)" />
+                        <button style={btnMini} onClick={(e) => { e.stopPropagation(); cambiarVarioVideos(v.id, 'fin', 1); }}>+</button>
+                      </div>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#9ca3af' }}>{formatoTiempo(dur)}</span>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        <button disabled={!!videosGenerando} style={{ ...boton, opacity: videosGenerando ? 0.6 : 1 }} onClick={(e) => { e.stopPropagation(); generarClipVideos(key, v.inicio, dur, `VARIOS ${i + 1}`); }}>{generando ? 'GENERANDO...' : 'GENERAR'}</button>
+                        <button style={{ ...boton, background: '#ef4444' }} onClick={(e) => { e.stopPropagation(); borrarVarioVideos(v.id); }}>X</button>
+                      </div>
+                    </div>
+                    {renderClipVideos(key)}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })() : hoja === 'Edición' ? (
         <div ref={editorRef} style={{ flex: 1, position: 'relative', display: 'flex' }}>
           {capturaSeleccionada && (
             <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
