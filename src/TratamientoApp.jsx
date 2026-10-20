@@ -6162,7 +6162,7 @@ const terminar = () => {
               <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
                 <video
                   ref={videoRefCortes}
-                  src={videoUrlCortes}
+                  src={cortesVideoUrl}
                   muted
                   controls
                   playsInline
