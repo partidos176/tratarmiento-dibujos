@@ -858,6 +858,8 @@ const bdVideoTargetRef = useRef(null);
   }, [filasMontaje, capturas]);
 
   const hojas = ['Base de datos', 'Cortes', 'Edición', 'Montaje'];
+  // Panel de sincronización mitad/fin (siempre visible por petición del usuario)
+  const [mostrarOffsets, setMostrarOffsets] = useState(true);
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -5895,7 +5897,7 @@ const terminar = () => {
                         </td>
                         <td onClick={(e) => { if (e.target.closest('button')) return; setSelVideoBD(prev => prev === 'bd_' + v.id ? null : 'bd_' + v.id); }} title="Seleccionar vídeo" style={{ border: '1px solid #334155', padding: '0.5rem 1rem', textAlign: 'center', cursor: 'pointer', background: selVideoBD === 'bd_' + v.id ? 'rgba(250,204,21,0.25)' : 'transparent' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start', marginBottom: '0.3rem' }}>
-                            <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{v.nombre}</div>
+                            <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{v.nombre} {offsetCortes.off1 != null ? 'off1=' + offsetCortes.off1 + '¦' : ''} seg2={offsetCortes.seg2 != null ? offsetCortes.seg2 : '—'}</div>
                             <button onClick={() => { bdVideoTargetRef.current = { kind: 'bd', id: v.id }; bdVideoRef.current?.click(); }} title="Anclar vídeo del PC" style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.75rem', width: '24px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>📌</button>
                             {selectorVideoPin('bd', v.id)}
                           </div>
@@ -5913,6 +5915,70 @@ const terminar = () => {
               </tbody>
             </table>
             </div>
+            {/* Botón independiente para cargar video para offset */}
+            <div style={{ marginTop: '1rem' }}>
+              <button
+                onClick={() => { bdVideoRef.current?.click(); }}
+                style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+              >
+                Cargar video para offset
+              </button>
+              <input
+                ref={bdVideoRef}
+                type="file"
+                accept="video/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  if (!f) return;
+                  if (videoUrl) URL.revokeObjectURL(videoUrl);
+                  setVideoUrl(URL.createObjectURL(f));
+                  setArchivo(f);
+                  setProgreso(0);
+                  corteCargadoRef.current = null;
+                  clipOrigenRef.current = null;
+                  clipResumeRef.current = null;
+                  clipMainRef.current = null;
+                  if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
+                  setClipActivo(null);
+                  setAviso('Video cargado para offsets');
+                }}
+              />
+            </div>
+            {/* Panel de sincronización mitad/fin */}
+            {mostrarOffsets && (
+              <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Sincronización mitad/fin</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '0.5rem' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 1ª parte (min):</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={offsetCortes.off1 != null ? offsetCortes.off1 : ''}
+                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off1: e.target.value === '' ? null : Number(e.target.value) }))}
+                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
+                  />
+                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 2ª parte (min):</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={offsetCortes.off2 != null ? offsetCortes.off2 : ''}
+                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: e.target.value === '' ? null : Number(e.target.value) }))}
+                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
+                  />
+                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>2ª parte desde min:</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={offsetCortes.seg2 != null ? offsetCortes.seg2 : ''}
+                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, seg2: e.target.value === '' ? null : Number(e.target.value) }))}
+                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
+                  />
+                </div>
+              </div>
+            )}
             {avisoCopia && (
               <div
                 title={avisoCopia.texto}
