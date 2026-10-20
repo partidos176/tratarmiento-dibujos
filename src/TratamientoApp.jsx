@@ -4252,9 +4252,12 @@ const terminar = () => {
         // solo trae los offsets para poder mostrar el minuto de PARTIDO: hay que
         // NO volver a convertirlos (si no, se desfasarian dos veces).
         const hayOff = tieneOffsets;
+        // Al importar en Base de datos no se toca nada de Sincronización
+        // (offsets ni vídeo para offset): esos estados son independientes y
+        // solo se tocan desde la hoja Sincronización.
+        // setOffsetCortes(tieneOffsets ? { off1: f1, off2: f2, seg2 } : { off1: null, off2: null, seg2: null });
         const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
         const f2 = off2 != null ? off2 : f1;
-        setOffsetCortes(tieneOffsets ? { off1: f1, off2: f2, seg2 } : { off1: null, off2: null, seg2: null });
         const aplicar = (t) => {
           const n = Number(t);
           if (!Number.isFinite(n)) return t;
