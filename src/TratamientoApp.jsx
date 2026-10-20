@@ -1051,9 +1051,17 @@ const bdVideoTargetRef = useRef(null);
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           <button onClick={() => descargarClipVideos(key)} style={{ background: '#22c55e', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '0.5rem 0.9rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' }}>Descargar</button>
           <button onClick={() => borrarClipVideos(key)} style={{ background: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '0.5rem 0.9rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase' }}>Borrar</button>
-        </div>
-      </div>
-    );
+                </div>
+                <div style={{ marginTop: '1rem' }}>
+                  <button
+                    onClick={borrarSincronizacion}
+                    style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', textTransform: 'uppercase' }}
+                  >
+                    Borrar
+                  </button>
+                </div>
+              </div>
+            );
   };
 
   const moverInicioVideos = (ct, delta) => {
@@ -1163,6 +1171,18 @@ const bdVideoTargetRef = useRef(null);
   const borrarSyncVideos = (parte) => {
     if (parte === 1) setOffsetCortes(prev => ({ ...prev, off1: null }));
     else setOffsetCortes(prev => ({ ...prev, off2: null }));
+  };
+
+  const borrarSincronizacion = () => {
+    if (window.confirm('¿Borrar todos los datos de Sincronización (offsets y vídeo)?')) {
+      setOffsetCortes({ off1: null, off2: null, seg2: null });
+      if (syncVideoUrl) URL.revokeObjectURL(syncVideoUrl);
+      setSyncVideoUrl('');
+      setSyncArchivo(null);
+      const v = videoRef.current;
+      if (v) { try { v.currentTime = 0; } catch (_) {} }
+      setAviso('Sincronización borrada');
+    }
   };
 
   const exportarBaseDatosVideos = () => {
