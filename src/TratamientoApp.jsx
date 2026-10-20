@@ -910,7 +910,7 @@ const bdVideoTargetRef = useRef(null);
     return null;
   };
   const minutosAMmss = (m) => {
-    const s = Math.max(0, Math.round(Number(m) * 60));
+    const s = Math.max(0, Math.floor(Number(m) * 60));
     return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   };
   const mmssAMinutos = (str) => {
@@ -5865,7 +5865,7 @@ const terminar = () => {
                     onClick={() => {
                       const v = videoRef.current;
                       if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
-                      const min = v.currentTime / 60;
+                      const min = Math.floor(v.currentTime) / 60;
                       setOffsetCortes(prev => ({ ...prev, off1: min }));
                     }}
                     style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer' }}
@@ -5876,7 +5876,7 @@ const terminar = () => {
                     onClick={() => {
                       const v = videoRef.current;
                       if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
-                      const min = v.currentTime / 60;
+                      const min = Math.floor(v.currentTime) / 60;
                       const seg2default = 45;
                       setOffsetCortes(prev => ({
                         ...prev,
