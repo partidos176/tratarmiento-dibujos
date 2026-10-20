@@ -5865,7 +5865,7 @@ const terminar = () => {
                     onClick={() => {
                       const v = videoRef.current;
                       if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
-                      const min = Math.round((v.currentTime / 60) * 10) / 10;
+                      const min = v.currentTime / 60;
                       setOffsetCortes(prev => ({ ...prev, off1: min }));
                     }}
                     style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer' }}
@@ -5876,12 +5876,12 @@ const terminar = () => {
                     onClick={() => {
                       const v = videoRef.current;
                       if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
-                      const min = Math.round((v.currentTime / 60) * 10) / 10;
+                      const min = v.currentTime / 60;
                       const seg2default = 45;
                       setOffsetCortes(prev => ({
                         ...prev,
                         seg2: prev.seg2 != null ? prev.seg2 : seg2default,
-                        off2: Math.max(0, Math.round(min * 10) / 10)
+                        off2: Math.max(0, min)
                       }));
                     }}
                     style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer', marginLeft: '0.5rem' }}
