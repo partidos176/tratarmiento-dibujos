@@ -2075,6 +2075,10 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
     // Fase 2: aplicar los fundidos. Cada uno se come media duracion del final
     // del trozo anterior y media del principio del siguiente, y en su lugar se
     // encaja el fundido, igual que hace el bucle de dibujo del navegador.
+    // IMPORTANTE: el operando B del fundido debe tomarse del trozo ORIGINAL
+    // (head sin adelantar) y durar 'd' segundos. El siguiente tramo avanza 'd'
+    // completo para continuar justo donde termina el fundido (sin salto atras
+    // ni repeticion). Se deja un minimo de 0.1s en el siguiente tramo.
     const items = [];
     let durTotal = 0;
     for (let i = 0; i < trozos.length; i++) {
@@ -2084,18 +2088,26 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       // de su alcance.
       const bruto = transPorPos.get(i);
       let mitad = 0;
+      let operandoB = null;
       if (i + 1 < trozos.length && bruto) {
-        const d = Math.min(bruto.dur, longitudDe(item), longitudDe(trozos[i + 1]));
+        const sig = trozos[i + 1];
+        const d = Math.min(bruto.dur, longitudDe(item), longitudDe(sig));
         if (d >= 0.2) {
           mitad = d / 2;
-          trozos[i + 1] = { ...trozos[i + 1] };
-          avanzarCabeza(trozos[i + 1], mitad);
+          // Capturar operando B del trozo original (head sin recortar): el
+          // fundido consumira d segundos de B empezando en su head original.
+          operandoB = operandoDe(sig, 0);
+          trozos[i + 1] = { ...sig };
+          // Avanzar B en 'd' completo (como en el canvas): B continua donde
+          // acaba el fundido. Clamp para dejar al menos 0.1s en el tramo B.
+          const avance = Math.min(d, longitudDe(sig) - 0.1);
+          if (avance > 0) avanzarCabeza(trozos[i + 1], avance);
         }
       }
       if (mitad > 0) acortarCola(item, mitad);
       if (longitudDe(item) > 0.05) { items.push(item); durTotal += longitudDe(item); }
-      if (mitad > 0 && trozos[i + 1] && longitudDe(trozos[i + 1]) > 0.05) {
-        items.push({ tipo: 'transicion', dur: mitad * 2, modelo: (bruto && bruto.modelo) || 'crossfade', a: operandoDe(item, mitad), b: operandoDe(trozos[i + 1], 0), nombre: '' });
+      if (mitad > 0 && trozos[i + 1] && longitudDe(trozos[i + 1]) > 0.05 && operandoB) {
+        items.push({ tipo: 'transicion', dur: mitad * 2, modelo: (bruto && bruto.modelo) || 'crossfade', a: operandoDe(item, mitad), b: operandoB, nombre: '' });
         durTotal += mitad * 2;
       }
     }
