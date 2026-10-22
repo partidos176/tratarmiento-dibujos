@@ -36,11 +36,10 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Reproducción de preview.
 - Exportación de vídeo final (vía rápida con FFmpeg en el servidor local, con
   informe de fases; si el servidor descarta algún fundido lo indica el informe).
-- Indicadores junto al botón *Limpiar*: **Total** (suma de periodos de cortes +
-  transiciones + imágenes de las líneas seleccionadas) y **Real** (duración
-  estimada del vídeo final: lo mismo, ajustado por las animaciones dentro de
-  cada corte, el recorte al final del vídeo base y −d/2 por cada fundido;
-  coincide con lo que informa la descarga).
+- Indicador **Real** junto al botón *Limpiar*: duración estimada del vídeo
+  final para las líneas seleccionadas (periodos + animaciones + imágenes
+  dentro de cada corte, −d/2 por cada fundido y recorte al final del vídeo
+  base); coincide con lo que informa la descarga.
 - Guardado/carga de sesión.
 
 ---
