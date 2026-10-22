@@ -1750,6 +1750,24 @@ const bdVideoTargetRef = useRef(null);
       }
       rangos[rangos.length - 1][1] = segs.length;
     }
+    // Clamp: recortar segmentos de video base que se pasen de la duracion real.
+    // Evita que la grabacion intente leer mas alla del final y se quede congelada.
+    if (Number.isFinite(duracion) && duracion > 0) {
+      for (const s of segs) {
+        if (!s.kind && !s.esAnim && s.tipo !== 'imagen' && s.el === base) {
+          if (s.desde >= duracion) { s.desde = duracion; s.hasta = duracion; }
+          else if (s.hasta > duracion) s.hasta = duracion;
+        }
+      }
+      const antes = segs.length;
+      for (let i = segs.length - 1; i >= 0; i--) {
+        const s = segs[i];
+        if (!s.kind && !s.esAnim && s.tipo !== 'imagen' && s.el === base && !(s.hasta - s.desde > 0.05)) {
+          segs.splice(i, 1);
+        }
+      }
+      if (segs.length !== antes) console.log('[PrepararSegmentos] descartados', antes - segs.length, 'segmentos base por clamp');
+    }
     const esVideoSeg = (s) => s && !s.kind && s.el && s.el.tagName !== 'IMG';
     // Si hay animaciones en la hoja pero ninguna cae en los recortes, saldría
     // una descarga sin animaciones sin explicación: se avisa para revisar
@@ -2005,7 +2023,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
     return { origen: 'recurso', id: it.id, ext: it.ext, desde: colaMs ? Number(it.hasta) - colaMs : Number(it.desde) };
   };
 
-  const construirPlanMontaje = async (validas) => {
+  const construirPlanMontaje = async (validas, videoDur) => {
     const baseSrc = videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) return null;
     const cache = new Map();
@@ -2071,6 +2089,25 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       if (trozos.length === trozosAntes) diag.lineasSinTrozos.push(nombre || ('#' + (linea.inicio != null ? Math.round(linea.inicio) + 's' : '?')));
     }
     if (!trozos.length) return null;
+
+    // Clamp: recortar trozos 'fuente' que se pasen de la duracion del video base.
+    // Evita que el servidor intente extraer mas alla del final y el montaje se quede corto.
+    if (Number.isFinite(videoDur) && videoDur > 0) {
+      for (const t of trozos) {
+        if (t.tipo === 'fuente') {
+          if (t.ini >= videoDur) { t.ini = videoDur; t.fin = videoDur; }
+          else if (t.fin > videoDur) t.fin = videoDur;
+        }
+      }
+      // Descartar trozos de longitud cero o negativa tras el clamp
+      const antes = trozos.length;
+      for (let i = trozos.length - 1; i >= 0; i--) {
+        if (trozos[i].tipo === 'fuente' && !(trozos[i].fin - trozos[i].ini > 0.05)) {
+          trozos.splice(i, 1);
+        }
+      }
+      if (trozos.length !== antes) diag.trozosDescartados = antes - trozos.length;
+    }
 
     // Fase 2: aplicar los fundidos. Cada uno se come media duracion del final
     // del trozo anterior y media del principio del siguiente, y en su lugar se
@@ -2283,7 +2320,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       const salud = await saludarServidor();
       if (!salud) { motivoViaRapida.current = 'el servidor del puerto 3001 no responde'; return false; }
       const tPlan0 = performance.now();
-      const plan = await construirPlanMontaje(validas);
+      const plan = await construirPlanMontaje(validas, duracion);
       const tPlanMs = performance.now() - tPlan0;
       if (!plan || !plan.items.length) { motivoViaRapida.current = 'no se pudo armar el plan: una fila sin metraje, o un clip o imagen que no se pudo subir'; return false; }
 
