@@ -88,6 +88,8 @@ tratarmiento-dibujos/
 pnpm install
 ```
 
+> El proyecto usa **pnpm** (`pnpm-lock.yaml`). No uses `npm install` ni generes `package-lock.json`.
+
 ### Desarrollo
 ```bash
 pnpm dev
@@ -123,6 +125,7 @@ pnpm deploy
 ## 🔐 Seguridad y mantenimiento
 
 - `engines.node` fijado a `>=22.23.4` (parche de vulnerabilidades críticas de Node.js y CA eMudhra).
-- **Dependabot** semanal para npm (patch/minor) + auto-merge cuando CI pasa.
+- **Dependabot** semanal para dependencias npm gestionadas con pnpm (patch/minor) + auto-merge cuando CI pasa.
+- **Auto-actualización de Node.js** semanal (workflow `node-auto-update.yml`): actualiza parches dentro de la misma major y hace commit directo a `main`.
 - **Regla de código**: ningún componente nuevo debe superar las 500 líneas (ver `AGENTS.md`).
 - Mantener este README actualizado con cualquier cambio relevante.
