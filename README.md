@@ -39,7 +39,8 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Composición de filas/tramos de vídeo e imágenes.
 - Fundidos y transiciones.
 - Reproducción de preview.
-- Exportación de vídeo final.
+- Exportación de vídeo final (vía rápida con FFmpeg en el servidor local, con
+  informe de fases; si el servidor descarta algún fundido lo indica el informe).
 - Guardado/carga de sesión.
 
 ---
