@@ -2163,43 +2163,37 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
 
   // La carpeta fija del servidor ('futbol\videos') solo la puede escribir el
   // servidor: el navegador no tiene acceso a la ruta. Al cargar un video en la
-  // hoja Base de datos se manda nombre y tamano, y el servidor lo busca en el
-  // disco y lo copia alli (de disco a disco, sin subir GB). Los nombres de lo
-  // copiado se apuntan en localStorage para poder borrarlos al limpiar o al
-  // recargar.
+  // hoja Base de datos se sube el archivo directamente (multipart/form-data)
+  // al endpoint /api/upload. Es más fiable que buscar por nombre en disco.
   const COPIAS_KEY = 'videos_copiados';
   const copiarVideoAlServidor = async (file) => {
     try {
       if (!file || !file.name || !(file.size > 0)) return;
-      setAvisoCopia({ estado: 'copiando', texto: 'Copiando «' + file.name + '» para el servidor…' });
-      const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/videos/copiar', {
+      setAvisoCopia({ estado: 'copiando', texto: 'Subiendo «' + file.name + '» al servidor…' });
+      const fd = new FormData();
+      fd.append('video', file);
+      const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: file.name, size: file.size }),
+        body: fd,
       }, 120000);
-      if (!r || !r.ok) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no respondió para copiar el vídeo' }); return; }
+      if (!r || !r.ok) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no respondió al subir el vídeo' }); return; }
       const d = await r.json().catch(() => null);
-      if (!d) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no devolvió nada al copiar el vídeo' }); return; }
+      if (!d) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no devolvió nada al subir el vídeo' }); return; }
       if (d.ok) {
-        // Solo se apunta lo que la app copio desde fuera: un fichero que ya
-        // estaba en la biblioteca de Videos no se borra al limpiar ni al
-        // recargar (seria borrar un vídeo del usuario).
-        if (!d.yaEstaba) {
-          try {
-            const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
-            const lista = Array.isArray(prev) ? prev : [];
-            if (!lista.includes(file.name)) lista.push(file.name);
-            localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
-          } catch (_) {}
-          setAvisoCopia({ estado: 'ok', texto: 'Vídeo copiado para el servidor' + (d.ms ? ' (' + (d.ms / 1000).toFixed(1) + ' s)' : '') });
-        } else {
-          setAvisoCopia({ estado: 'ok', texto: 'El vídeo ya está en la carpeta del servidor' });
-        }
+        // El servidor cachea el video y devuelve ok. Apuntamos nombre para
+        // poder borrarlo de la carpeta 'videos' al limpiar/recargar si hace falta.
+        try {
+          const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
+          const lista = Array.isArray(prev) ? prev : [];
+          if (!lista.includes(file.name)) lista.push(file.name);
+          localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
+        } catch (_) {}
+        setAvisoCopia({ estado: 'ok', texto: 'Vídeo subido al servidor' + (d.ms ? ' (' + (d.ms / 1000).toFixed(1) + ' s)' : '') });
       } else {
-        setAvisoCopia({ estado: 'mal', texto: d.motivo ? ('No se pudo copiar: ' + d.motivo) : ('No encontré «' + file.name + '» en el disco: al descargar se subirá al servidor') });
+        setAvisoCopia({ estado: 'mal', texto: d.motivo ? ('No se pudo subir: ' + d.motivo) : ('Error subiendo «' + file.name + '»') });
       }
     } catch (_) {
-      setAvisoCopia({ estado: 'mal', texto: 'No se pudo copiar el vídeo para el servidor' });
+      setAvisoCopia({ estado: 'mal', texto: 'No se pudo subir el vídeo al servidor' });
     }
   };
 
