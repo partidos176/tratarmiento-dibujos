@@ -7450,7 +7450,30 @@ const terminar = () => {
                         // (chunks + Blob + subida + reindexado): en montajes de
                         // varios minutos eso cuelga la pestaña. Mejor avisar.
                         if (!destino) { setAviso('Descarga cancelada: elige un destino para guardar el montaje.'); return; }
-                        await descargarDesdeMontaje(marcadas, null, null, destino);
+                        // Pre-cargar el video base (igual que en "por separado")
+                        // para que la duracion sea correcta y no se corte a 27s.
+                        const baseSrcMontaje = videoUrlCortes || videoUrl;
+                        let baseMontaje = null;
+                        if (baseSrcMontaje) {
+                          baseMontaje = document.createElement('video');
+                          baseMontaje.muted = true; baseMontaje.playsInline = true;
+                          baseMontaje.preload = 'auto'; baseMontaje.src = baseSrcMontaje;
+                          baseMontaje.style.cssText = 'position:fixed;opacity:0.01;pointerEvents:none;width:1px;height:1px;left:0;top:0;';
+                          document.body.appendChild(baseMontaje);
+                          await new Promise((res) => {
+                            let listo = false;
+                            const fin = () => { if (listo) return; listo = true; res(); };
+                            baseMontaje.onloadedmetadata = fin;
+                            baseMontaje.onerror = fin;
+                            setTimeout(fin, 4000);
+                          });
+                        }
+                        try {
+                          await descargarDesdeMontaje(marcadas, null, baseMontaje, destino);
+                        } finally {
+                          try { baseMontaje && baseMontaje.pause(); } catch (_) {}
+                          try { if (baseMontaje && baseMontaje.parentNode) baseMontaje.parentNode.removeChild(baseMontaje); } catch (_) {}
+                        }
                       }}
                       disabled={descargandoMontaje}
                       style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.6rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', cursor: descargandoMontaje ? 'wait' : 'pointer', textAlign: 'center' }}
