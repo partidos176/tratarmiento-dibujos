@@ -59,8 +59,6 @@ function TratamientoApp({ videoInicial }) {
   const [videoUrlCortes, setVideoUrlCortes] = useState('');
   const [cortesArchivo, setCortesArchivo] = useState(null);
   const [cortesVideoUrl, setCortesVideoUrl] = useState('');
-  const [syncVideoUrl, setSyncVideoUrl] = useState('');
-  const [syncArchivo, setSyncArchivo] = useState(null);
   const [tiempoCortes, setTiempoCortes] = useState(0);
   const [durCortes, setDurCortes] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -861,9 +859,7 @@ const bdVideoTargetRef = useRef(null);
     return () => clearTimeout(timer);
   }, [filasMontaje, capturas]);
 
-  const hojas = ['Sincronización', 'Base de datos', 'Cortes', 'Edición', 'Montaje'];
-  // Panel de sincronización mitad/fin (siempre visible por petición del usuario)
-  const [mostrarOffsets, setMostrarOffsets] = useState(true);
+  const hojas = ['Base de datos', 'Cortes', 'Edición', 'Montaje'];
 
   const colores = ['#ef4444', '#3b82f6', '#22c55e', '#facc15', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#84cc16', '#d946ef', '#92400e', '#000000', '#ffffff'];
 
@@ -937,23 +933,6 @@ const bdVideoTargetRef = useRef(null);
     };
     v.addEventListener('durationchange', onDur);
     try { v.currentTime = Number.MAX_SAFE_INTEGER; } catch (_) { setDuracion(0); }
-  };
-
-  const borrarSyncVideos = (parte) => {
-    if (parte === 1) setOffsetCortes(prev => ({ ...prev, off1: null }));
-    else setOffsetCortes(prev => ({ ...prev, off2: null }));
-  };
-
-  const borrarSincronizacion = () => {
-    if (window.confirm('¿Borrar todos los datos de Sincronización (offsets y vídeo)?')) {
-      setOffsetCortes({ off1: null, off2: null, seg2: null });
-      if (syncVideoUrl) URL.revokeObjectURL(syncVideoUrl);
-      setSyncVideoUrl('');
-      setSyncArchivo(null);
-      const v = videoRef.current;
-      if (v) { try { v.currentTime = 0; } catch (_) {} }
-      setAviso('Sincronización borrada');
-    }
   };
 
   const periodo = 0;
@@ -4351,9 +4330,9 @@ const terminar = () => {
         // solo trae los offsets para poder mostrar el minuto de PARTIDO: hay que
         // NO volver a convertirlos (si no, se desfasarian dos veces).
         const hayOff = tieneOffsets;
-        // Al importar en Base de datos no se toca nada de Sincronización
-        // (offsets ni vídeo para offset): esos estados son independientes y
-        // solo se tocan desde la hoja Sincronización.
+        // Los offsets vienen solo en el archivo importado: se usan para situar
+        // los cortes, pero ya no se editan desde la app (la hoja de
+        // Sincronización se ha retirado).
         // setOffsetCortes(tieneOffsets ? { off1: f1, off2: f2, seg2 } : { off1: null, off2: null, seg2: null });
         const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
         const f2 = off2 != null ? off2 : f1;
@@ -4372,12 +4351,6 @@ const terminar = () => {
         const filas = Array.isArray(data) ? data : data.filas;
         if (!Array.isArray(filas)) { window.alert('El archivo no tiene cortes que se puedan cargar (no es un export de cortes/montaje ni una copia de partido).'); return; }
         if (hayOff) filas.forEach(f => { if (f) { if (f.inicio != null) f.inicio = aplicar(f.inicio); if (f.fin != null) f.fin = aplicar(f.fin); } });
-        // Si es un fichero de cortes/partido pero no trae los offsets de
-        // sincronizacion, los cortes iran con los minutos de partido tal cual
-        // (se irian al minuto de PARTIDO de la grabacion). Avisamos.
-        if (!tieneOffsets && filas.some(f => f && Object.prototype.hasOwnProperty.call(f, 'accion'))) {
-          setAviso('Este archivo no trae los offsets de sincronizacion (inicio 1ª y 2ª parte): los cortes se colocan con el minuto de partido, no el de la grabacion. Abrelo en futbol, sincroniza el video y vuelve a exportarlo.');
-        }
         const ids = new Set();
         const filasUnicas = filas.filter(f => {
           if (!f || ids.has(f.id)) return false;
@@ -5919,141 +5892,6 @@ const terminar = () => {
             </>
           )}
         </div>
-      ) : hoja === 'Sincronización' ? (
-        (() => {
-          const children = [
-            <div key="btn" style={{ marginTop: '1rem' }}>
-              <button
-                onClick={() => { bdVideoRef.current?.click(); }}
-                style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
-              >
-                Cargar video para offset
-              </button>
-              <button
-                onClick={borrarSincronizacion}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', textTransform: 'uppercase', marginLeft: '0.5rem' }}
-              >
-                Borrar
-              </button>
-              <input
-                ref={bdVideoRef}
-                type="file"
-                accept="video/*"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const f = e.target.files && e.target.files[0];
-                  if (!f) return;
-                  if (syncVideoUrl) URL.revokeObjectURL(syncVideoUrl);
-                  const url = URL.createObjectURL(f);
-                  setSyncVideoUrl(url);
-                  setSyncArchivo(f);
-                  setProgreso(0);
-                  corteCargadoRef.current = null;
-                  clipOrigenRef.current = null;
-                  clipResumeRef.current = null;
-                  clipMainRef.current = null;
-                  if (clipTimerRef.current) { clearTimeout(clipTimerRef.current); clipTimerRef.current = null; }
-                  setClipActivo(null);
-                }}
-              />
-            </div>
-          ];
-          if (mostrarOffsets) {
-            children.push(
-              <div key="offsets" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, color: '#e2e8f0', fontSize: '0.85rem' }}>Sincronización mitad/fin</span>
-                  <button
-                    onClick={() => {
-                      const v = videoRef.current;
-                      if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
-                      const min = Math.floor(v.currentTime) / 60;
-                      setOffsetCortes(prev => ({ ...prev, off1: min }));
-                    }}
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer' }}
-                  >
-                    Inicio 1ª parte
-                  </button>
-                  <button
-                    onClick={() => {
-                      const v = videoRef.current;
-                      if (!v || v.currentTime == null) { setAviso('Carga un video antes de marcar el inicio'); return; }
-                      const min = Math.floor(v.currentTime) / 60;
-                      const seg2default = 45;
-                      setOffsetCortes(prev => ({
-                        ...prev,
-                        seg2: prev.seg2 != null ? prev.seg2 : seg2default,
-                        off2: Math.max(0, min)
-                      }));
-                    }}
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.4rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.75rem', color: '#ffffff', cursor: 'pointer', marginLeft: '0.5rem' }}
-                  >
-                    Inicio 2ª parte
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px auto 120px', gap: '0.5rem' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 1ª parte (min):</label>
-                  <input
-                    type="text"
-                    value={offsetCortes.off1 != null ? minutosAMmss(offsetCortes.off1) : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off1: mmssAMinutos(e.target.value) }))}
-                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
-                  />
-                  <label style={{ display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>Offset 2ª parte (min):</label>
-                  <input
-                    type="text"
-                    value={offsetCortes.off2 != null ? minutosAMmss(offsetCortes.off2) : ''}
-                    onChange={(e) => setOffsetCortes(prev => ({ ...prev, off2: mmssAMinutos(e.target.value) }))}
-                    style={{ width: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '0.25rem 0.4rem', color: '#e2e8f0', fontSize: '0.7rem', fontFamily: 'Inter, sans-serif' }}
-                  />
-                </div>
-              </div>
-            );
-          }
-          if (syncVideoUrl) {
-            children.push(
-              <div key="player" style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginTop: '1rem', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                <video
-                  ref={videoRef}
-                  src={syncVideoUrl}
-                  style={{ width: '100%', maxWidth: '480px', background: 'black', flexShrink: 0 }}
-                  autoPlay
-                  muted
-                  controls
-                  playsInline
-                ></video>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
-                  <button
-                    onClick={() => { const v = videoRef.current; if (v) v.currentTime = Math.min((v.duration || 0), Math.max(0, v.currentTime + 5)); }}
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', padding: '0.35rem 0.85rem', color: '#ffffff', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    +5 seg.
-                  </button>
-                  <button
-                    onClick={() => { const v = videoRef.current; if (v) v.currentTime = Math.max(0, v.currentTime - 5); }}
-                    style={{ background: '#0ea5e9', border: 'none', borderRadius: '6px', padding: '0.35rem 0.85rem', color: '#ffffff', fontSize: '0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    -5 seg.
-                  </button>
-                </div>
-              </div>
-            );
-          }
-          children.push(
-            <button
-              key="export"
-              onClick={() => exportarMontaje()}
-              style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginTop: '1rem' }}
-            >
-              Exportar BASE DATOS
-            </button>
-          );
-          return (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
-              {children}
-            </div>
-          );
-        })()
       ) : hoja === 'Base de datos' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem', padding: '2rem' }}>
           <input

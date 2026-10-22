@@ -1,6 +1,6 @@
 # 🎬 Tratamiento de Dibujos
 
-Aplicación web para **tratamiento, corte, anotación y montaje de vídeo/dibujos tácticos**. Permite cargar vídeos, extraer capturas, dibujar figuras sobre frames, sincronizar clips y generar montajes finales.
+Aplicación web para **tratamiento, corte, anotación y montaje de vídeo/dibujos tácticos**. Permite cargar vídeos, extraer capturas, dibujar figuras sobre frames y generar montajes finales.
 
 Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **IndexedDB**.
 
@@ -8,26 +8,21 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 
 ## ✨ Funcionalidades por hoja
 
-### 1. `Sincronización`
-- Carga de un vídeo de referencia para calcular offsets.
-- Sincronización de tiempos entre vídeo base y clips.
-- Borrado de la sincronización actual.
-
-### 2. `Base de datos`
+### 1. `Base de datos`
 - Tabla de archivos/registros (`DATOS` + `VIDEO`).
 - Alta de registros y asociación de vídeos.
 - Importación de montajes en JSON.
 - Gestión de vídeos ocultos y biblioteca local.
 - Persistencia de vídeos en IndexedDB.
 
-### 3. `Cortes`
+### 2. `Cortes`
 - Carga de vídeo para cortar.
 - Marcado de cortes sobre el vídeo.
 - Selección masiva de cortes (`SELEC. TODO`).
 - Paso de cortes a la hoja `Montaje`.
 - Recorte de clips con FFmpeg.wasm.
 
-### 4. `Edición`
+### 3. `Edición`
 - Captura de frames del vídeo.
 - Dibujo de figuras: triángulos redondeados, elipses, líneas, flechas y trazos.
 - Selección, movimiento y borrado de figuras.
@@ -35,7 +30,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Exportación de captura anotada y salto a `Montaje`.
 - Animaciones/preview de capturas.
 
-### 5. `Montaje`
+### 4. `Montaje`
 - Composición de filas/tramos de vídeo e imágenes.
 - Fundidos y transiciones.
 - Reproducción de preview.
