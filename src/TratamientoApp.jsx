@@ -2162,32 +2162,59 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
   };
 
   // La carpeta fija del servidor ('futbol\videos') solo la puede escribir el
-  // servidor: el navegador no tiene acceso a la ruta. Al cargar un video en la
-  // hoja Base de datos se sube el archivo directamente (multipart/form-data)
-  // al endpoint /api/upload. Es más fiable que buscar por nombre en disco.
+  // servidor: el navegador no tiene acceso a la ruta. Se usa una estrategia
+  // hibrida para cargar el video de partida:
+  //   1) Rapida: se manda solo nombre y tamano a /api/videos/copiar. Si el
+  //      servidor ya tiene el fichero en su disco (o en su cache) con ese mismo
+  //      nombre y tamano, lo copia alla sin subir nada: instantaneo, evita
+  //      subir GB por el navegador.
+  //   2) Fallback: si el servidor no lo encuentra en disco, se sube el archivo
+  //      entero por /api/upload (multipart). Mas lento, pero fiable aunque el
+  //      fichero no este en el equipo del servidor.
   const COPIAS_KEY = 'videos_copiados';
   const copiarVideoAlServidor = async (file) => {
     try {
       if (!file || !file.name || !(file.size > 0)) return;
-      setAvisoCopia({ estado: 'copiando', texto: 'Subiendo «' + file.name + '» al servidor…' });
-      const fd = new FormData();
-      fd.append('video', file);
-      const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/upload', {
-        method: 'POST',
-        body: fd,
-      }, 120000);
-      if (!r || !r.ok) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no respondió al subir el vídeo' }); return; }
-      const d = await r.json().catch(() => null);
-      if (!d) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no devolvió nada al subir el vídeo' }); return; }
-      if (d.ok) {
-        // El servidor cachea el video y devuelve ok. Apuntamos nombre para
-        // poder borrarlo de la carpeta 'videos' al limpiar/recargar si hace falta.
+      const apuntarCopia = () => {
         try {
           const prev = JSON.parse(localStorage.getItem(COPIAS_KEY) || '[]');
           const lista = Array.isArray(prev) ? prev : [];
           if (!lista.includes(file.name)) lista.push(file.name);
           localStorage.setItem(COPIAS_KEY, JSON.stringify(lista));
         } catch (_) {}
+      };
+
+      // 1) Via rapida: nombre + tamano. El servidor busca en disco/cache.
+      setAvisoCopia({ estado: 'copiando', texto: 'Buscando «' + file.name + '» en el servidor…' });
+      let rapida = null;
+      try {
+        const rc = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/videos/copiar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: file.name, size: file.size }),
+        }, 20000);
+        if (rc && rc.ok) rapida = await rc.json().catch(() => null);
+      } catch (_) { rapida = null; }
+
+      if (rapida && rapida.ok) {
+        apuntarCopia();
+        setAvisoCopia({ estado: 'ok', texto: 'Vídeo copiado en el servidor' + (rapida.ms ? ' (' + rapida.ms + ' ms)' : '') });
+        return;
+      }
+
+      // 2) Fallback: subir el archivo entero.
+      setAvisoCopia({ estado: 'copiando', texto: 'Subiendo «' + file.name + '» al servidor…' });
+      const fd = new FormData();
+      fd.append('video', file);
+      const r = await fetchConTimeout(SERVIDOR_MONTAJE + '/api/upload', {
+        method: 'POST',
+        body: fd,
+      }, 600000);
+      if (!r || !r.ok) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no respondió al subir el vídeo' }); return; }
+      const d = await r.json().catch(() => null);
+      if (!d) { setAvisoCopia({ estado: 'mal', texto: 'El servidor no devolvió nada al subir el vídeo' }); return; }
+      if (d.ok) {
+        apuntarCopia();
         setAvisoCopia({ estado: 'ok', texto: 'Vídeo subido al servidor' + (d.ms ? ' (' + (d.ms / 1000).toFixed(1) + ' s)' : '') });
       } else {
         setAvisoCopia({ estado: 'mal', texto: d.motivo ? ('No se pudo subir: ' + d.motivo) : ('Error subiendo «' + file.name + '»') });
