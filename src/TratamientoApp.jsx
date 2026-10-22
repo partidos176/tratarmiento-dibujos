@@ -5,6 +5,7 @@ import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 // en cuatro sitios mas, pero como el modulo ya se carga de forma estatica ese await
 // no ahorraba nada: Vite lo avisa con INEFFECTIVE_DYNAMIC_IMPORT.
 import { fetchFile } from '@ffmpeg/util';
+import { estimarDuracionMontaje } from './estimacionMontaje';
 
 // Al recargar se empieza de cero en todas las hojas: se borran las claves
 // locales ANTES de que los estados las lean (esto corre al cargar el bundle,
@@ -7480,6 +7481,56 @@ const terminar = () => {
             >
               Limpiar
             </button>
+            {(() => {
+              // Suma de las líneas marcadas: periodo (fin - inicio) de cada
+              // corte, más la duración de cada transición y de cada imagen,
+              // con los mismos valores que usa construirPlanMontaje.
+              const seleccionadas = filasMontaje.filter(f => lineasSelMontaje[f.id]);
+              const segsSel = seleccionadas.reduce((acc, f) => {
+                if (f.inicio != null && f.fin != null) return acc + Math.max(0, Number(f.fin) - Number(f.inicio));
+                if (f.tipo === 'transicion') return acc + Math.max(0.3, Number(f.duracion) || 2);
+                if (f.tipo === 'imagen' || f.imagenUrl) return acc + (Number(f.duracion) || 4);
+                return acc + (Number(f.duracion) || 0);
+              }, 0);
+              // Duración real estimada: periodos + animaciones + imágenes
+              // − d/2 de cada fundido (lo que muestra el informe al descargar).
+              const est = estimarDuracionMontaje(seleccionadas, {
+                capturas,
+                videoDur: duracion,
+                baseDisponible: !!(videoUrlCortes || videoUrl),
+              });
+              const chip = { background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' };
+              const label = { color: '#94a3b8', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em' };
+              const valor = { fontFamily: 'var(--font-mono, JetBrains Mono, monospace)', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0' };
+              const desglose = [
+                'periodos ' + est.periodos.toFixed(1) + ' s',
+                'animaciones ' + est.animaciones.toFixed(1) + ' s',
+                'imágenes ' + est.imagenes.toFixed(1) + ' s',
+                'clip ' + est.clips.toFixed(1) + ' s',
+                'recorte final ' + est.recorteFinal.toFixed(1) + ' s',
+                'fundidos −' + est.fundidos.toFixed(1) + ' s',
+              ].join(' · ');
+              return (
+                <>
+                  <div
+                    title="Suma de las líneas seleccionadas: periodo de cada corte + transiciones + imágenes. Es lo que ves en la lista, antes de los fundidos."
+                    style={chip}
+                  >
+                    <span style={label}>Total</span>
+                    <span style={valor}>{formatoTiempo(segsSel)}</span>
+                  </div>
+                  <div
+                    title={'Duración real estimada (la que informa la descarga): ' + desglose
+                      + (est.sinMetraje.length ? '\nSin metraje: ' + est.sinMetraje.join(', ') : '')
+                      + (est.motivo ? '\nNo estimable: ' + est.motivo : '')}
+                    style={chip}
+                  >
+                    <span style={label}>Real</span>
+                    <span style={{ ...valor, color: est.motivo ? '#94a3b8' : '#38bdf8' }}>{est.motivo ? '—' : formatoTiempo(est.segundos)}</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>

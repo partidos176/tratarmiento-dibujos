@@ -36,6 +36,11 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Reproducción de preview.
 - Exportación de vídeo final (vía rápida con FFmpeg en el servidor local, con
   informe de fases; si el servidor descarta algún fundido lo indica el informe).
+- Indicadores junto al botón *Limpiar*: **Total** (suma de periodos de cortes +
+  transiciones + imágenes de las líneas seleccionadas) y **Real** (duración
+  estimada del vídeo final: lo mismo, ajustado por las animaciones dentro de
+  cada corte, el recorte al final del vídeo base y −d/2 por cada fundido;
+  coincide con lo que informa la descarga).
 - Guardado/carga de sesión.
 
 ---
@@ -46,6 +51,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 |---|---|
 | `src/TratamientoApp.jsx` | Aplicación principal: estado, hojas, editor, cortes y montaje. |
 | `src/persistencia.js` | IndexedDB (`tratamiento-dibujos`): stores `videos`, `imagenes`, `capturas`, `sesion`; guardar/cargar/limpiar sesión y vídeos. |
+| `src/estimacionMontaje.js` | `estimarDuracionMontaje(filas, opts)`: duración real estimada del montaje (periodos + animaciones + imágenes − d/2 por fundido) sin tocar el servidor. Espejo de la aritmética de `construirPlanMontaje`. |
 | `src/ffmpegUtil.js` | Carga FFmpeg.wasm, `trimVideo`, `framesToVideo`, `isFFmpegSupported`. |
 | `src/mp4Demux.js` | Lector MP4 mínimo sin dependencias: enumera muestras de vídeo para `VideoDecoder`. |
 | `src/firebase.js` | Configuración Firebase (RTDB + Auth). **Requiere rellenar las credenciales.** |
