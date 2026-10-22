@@ -2010,16 +2010,20 @@ const bdVideoTargetRef = useRef(null);
 const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.ini)) : (it.tipo === 'imagen' ? Number(it.dur) : (Number(it.hasta) - Number(it.desde))));
   const acortarCola = (it, m) => {
     if (it.tipo === 'fuente') it.fin = Number(it.fin) - m;
+    else if (it.tipo === 'imagen') it.dur = Number(it.dur) - m;
     else if (it.tipo === 'clip') it.hasta = Number(it.hasta) - m;
   };
   const avanzarCabeza = (it, m) => {
     if (it.tipo === 'fuente') it.ini = Number(it.ini) + m;
+    else if (it.tipo === 'imagen') it.dur = Number(it.dur) - m;
     else if (it.tipo === 'clip') it.desde = Number(it.desde) + m;
   };
   // El trozo de un item que se usa como operando de un fundido. 'cola' es la
   // parte final (m milisegundos antes del final), 'cabeza' es la parte inicial.
   const operandoDe = (it, colaMs) => {
     if (it.tipo === 'fuente') return { origen: 'fuente', ini: colaMs ? Number(it.fin) - colaMs : Number(it.ini) };
+    // Una imagen es un fotograma fijo: no hay punto de Seek, siempre desde 0.
+    if (it.tipo === 'imagen') return { origen: 'recurso', id: it.id, ext: it.ext, desde: 0 };
     return { origen: 'recurso', id: it.id, ext: it.ext, desde: colaMs ? Number(it.hasta) - colaMs : Number(it.desde) };
   };
 
