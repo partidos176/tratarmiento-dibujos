@@ -2358,6 +2358,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       let tServidorMs = 0;
       let servidorContenido = 0;
       let servidorReal = 0;
+      let servidorOmitidos = 0;
       let tEntregaMs = 0;
       let origen = null;
       if (plan.items.some(it => it.tipo === 'fuente')) {
@@ -2437,6 +2438,8 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
             if (cabContenido != null) servidorContenido = Number(cabContenido) || 0;
             const cabReal = xhr.getResponseHeader('X-Montaje-Real');
             if (cabReal != null) servidorReal = Number(cabReal) || 0;
+            const cabOmitidos = xhr.getResponseHeader('X-Montaje-Omitidos');
+            if (cabOmitidos != null) servidorOmitidos = Number(cabOmitidos) || 0;
             if (xhr.status >= 200 && xhr.status < 300) {
               const b = xhr.response;
               if (!b || !b.size) { reject(new Error('El servidor devolvio un fichero vacio')); return; }
@@ -2504,6 +2507,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
               extra += ' | real: ' + servidorReal.toFixed(0) + ' s';
               if (servidorContenido > 0 && servidorReal < servidorContenido - 2) extra += ' (¡salio menos de lo pedido!)';
             }
+            if (servidorOmitidos > 0) extra += ' | ' + servidorOmitidos + ' fundido(s) sustituido(s) por corte seco';
             return extra;
           })());
         setAviso('');
