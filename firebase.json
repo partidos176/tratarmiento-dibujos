@@ -6,7 +6,7 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    },
+    ],
     "headers": [
       {
         "source": "/index.html",
