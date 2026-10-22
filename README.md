@@ -1,52 +1,128 @@
-# Tratamiento de Dibujos
+# 🎬 Tratamiento de Dibujos
 
-Aplicación web para **tratamiento y anotación de video/dibujos tácticos** con captura de frames, dibujo de figuras y persistencia local/Firebase.
+Aplicación web para **tratamiento, corte, anotación y montaje de vídeo/dibujos tácticos**. Permite cargar vídeos, extraer capturas, dibujar figuras sobre frames, sincronizar clips y generar montajes finales.
 
-## ✨ Funcionalidades
-- **Sincronización**: sincronización de video.
-- **Base de datos**: gestión de archivos/videos.
-- **Cortes**: corte de clips de video.
-- **Edición**: anotación y dibujo sobre frames.
-- **Montaje**: composición de videos.
+Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **IndexedDB**.
 
-Desarrollada con **React 19 + Vite 8**, procesamiento de video con **FFmpeg.wasm** y **mediabunny**, y almacenamiento con **Firebase**.
+---
+
+## ✨ Funcionalidades por hoja
+
+### 1. `Sincronización`
+- Carga de un vídeo de referencia para calcular offsets.
+- Sincronización de tiempos entre vídeo base y clips.
+- Borrado de la sincronización actual.
+
+### 2. `Base de datos`
+- Tabla de archivos/registros (`DATOS` + `VIDEO`).
+- Alta de registros y asociación de vídeos.
+- Importación de montajes en JSON.
+- Gestión de vídeos ocultos y biblioteca local.
+- Persistencia de vídeos en IndexedDB.
+
+### 3. `Cortes`
+- Carga de vídeo para cortar.
+- Marcado de cortes sobre el vídeo.
+- Selección masiva de cortes (`SELEC. TODO`).
+- Paso de cortes a la hoja `Montaje`.
+- Recorte de clips con FFmpeg.wasm.
+
+### 4. `Edición`
+- Captura de frames del vídeo.
+- Dibujo de figuras: triángulos redondeados, elipses, líneas, flechas y trazos.
+- Selección, movimiento y borrado de figuras.
+- Pantalla completa del editor.
+- Exportación de captura anotada y salto a `Montaje`.
+- Animaciones/preview de capturas.
+
+### 5. `Montaje`
+- Composición de filas/tramos de vídeo e imágenes.
+- Fundidos y transiciones.
+- Reproducción de preview.
+- Exportación de vídeo final.
+- Guardado/carga de sesión.
+
+---
+
+## 🧩 Módulos internos
+
+| Archivo | Función |
+|---|---|
+| `src/TratamientoApp.jsx` | Aplicación principal: estado, hojas, editor, cortes y montaje. |
+| `src/persistencia.js` | IndexedDB (`tratamiento-dibujos`): stores `videos`, `imagenes`, `capturas`, `sesion`; guardar/cargar/limpiar sesión y vídeos. |
+| `src/ffmpegUtil.js` | Carga FFmpeg.wasm, `trimVideo`, `framesToVideo`, `isFFmpegSupported`. |
+| `src/mp4Demux.js` | Lector MP4 mínimo sin dependencias: enumera muestras de vídeo para `VideoDecoder`. |
+| `src/firebase.js` | Configuración Firebase (RTDB + Auth). **Requiere rellenar las credenciales.** |
+| `src/App.jsx` | Monta `TratamientoApp`. |
+
+---
+
+## 📁 Estructura
+
+```
+tratarmiento-dibujos/
+├── src/
+│   ├── TratamientoApp.jsx
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── persistencia.js
+│   ├── ffmpegUtil.js
+│   ├── mp4Demux.js
+│   ├── firebase.js
+│   └── index.css
+├── AGENTS.md
+├── vite.config.js
+└── package.json
+```
 
 ---
 
 ## 🚀 Instalación y Puesta en Marcha
 
 ### Prerrequisitos
-- Node.js (versión 22.23.4 o superior)
+- Node.js **22.23.4 o superior**
 - pnpm
 
-### Pasos
-1. Instalar las dependencias del proyecto:
-   ```bash
-   pnpm install
-   ```
+### Instalación
+```bash
+pnpm install
+```
 
-2. Iniciar el servidor de desarrollo local:
-   ```bash
-   pnpm dev
-   ```
+### Desarrollo
+```bash
+pnpm dev
+```
 
-3. Abrir en el navegador la dirección indicada (por defecto `http://localhost:5173`).
+Abrir `http://localhost:5173`.
 
 ### Build
 ```bash
 pnpm build
 ```
 
-### Deploy
+### Deploy (Firebase Hosting)
 ```bash
 pnpm deploy
 ```
 
+> Antes de usar Firebase, rellena `src/firebase.js` con la configuración del proyecto.
+
 ---
 
-## 📦 Stack
-- React 19
-- Vite 8
-- Firebase
-- FFmpeg.wasm (`@ffmpeg/ffmpeg`, `@ffmpeg/util`)
-- mediabunny
+## 📦 Stack principal
+
+- **React 19** + **Vite 8**
+- **Firebase** Realtime Database + Auth
+- **FFmpeg.wasm** (`@ffmpeg/ffmpeg`, `@ffmpeg/util`)
+- **mediabunny**
+- **IndexedDB** para persistencia local
+- **firebase-tools** para deploy
+
+---
+
+## 🔐 Seguridad y mantenimiento
+
+- `engines.node` fijado a `>=22.23.4` (parche de vulnerabilidades críticas de Node.js y CA eMudhra).
+- **Dependabot** semanal para npm (patch/minor) + auto-merge cuando CI pasa.
+- **Regla de código**: ningún componente nuevo debe superar las 500 líneas (ver `AGENTS.md`).
+- Mantener este README actualizado con cualquier cambio relevante.
