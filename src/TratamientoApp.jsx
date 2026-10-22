@@ -2352,6 +2352,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       let tLecturaMs = 0;
       let tSubidaMs = 0;
       let tServidorMs = 0;
+      let servidorContenido = 0;
       let tEntregaMs = 0;
       let origen = null;
       if (plan.items.some(it => it.tipo === 'fuente')) {
@@ -2427,6 +2428,8 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
           xhr.onload = async () => {
                         pararBarra();
             tServidorMs = Number(xhr.getResponseHeader('X-Montaje-Ms')) || 0;
+            const cabContenido = xhr.getResponseHeader('X-Montaje-Contenido');
+            if (cabContenido != null) servidorContenido = Number(cabContenido) || 0;
             if (xhr.status >= 200 && xhr.status < 300) {
               const b = xhr.response;
               if (!b || !b.size) { reject(new Error('El servidor devolvio un fichero vacio')); return; }
@@ -2480,7 +2483,18 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
         setInformeDescarga('Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s reales'
           + (plan.diag ? ' | ' + plan.diag.lineas + ' lineas → ' + plan.items.length + ' tramos'
-            + (plan.diag.lineasSinTrozos.length ? ' (SIN METRAJE: ' + plan.diag.lineasSinTrozos.join(', ') + ')' : '') : ''));
+            + (plan.diag.lineasSinTrozos.length ? ' (SIN METRAJE: ' + plan.diag.lineasSinTrozos.join(', ') + ')' : '') : '')
+          + (() => {
+            const c = { fuente: 0, clip: 0, imagen: 0, transicion: 0 };
+            for (const it of plan.items) c[it.tipo] = (c[it.tipo] || 0) + 1;
+            const d = Object.keys(c).filter((k) => c[k]).map((k) => c[k] + ' ' + k).join('+');
+            let extra = ' | tipos: ' + (d || 'ninguno');
+            if (servidorContenido > 0) {
+              extra += ' | servidor: ' + servidorContenido.toFixed(0) + ' s';
+              if (servidorContenido < durTotal - 1) extra += ' (¡el servidor descarto tramos!)';
+            }
+            return extra;
+          })());
         setAviso('');
         return true;
       } finally {
