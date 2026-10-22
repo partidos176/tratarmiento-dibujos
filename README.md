@@ -35,7 +35,8 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Fundidos y transiciones.
 - Reproducción de preview.
 - Exportación de vídeo final (vía rápida con FFmpeg en el servidor local, con
-  informe de fases; si el servidor descarta algún fundido lo indica el informe).
+  informe de fases en formato `MM:SS`; si el servidor descarta algún fundido
+  lo indica el informe).
 - Indicador **Real** junto al botón *Limpiar*: duración estimada del vídeo
   final para las líneas seleccionadas (periodos + animaciones + imágenes
   dentro de cada corte, −d/2 por cada fundido y recorte al final del vídeo

@@ -2471,7 +2471,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
         if (tFuenteMs > 0) fases.push('subida fuente ' + s1(tFuenteMs));
         if (tServidorMs > 0) fases.push('servidor ' + s1(tServidorMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
-        setInformeDescarga('Montaje de ' + Math.round(durTotal) + ' s en ' + real.toFixed(0) + ' s reales'
+        setInformeDescarga('Montaje de ' + formatoTiempo(durTotal) + ' en ' + formatoTiempo(real) + ' reales'
           + (plan.diag ? ' | ' + plan.diag.lineas + ' lineas → ' + plan.items.length + ' tramos'
             + (plan.diag.lineasSinTrozos.length ? ' (SIN METRAJE: ' + plan.diag.lineasSinTrozos.join(', ') + ')' : '') : '')
           + (() => {
@@ -2480,11 +2480,11 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
             const d = Object.keys(c).filter((k) => c[k]).map((k) => c[k] + ' ' + k).join('+');
             let extra = ' | tipos: ' + (d || 'ninguno');
             if (servidorContenido > 0) {
-              extra += ' | servidor: ' + servidorContenido.toFixed(0) + ' s';
+              extra += ' | servidor: ' + formatoTiempo(servidorContenido);
               if (servidorContenido < durTotal - 1) extra += ' (¡el servidor descarto tramos!)';
             }
             if (servidorReal > 0) {
-              extra += ' | real: ' + servidorReal.toFixed(0) + ' s';
+              extra += ' | real: ' + formatoTiempo(servidorReal);
               if (servidorContenido > 0 && servidorReal < servidorContenido - 2) extra += ' (¡salio menos de lo pedido!)';
             }
             if (servidorOmitidos > 0) extra += ' | ' + servidorOmitidos + ' fundido(s) sustituido(s) por corte seco';
@@ -3343,7 +3343,7 @@ else {
         if (tTrimMs > 0) fases.push('recorte servidor ' + s1(tTrimMs));
         if (tEntregaMs > 0) fases.push('entrega ' + s1(tEntregaMs));
         setInformeDescarga(
-          'Montaje de ' + Math.round(totalDur) + ' s en ' + real.toFixed(0) + ' s reales'
+          'Montaje de ' + formatoTiempo(totalDur) + ' en ' + formatoTiempo(real) + ' reales'
           + (motivoViaRapida.current ? ' | VIA RAPIDA NO USADA: ' + motivoViaRapida.current : '')
         );
       }
