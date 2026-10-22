@@ -2357,6 +2357,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       let tSubidaMs = 0;
       let tServidorMs = 0;
       let servidorContenido = 0;
+      let servidorReal = 0;
       let tEntregaMs = 0;
       let origen = null;
       if (plan.items.some(it => it.tipo === 'fuente')) {
@@ -2434,6 +2435,8 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
             tServidorMs = Number(xhr.getResponseHeader('X-Montaje-Ms')) || 0;
             const cabContenido = xhr.getResponseHeader('X-Montaje-Contenido');
             if (cabContenido != null) servidorContenido = Number(cabContenido) || 0;
+            const cabReal = xhr.getResponseHeader('X-Montaje-Real');
+            if (cabReal != null) servidorReal = Number(cabReal) || 0;
             if (xhr.status >= 200 && xhr.status < 300) {
               const b = xhr.response;
               if (!b || !b.size) { reject(new Error('El servidor devolvio un fichero vacio')); return; }
@@ -2496,6 +2499,10 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
             if (servidorContenido > 0) {
               extra += ' | servidor: ' + servidorContenido.toFixed(0) + ' s';
               if (servidorContenido < durTotal - 1) extra += ' (¡el servidor descarto tramos!)';
+            }
+            if (servidorReal > 0) {
+              extra += ' | real: ' + servidorReal.toFixed(0) + ' s';
+              if (servidorContenido > 0 && servidorReal < servidorContenido - 2) extra += ' (¡salio menos de lo pedido!)';
             }
             return extra;
           })());
