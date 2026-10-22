@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
+    # El proyecto usa pnpm-lock.yaml; no debe existir package-lock.json.
     directory: "/"
     schedule:
       interval: "weekly"
