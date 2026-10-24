@@ -7202,6 +7202,35 @@ const terminar = () => {
                 e.target.value = '';
               }}
             />
+            <button
+              onClick={() => regenerarVideosAnim()}
+              disabled={progresoRegen !== null}
+              title="Regenerar todos los vídeos de animación a 25 fps (los de antes iban a 30 y daban tirones)"
+              style={{ background: '#8b5cf6', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: progresoRegen !== null ? 'wait' : 'pointer', opacity: progresoRegen !== null ? 0.7 : 1 }}
+            >
+              {progresoRegen !== null ? `Generando ${progresoRegen}%` : 'Regenerar vídeos'}
+            </button>
+            <button
+              onClick={async () => {
+                if (serverOn) { await comprobarServidor(); return; }
+                setAviso('Iniciando servidor de recorte...');
+                try {
+                  const r = await fetch('/iniciar-servidor');
+                  if (!r.ok) { setAviso('Solo disponible en localhost'); return; }
+                  const d = await r.json().catch(() => ({}));
+                  if (d && d.ok) setAviso(d.ya ? 'Servidor ya en marcha (puerto 3001)' : 'Servidor iniciado (puerto 3001)');
+                  else setAviso('No se pudo iniciar el servidor' + (d && d.error ? ': ' + d.error : ''));
+                } catch (e) {
+                  setAviso('Solo disponible en localhost');
+                }
+                await comprobarServidor();
+              }}
+              title={serverOn ? 'Servidor conectado (pulsar para re-comprobar)' : 'Servidor desconectado (pulsar para iniciar)'}
+              style={{ background: serverOn ? '#16a34a' : '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: serverOn ? '#4ade80' : '#ef4444', display: 'inline-block' }} />
+              Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
+            </button>
             <button onClick={() => imagenInputRef.current?.click()} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Imagen</button>
             <button
               onClick={() => setShowTransiciones(true)}
@@ -7248,14 +7277,6 @@ const terminar = () => {
                 </div>
               </div>
             )}
-            <button
-              onClick={() => regenerarVideosAnim()}
-              disabled={progresoRegen !== null}
-              title="Regenerar todos los vídeos de animación a 25 fps (los de antes iban a 30 y daban tirones)"
-              style={{ background: '#8b5cf6', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: progresoRegen !== null ? 'wait' : 'pointer', opacity: progresoRegen !== null ? 0.7 : 1 }}
-            >
-              {progresoRegen !== null ? `Generando ${progresoRegen}%` : 'Regenerar vídeos'}
-            </button>
             {showModalDescarga && (() => {
               const marcadas = filasMontaje.filter(f => lineasSelMontaje[f.id] && (f.imagenUrl || f.videoUrl || (f.inicio != null && f.fin != null) || f.tipo === 'transicion'));
               return (
@@ -7405,37 +7426,11 @@ const terminar = () => {
             >
               Cancelar
             </button>
-            {informeDescarga && (
-              <div style={{ marginTop: '0.4rem', color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'Inter, sans-serif', lineHeight: 1.35 }}>
-                {informeDescarga}
-              </div>
-            )}
             <button
               onClick={() => exportarMontaje()}
               style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
             >
               Exportar
-            </button>
-            <button
-              onClick={async () => {
-                if (serverOn) { await comprobarServidor(); return; }
-                setAviso('Iniciando servidor de recorte...');
-                try {
-                  const r = await fetch('/iniciar-servidor');
-                  if (!r.ok) { setAviso('Solo disponible en localhost'); return; }
-                  const d = await r.json().catch(() => ({}));
-                  if (d && d.ok) setAviso(d.ya ? 'Servidor ya en marcha (puerto 3001)' : 'Servidor iniciado (puerto 3001)');
-                  else setAviso('No se pudo iniciar el servidor' + (d && d.error ? ': ' + d.error : ''));
-                } catch (e) {
-                  setAviso('Solo disponible en localhost');
-                }
-                await comprobarServidor();
-              }}
-              title={serverOn ? 'Servidor conectado (pulsar para re-comprobar)' : 'Servidor desconectado (pulsar para iniciar)'}
-              style={{ background: serverOn ? '#16a34a' : '#334155', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: serverOn ? '#4ade80' : '#ef4444', display: 'inline-block' }} />
-              Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
             <button
               onClick={() => {
@@ -7512,6 +7507,13 @@ const terminar = () => {
               );
             })()}
           </div>
+          {informeDescarga && (
+            <div style={{ width: '100%', maxWidth: '900px', display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'Inter, sans-serif', lineHeight: 1.35, whiteSpace: 'nowrap', marginRight: '6rem' }}>
+                {informeDescarga}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '1600px', alignItems: 'flex-start' }}>
           <div style={{ flex: '0 0 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
