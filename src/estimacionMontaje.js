@@ -62,8 +62,10 @@ export const estimarDuracionMontaje = (filas, opts = {}) => {
       trozos.push({ tipo: 'imagen', dur: IMG_DUR, desde: 0, hasta: IMG_DUR });
       res.imagenes += IMG_DUR;
     } else if (linea.videoUrl) {
-      trozos.push({ tipo: 'clip', desde: 0, hasta: CLIP_DESCONOCIDO });
-      res.clips += CLIP_DESCONOCIDO;
+      const d = Number(linea.duracion);
+      const dur = Number.isFinite(d) && d > 0.1 ? d : CLIP_DESCONOCIDO;
+      trozos.push({ tipo: 'clip', desde: 0, hasta: dur });
+      res.clips += dur;
     } else if (linea.inicio != null && linea.fin != null) {
       const ini = Math.max(0, Number(linea.inicio));
       const fin = Math.max(ini + 0.5, Number(linea.fin));

@@ -41,8 +41,9 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
   lo indica el informe).
 - Indicador **Real** junto al botón *Limpiar*: duración estimada del vídeo
   final para las líneas seleccionadas (periodos + animaciones + imágenes
-  dentro de cada corte, −d/2 por cada fundido y recorte al final del vídeo
-  base); coincide con lo que informa la descarga.
+  + duración exacta de los vídeos insertados como clips, −d/2 por cada
+  fundido y recorte al final del vídeo base); coincide con lo que informa
+  la descarga.
 - Guardado/carga de sesión.
 
 ---

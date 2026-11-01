@@ -170,7 +170,29 @@ const [hoja, setHoja] = useState('Base de datos');
   const [generandoClip, setGenerandoClip] = useState(null);
   const [progresoClips, setProgresoClips] = useState({});
   const [filasMontaje, setFilasMontaje] = useState([]);
-  // Las marcas de los numeros no viajan en los archivos, asi que se recalculan a
+  const clipsDurCargadosRef = useRef(new Set());
+  useEffect(() => {
+    for (const f of filasMontaje) {
+      if (f && f.videoUrl && !(Number(f.duracion) > 0) && !clipsDurCargadosRef.current.has(f.id)) {
+        clipsDurCargadosRef.current.add(f.id);
+        const intentar = (intentos) => {
+          duracionDeVideo(f.videoUrl).then((d) => {
+            if (d > 0) {
+              setFilasMontaje(prev => prev.map(x => (x.id === f.id && !(Number(x.duracion) > 0)) ? { ...x, duracion: d } : x));
+            } else if (intentos > 0) {
+              setTimeout(() => intentar(intentos - 1), 2000);
+            } else {
+              clipsDurCargadosRef.current.delete(f.id);
+            }
+          }).catch(() => {
+            if (intentos > 0) setTimeout(() => intentar(intentos - 1), 2000);
+            else clipsDurCargadosRef.current.delete(f.id);
+          });
+        };
+        intentar(3);
+      }
+    }
+  }, [filasMontaje]);  // Las marcas de los numeros no viajan en los archivos, asi que se recalculan a
   // partir de las filas de Montaje: un corte esta marcado si y solo si esta en la
   // hoja. Asi el circulo azul se ve igual en CORTES y en MONTAJE, aparece solo al
   // cargar un resumen, y desaparece en CORTES en cuanto se borra la fila en
@@ -1980,7 +2002,7 @@ const bdVideoTargetRef = useRef(null);
       v.muted = true; v.preload = 'metadata'; v.src = u;
       v.onloadedmetadata = () => { const d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0; try { v.removeAttribute('src'); v.load(); } catch (_) {} fin(d); };
       v.onerror = () => fin(0);
-      setTimeout(() => fin(0), 5000);
+      setTimeout(() => fin(0), 15000);
     } catch (_) { fin(0); }
   });
 
@@ -2097,8 +2119,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
       } else if (linea.videoUrl) {
         const r = await asegurar(linea.videoUrl);
         if (!r) return null;
-        const d = (await duracionDeVideo(linea.videoUrl)) || 5;
-        if (!(d > 0.1)) return null;
+        const d = (Number(linea.duracion) > 0 ? Number(linea.duracion) : (await duracionDeVideo(linea.videoUrl))) || 5;        if (!(d > 0.1)) return null;
         trozos.push({ tipo: 'clip', id: r.id, ext: r.ext, desde: 0, hasta: d, nombre });
       } else if (linea.inicio != null && linea.fin != null && baseSrc) {
         const ini = Math.max(0, linea.inicio);
@@ -7250,6 +7271,7 @@ const terminar = () => {
                 if (esVideo) {
                   const url = URL.createObjectURL(file);
                   const nueva = { id: Date.now(), videoUrl: url, imagenUrl: null, concepto: file.name || '', duracion: null };
+                    duracionDeVideo(url).then((d) => { if (d > 0) setFilasMontaje(prev => prev.map(f => f.id === nueva.id ? { ...f, duracion: d } : f)); }).catch(() => {});
                   setFilasMontaje(prev => {
                     const ixSel = filaSelMontaje != null ? prev.findIndex(f => f.id === filaSelMontaje) : -1;
                     const ixChk = ixSel >= 0 ? ixSel : prev.findIndex(f => lineasSelMontaje[f.id]);
