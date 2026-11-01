@@ -7180,11 +7180,26 @@ const terminar = () => {
             <input
               ref={imagenInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               style={{ display: 'none' }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                const esVideo = (file.type || '').startsWith('video/');
+                if (esVideo) {
+                  const url = URL.createObjectURL(file);
+                  const nueva = { id: Date.now(), videoUrl: url, imagenUrl: null, concepto: file.name || '', duracion: null };
+                  setFilasMontaje(prev => {
+                    const ixSel = filaSelMontaje != null ? prev.findIndex(f => f.id === filaSelMontaje) : -1;
+                    const ixChk = ixSel >= 0 ? ixSel : prev.findIndex(f => lineasSelMontaje[f.id]);
+                    if (ixChk < 0) return [...prev, nueva];
+                    const copy = [...prev];
+                    copy.splice(ixChk + 1, 0, nueva);
+                    return copy;
+                  });
+                  e.target.value = '';
+                  return;
+                }
                 const reader = new FileReader();
                 reader.onload = () => {
                   const dataUrl = reader.result;
@@ -7231,7 +7246,7 @@ const terminar = () => {
               <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: serverOn ? '#4ade80' : '#ef4444', display: 'inline-block' }} />
               Servidor {serverOn ? 'ON' : serverOn === false ? 'OFF' : '···'}
             </button>
-            <button onClick={() => imagenInputRef.current?.click()} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Imagen</button>
+            <button onClick={() => imagenInputRef.current?.click()} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>Imagen / Video</button>
             <button
               onClick={() => setShowTransiciones(true)}
               style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}

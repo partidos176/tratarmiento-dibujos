@@ -34,6 +34,8 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Composición de filas/tramos de vídeo e imágenes.
 - Fundidos y transiciones.
 - Reproducción de preview.
+- El botón *Imagen* de la hoja Montaje acepta también archivos de vídeo
+  (además de imágenes), insertándolos como clips sueltos.
 - Exportación de vídeo final (vía rápida con FFmpeg en el servidor local, con
   informe de fases en formato `MM:SS`; si el servidor descarta algún fundido
   lo indica el informe).
