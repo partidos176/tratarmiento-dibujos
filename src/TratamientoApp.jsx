@@ -1,5 +1,5 @@
 ﻿import { useState, useRef, useEffect } from 'react';
-import { guardarSesion, guardarVideosBD, borrarTodoLocal } from './persistencia';
+import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './persistencia';
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 // fetchFile sale solo de aqui. Antes ademas se hacia un await import('@ffmpeg/util')
 // en cuatro sitios mas, pero como el modulo ya se carga de forma estatica ese await
@@ -7,12 +7,9 @@ import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 import { fetchFile } from '@ffmpeg/util';
 import { estimarDuracionMontaje } from './estimacionMontaje';
 
-// Al recargar se empieza de cero en todas las hojas: se borran las claves
-// locales ANTES de que los estados las lean (esto corre al cargar el bundle,
-// previo al primer render). El IndexedDB se vacía en el primer efecto.
-try {
-  for (const k of ['bd_archivos', 'bd_videos', 'fm_sesion', 'cap_sesion', 'preview_anim']) localStorage.removeItem(k);
-} catch (_) {}
+// Se restaura la sesión guardada al arrancar: las claves locales y el
+// IndexedDB se leen en los efectos de montaje (ver abajo). No se borra nada
+// aquí para que al recargar los datos sigan disponibles.
 
 const pathTrianguloRedondeado = (p1, p2, p3, radio) => {
   const v = [p1, p2, p3];
@@ -557,11 +554,52 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [videoUrl]);
-  // Al recargar se empieza de cero en todas las hojas: no se restaura nada,
-  // solo se vacía lo persistido y se liberan los flags para trabajar.
+  // Al arrancar se restaura lo guardado (sesión, vídeo principal, cortes) en
+  // vez de vaciarlo, para que al recargar no se pierdan los datos. Todo va
+  // protegido con try/catch para que un fallo de restauración no deje la
+  // pantalla en blanco.
   useEffect(() => {
     (async () => {
-      try { await borrarTodoLocal(); } catch (_) {}
+      try {
+        const s = await idbLeer();
+        if (s && Array.isArray(s.capturas) && s.capturas.length > 0) {
+          setCapturas(prev => {
+            const prevById = new Map((prev || []).map(c => [c && c.id, c]));
+            return s.capturas.map(c => {
+              const p = prevById.get(c && c.id);
+              if (p && p.videoUrl && !c.videoUrl) return { ...c, videoUrl: p.videoUrl, duracionAnim: p.duracionAnim };
+              return c;
+            });
+          });
+          try { await aplicarCortes(s); } catch (_) {}
+          if (Array.isArray(s.figuras)) setFiguras(normalizarFiguras(s.figuras));
+          const sel = (s.capturas || []).find(c => c.id === s.capturaSeleccionadaId) || null;
+          if (sel) {
+            setCapturaSeleccionada(prevSel => {
+              if (prevSel && prevSel.id === sel.id && prevSel.videoUrl && !sel.videoUrl) {
+                return { ...sel, videoUrl: prevSel.videoUrl, duracionAnim: prevSel.duracionAnim };
+              }
+              return sel;
+            });
+          } else {
+            setCapturaSeleccionada(null);
+          }
+          setCapturaGuardada(null);
+          setImgDim(null);
+          setFiguraSeleccionada(null);
+        }
+        try {
+          const vp = await idbLeerKV(VIDEO_PP_KEY);
+          if (vp && vp.blob && vp.blob.size) {
+            const url = URL.createObjectURL(vp.blob);
+            videoGuardadoRef.current.ppal = url;
+            setArchivo({ name: vp.nombre || 'video', size: vp.blob.size, blob: vp.blob });
+            setVideoUrl(url);
+            setProgreso(0);
+          }
+        } catch (_) {}
+        try { await idbPonerKV(VIDEO_CORTES_KEY, null); } catch (_) {}
+      } catch (_) {}
       try { sesionListaRef.current = true; } catch (_) {}
     })();
   }, []);
@@ -852,7 +890,25 @@ const bdVideoTargetRef = useRef(null);
   }, [hoja]);
 
   useEffect(() => {
-    try { capsListasRef.current = true; } catch (_) {}
+    cargarSesion().then(({ filasMontaje: fm, capturas: caps }) => {
+      if (Array.isArray(fm) && fm.length > 0) setFilasMontaje(fm.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: (f.tipo === 'transicion' || f.tipo === 'imagen') ? null : (fm.slice(0, idx + 1).filter(x => x.tipo !== 'transicion' && x.tipo !== 'imagen').length) }));
+      if (Array.isArray(caps) && caps.length > 0) {
+        setCapturas(prev => {
+          const map = new Map(prev.map(c => [c.id, c]));
+          for (const c of caps) if (c && c.id != null) {
+            const existing = map.get(c.id);
+            map.set(c.id, existing ? { ...existing, ...c, videoUrl: c.videoUrl || existing.videoUrl } : c);
+          }
+          return [...map.values()];
+        });
+        for (const c of caps) {
+          if (c && c.videoUrl && c.videoUrl.startsWith('blob:')) {
+            videoBlobADataUrl(c.videoUrl).then(r => { if (r) videoDataUrlCacheRef.current.set(c.videoUrl, r); }).catch(() => {});
+          }
+        }
+      }
+      capsListasRef.current = true;
+    }).catch(() => { try { capsListasRef.current = true; } catch (_) {} });
   }, []);
 
   useEffect(() => {
@@ -4235,7 +4291,12 @@ const terminar = () => {
   };
 
   useEffect(() => {
-    try { bdCargadoRef.current = true; } catch (_) {}
+    cargarVideosBD().then(v => {
+      const vivos = (v || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin));
+      if (vivos.length > 0) setVideosBD(vivos);
+      bdCargadoRef.current = true;
+    }).catch(() => { try { bdCargadoRef.current = true; } catch (_) {} });
+    setVideosBD(prev => (prev || []).filter(x => !x || typeof x.videoUrl !== 'string' || !x.videoUrl.startsWith('blob:') || x.videoUrl.startsWith(window.location.origin)));
   }, []);
 
   useEffect(() => {
