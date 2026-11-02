@@ -18,8 +18,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 ### 2. `Cortes`
 - Carga de vídeo para cortar.
 - Marcado de cortes sobre el vídeo.
-- Selección masiva de cortes (`SELEC. TODO`).
-- Paso de cortes a la hoja `Montaje`.
+- Selección masiva de cortes (`SELEC. TODO`): una pulsación marca todos los cortes y los pasa a `Montaje`; pulsar de nuevo los desmarca y los borra de `Montaje`.
 - Recorte de clips con FFmpeg.wasm.
 
 ### 3. `Edición`
@@ -113,6 +112,32 @@ pnpm deploy
 ```
 
 > Antes de usar Firebase, rellena `src/firebase.js` con la configuración del proyecto.
+
+### Auto-actualización local (lunes / arranque)
+
+El proyecto incluye un script que ejecuta `git pull`, `pnpm install` y `pnpm run build`,
+y envía una notificación de Windows con el resultado:
+
+- Script: `scripts/auto-update.ps1` (también `scripts/auto-update.bat`).
+- Log: `%LOCALAPPDATA%\\tratarmiento-dibujos\\auto-update.log`.
+
+Para automatizarlo (lunes a las 09:00 y al iniciar sesión):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\\register-task.ps1
+```
+
+Para desactivarlo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\\unregister-task.ps1
+```
+
+Ejecución manual:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\\auto-update.ps1
+```
 
 ---
 

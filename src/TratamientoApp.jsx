@@ -218,12 +218,32 @@ const [hoja, setHoja] = useState('Base de datos');
   // se duplican.
   const marcarTodosLosCortes = () => {
     if (!cortes.length) { setAviso('No hay cortes en la hoja'); return; }
+    const todosMarcados = cortes.every(ct => !!corteNumAzul['c' + ct]);
+    if (todosMarcados) {
+      // Segunda pulsacion: deseleccionar todos los cortes y borrarlos de Montaje.
+      setCorteNumAzul(prev => {
+        const next = { ...prev };
+        for (const ct of cortes) delete next['c' + ct];
+        return next;
+      });
+      setFilasMontaje(prev => {
+        const claves = new Set(cortes.map(ct => String(ct)));
+        const aBorrar = prev.filter(f => f && f.inicio != null && claves.has(String(f.inicio)));
+        for (const f of aBorrar) {
+          if (f.videoUrl && String(f.videoUrl).startsWith('blob:')) { try { URL.revokeObjectURL(f.videoUrl); } catch (_) {} }
+        }
+        return prev.filter(f => !(f && f.inicio != null && claves.has(String(f.inicio))));
+      });
+      return;
+    }
+    // Primera pulsacion (o parcial): marcar todos y pasar los que falten a Montaje.
     setCorteNumAzul(prev => {
       const next = { ...prev };
       for (const ct of cortes) next['c' + ct] = true;
       return next;
     });
-    pasarCortesAMontaje(cortes);
+    const faltan = cortes.some(ct => !filasMontaje.some(f => f && f.inicio != null && Math.abs(f.inicio - ct) < 0.01));
+    if (faltan) pasarCortesAMontaje(cortes);
   };
   const [videosBD, setVideosBD] = useState([]);
   const [selVideoBD, setSelVideoBD] = useState(null);
