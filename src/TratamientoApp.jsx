@@ -4554,10 +4554,10 @@ const terminar = () => {
   const exportarMontaje = async () => {
     try {
       const videoNameBD = (videosBD.length > 0 && videosBD[0].nombre ? videosBD[0].nombre.replace(/\.[^.]+$/, '') : 'montaje');
-      const nombreDefecto = `resumen_${videoNameBD}`;
-      const entrada = window.prompt('Nombre del archivo a descargar (sin extensión):', nombreDefecto);
+      const nombreDefecto = `resumen_${videoNameBD}.json`;
+      const entrada = window.prompt('Nombre del archivo a descargar (se añade .json):', nombreDefecto);
       if (entrada === null) return;
-      const nombreLimpio = entrada.trim().replace(/[\\/:*?"<>|]+/g, '_') || nombreDefecto;
+      const nombreLimpio = (entrada.trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\.json$/i, '') || nombreDefecto);
       const incrustar = async (url) => {
         if (!url || typeof url !== 'string') return null;
         if (url.startsWith('data:')) return url;
@@ -4569,35 +4569,38 @@ const terminar = () => {
         }
         return null;
       };
-      const filas = await Promise.all((filasMontaje || []).map(async (f) => {
+      const filas = [];
+      for (const f of (filasMontaje || [])) {
         const copia = { ...f };
-        if (f.videoUrl && f.videoUrl.startsWith('blob:')) {
+        if (f && f.videoUrl && f.videoUrl.startsWith('blob:')) {
           copia.videoDataUrl = await videoBlobADataUrl(f.videoUrl);
           copia.videoUrl = null;
         }
-        if (f.imagenUrl && f.imagenUrl.startsWith('blob:')) {
+        if (f && f.imagenUrl && f.imagenUrl.startsWith('blob:')) {
           copia.imagenDataUrl = await videoBlobADataUrl(f.imagenUrl);
           copia.imagenUrl = null;
         }
-        return copia;
-      }));
-      const animaciones = await Promise.all(
-        (capturas || [])
-          .filter(c => c && c.videoUrl)
-          .map(async (c) => ({ id: c.id, tiempo: c.tiempo ?? null, duracionAnim: c.duracionAnim || 4, videoDataUrl: await incrustar(c.videoUrl), figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }))
-      );
+        filas.push(copia);
+      }
+      const animaciones = [];
+      for (const c of (capturas || [])) {
+        if (!c || !c.videoUrl) continue;
+        animaciones.push({ id: c.id, tiempo: c.tiempo ?? null, duracionAnim: c.duracionAnim || 4, videoDataUrl: await incrustar(c.videoUrl), figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null });
+      }
       const fotos = (capturas || [])
         .filter(c => c && c.dataUrl)
         .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl, duracionAnim: c.duracionAnim || 4, figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }));
-      const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), ...syncCortes(), filas, animaciones, fotos }, null, 2)], { type: 'application/json' });
+      const contenido = JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), ...syncCortes(), filas, animaciones, fotos });
+      const blob = new Blob([contenido], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `${nombreLimpio}.json`;
+      a.target = '_blank';
+      a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      setTimeout(() => { try { a.remove(); } catch (_) {} try { URL.revokeObjectURL(url); } catch (_) {} }, 10000);
     } catch (e) {
       console.error('Error al exportar el montaje', e);
       window.alert('No se pudo exportar el montaje: ' + (e?.message || e));
