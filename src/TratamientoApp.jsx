@@ -699,6 +699,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const flechaOrigenRef = useRef(null);
   const [modoLineaClick, setModoLineaClick] = useState(false);
   const lineaOrigenRef = useRef(null);
+  const [figuraClickPendiente, setFiguraClickPendiente] = useState(null);
   const elipsesSessionRef = useRef([]);
   const cancelarVideoRef = useRef(false);
   const videoRef = useRef(null);
@@ -884,7 +885,7 @@ const bdVideoTargetRef = useRef(null);
     resueltas.sort((a, b) => a.en - b.en);
     const esFallback = previewMontaje && !(previewMontaje.anims && previewMontaje.anims.length) && resueltas.some(a => previewMontaje.src === a.src);
     if (previewMontaje && !esFallback) { previewRestauradaRef.current = true; return; }
-    const base = videoUrlCortes || videoUrl;
+    const base = cortesVideoUrl || videoUrlCortes || videoUrl;
     if (!base) {
       if (!previewMontaje) {
         deseaPlayPreviewRef.current = false;
@@ -1523,7 +1524,7 @@ const bdVideoTargetRef = useRef(null);
     } catch (_) {}
   };
 
-  const abrirPreviewLinea = (fila, tIr, autoPlay = true) => {    const src = videoUrlCortes || videoUrl;
+  const abrirPreviewLinea = (fila, tIr, autoPlay = true) => {    const src = cortesVideoUrl || videoUrlCortes || videoUrl;
     if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
     const anims = (capturas || [])
       .filter(c => c && c.videoUrl && c.tiempo != null && fila.inicio != null && fila.fin != null && c.tiempo >= fila.inicio && c.tiempo <= fila.fin)
@@ -2106,7 +2107,7 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
   };
 
   const construirPlanMontaje = async (validas, videoDur) => {
-    const baseSrc = videoUrlCortes || videoUrl;
+    const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) return null;
     const cache = new Map();
     const asegurar = async (url) => {
@@ -2329,9 +2330,9 @@ const longitudDe = (it) => (it.tipo === 'fuente' ? (Number(it.fin) - Number(it.i
   // caché del servidor es gratis, en cambio leer 1 GB para eso costaba casi un
   // minuto en cada descarga.
   const fuenteDeTramos = async () => {
-    const baseSrc = videoUrlCortes || videoUrl;
+    const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
     if (!baseSrc) return null;
-    const meta = videoUrlCortes ? archivoCortes : archivo;
+    const meta = (cortesVideoUrl || videoUrlCortes) ? (cortesArchivo || archivoCortes) : archivo;
     if (meta && meta.blob && meta.blob.size > 0) return { blob: meta.blob, size: meta.blob.size, nombre: meta.name || 'video' };
     if (meta instanceof Blob && meta.size > 0) return { blob: meta, size: meta.size, nombre: meta.name || 'video' };
     if (meta && typeof meta.size === 'number' && meta.size > 0) return { size: meta.size, nombre: meta.name || 'video' };
@@ -2414,7 +2415,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       if (mimeDescarga().ext !== 'mp4') { motivoViaRapida.current = 'este navegador no graba MP4'; return false; }
       const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
       if (!validas.length) { motivoViaRapida.current = 'no hay filas validas'; return false; }
-      const baseSrc = videoUrlCortes || videoUrl;
+      const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
       if (!baseSrc && validas.some(l => l.inicio != null)) { motivoViaRapida.current = 'no hay video base cargado'; return false; }
       const animsSinVideo = animsSinVideoDe(validas);
       if (animsSinVideo.length) { setAviso(avisoAnimsSinVideo(animsSinVideo)); motivoViaRapida.current = 'hay animaciones todavia sin video generado'; return false; }
@@ -2631,7 +2632,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
     };
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
-    const baseSrc = videoUrlCortes || videoUrl;
+    const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
     // Las animaciones sin vídeo generado no se pueden grabar: antes se
     // saltaban en silencio y el vídeo salía sin ellas. Se avisa y no se
@@ -2666,7 +2667,7 @@ const descargarDesdeServidor = async (lineas, nombreCustom, destinoDisco = null)
       try { setInformeDescarga(''); } catch (_) {}
       diagFase('Iniciando descarga…');
       diagIniciar();
-      const baseSrc = videoUrlCortes || videoUrl;
+      const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
       if (ext === 'webm') setAviso('Este navegador no soporta MP4: se descargará como WebM');
       const chunks = [];
       const mkVid = async (src) => {
@@ -3652,7 +3653,7 @@ else {
   const descargarLineasFFmpeg = async (lineas, nombreCustom) => {
     const validas = (lineas || []).filter(l => l && (l.imagenUrl || l.videoUrl || (l.inicio != null && l.fin != null) || l.tipo === 'transicion'));
     if (!validas.length) { setAviso('Marca el cuadrado de la fila para descargar'); return; }
-    const baseSrc = videoUrlCortes || videoUrl;
+    const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
     if (!baseSrc && validas.some(l => l.inicio != null && l.fin != null)) { setAviso('Carga primero un vídeo para descargar'); return; }
     if (!isFFmpegSupported()) { return descargarLineas(lineas, nombreCustom); }
     const { ext } = mimeDescarga();
@@ -4134,7 +4135,7 @@ const terminar = () => {
   };
 
   const descargarFragmentoLinea = async (linea) => {
-    const baseSrc = videoUrlCortes || videoUrl;
+    const baseSrc = cortesVideoUrl || videoUrlCortes || videoUrl;
     const imgUrls = [];
     if (linea.imagenUrl) imgUrls.push(linea.imagenUrl);
     if (linea.inicio != null && linea.fin != null) {
@@ -6165,9 +6166,10 @@ const terminar = () => {
                 onChange={(e) => {
                   const file = e.target.files && e.target.files[0];
                   if (!file) return;
-                  if (cortesVideoUrl) URL.revokeObjectURL(cortesVideoUrl);
-                  setCortesArchivo(file);
-                  setCortesVideoUrl(URL.createObjectURL(file));
+                  const prevUrl = cortesVideoUrl || videoUrlCortes;
+                  if (prevUrl) URL.revokeObjectURL(prevUrl);
+                  const url = URL.createObjectURL(file);
+                  cargarVideoEnCortes(url, file.name, file);
                   setOffsetCortes({ off1: null, off2: null, seg2: null });
                   corteCargadoRef.current = null;
                 }}
@@ -6179,9 +6181,12 @@ const terminar = () => {
             {cortesArchivo && (
               <button
                 onClick={() => {
-                  if (cortesVideoUrl) URL.revokeObjectURL(cortesVideoUrl);
+                  const prevUrl = cortesVideoUrl || videoUrlCortes;
+                  if (prevUrl) URL.revokeObjectURL(prevUrl);
                   setCortesArchivo(null);
                   setCortesVideoUrl('');
+                  setArchivoCortes(null);
+                  setVideoUrlCortes('');
                   setOffsetCortes({ off1: null, off2: null, seg2: null });
                   corteCargadoRef.current = null;
                 }}
@@ -6357,7 +6362,7 @@ const terminar = () => {
                 onClick={async () => {
                   const r = await guardarCaptura();
                   if (!r || !r.videoUrl) return;
-                  const base = videoUrlCortes || videoUrl;
+                  const base = cortesVideoUrl || videoUrlCortes || videoUrl;
                   const t = Math.max(0, r.tiempo ?? 0);
                   deseaPlayPreviewRef.current = true;
                   setFasePreview('base');
@@ -6526,36 +6531,36 @@ const terminar = () => {
           )}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '1rem', borderRight: '1px solid #1e293b' }}>
             <button
-              onClick={anadirTriangulo}
-              title="Añadir triángulo"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); setModoLineaClick(false); lineaOrigenRef.current = null; setModoFlechaClick(false); flechaOrigenRef.current = null; setModoCirculoClick(false); elipsesSessionRef.current = []; setFiguraClickPendiente(prev => prev === 'triangulo' ? null : 'triangulo'); }}
+              title={figuraClickPendiente === 'triangulo' ? 'Cancelar triángulo' : 'Añadir triángulo con click'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: figuraClickPendiente === 'triangulo' ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round">
                 <polygon points="12,3 22,20 2,20" />
               </svg>
             </button>
             <button
-              onClick={anadirCirculo}
-              title="Añadir círculo"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); setModoLineaClick(false); lineaOrigenRef.current = null; setModoFlechaClick(false); flechaOrigenRef.current = null; setModoCirculoClick(false); elipsesSessionRef.current = []; setFiguraClickPendiente(prev => prev === 'circulo' ? null : 'circulo'); }}
+              title={figuraClickPendiente === 'circulo' ? 'Cancelar círculo' : 'Añadir círculo con click'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: figuraClickPendiente === 'circulo' ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5">
                 <circle cx="12" cy="12" r="9" />
               </svg>
             </button>
             <button
-              onClick={anadirCirculoHueco}
-              title="Añadir C"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); setModoLineaClick(false); lineaOrigenRef.current = null; setModoFlechaClick(false); flechaOrigenRef.current = null; setModoCirculoClick(false); elipsesSessionRef.current = []; setFiguraClickPendiente(prev => prev === 'c' ? null : 'c'); }}
+              title={figuraClickPendiente === 'c' ? 'Cancelar C' : 'Añadir C con click'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: figuraClickPendiente === 'c' ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
                 <path d="M 18 5 A 9 9 0 1 0 18 19" />
               </svg>
             </button>
             <button
-              onClick={anadirTexto}
-              title="Añadir texto"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); setModoLineaClick(false); lineaOrigenRef.current = null; setModoFlechaClick(false); flechaOrigenRef.current = null; setModoCirculoClick(false); elipsesSessionRef.current = []; setFiguraClickPendiente(prev => prev === 'texto' ? null : 'texto'); }}
+              title={figuraClickPendiente === 'texto' ? 'Cancelar texto' : 'Añadir texto con click'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: figuraClickPendiente === 'texto' ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.5">
                 <polyline points="4,7 4,4 20,4 20,7" />
@@ -6568,6 +6573,7 @@ const terminar = () => {
                 e.stopPropagation();
                 if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
                 lineaOrigenRef.current = null;
+                setFiguraClickPendiente(null);
                 setModoLineaClick(prev => !prev);
               }}
               title={modoLineaClick ? 'Cancelar línea' : 'Añadir línea con clicks'}
@@ -6582,6 +6588,7 @@ const terminar = () => {
                   e.stopPropagation();
                   if (modoCirculoClick) { setModoCirculoClick(false); elipsesSessionRef.current = []; }
                   flechaOrigenRef.current = null;
+                  setFiguraClickPendiente(null);
                   setModoFlechaClick(prev => !prev);
                 }}
                 title={modoFlechaClick ? 'Cancelar flecha' : 'Añadir flecha con clicks'}
@@ -6628,6 +6635,7 @@ const terminar = () => {
                     elipsesSessionRef.current = [];
                     setAviso('');
                   }
+                  setFiguraClickPendiente(null);
                   setModoCirculoClick(prev => !prev);
                 }}
                title={modoCirculoClick ? 'Desactivar y unir elipses' : 'Colocar elipses con click'}
@@ -6641,6 +6649,47 @@ const terminar = () => {
             </button>
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
+            if (figuraClickPendiente) {
+              const p = puntoImagen(e);
+              if (p) {
+                const x = Math.min(1, Math.max(0, p.x));
+                const y = Math.min(1, Math.max(0, p.y));
+                if (figuraClickPendiente === 'triangulo') {
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'triangulo', x, y, ancho: 0.06, alto: 0.35, color: '#f97316', opacidad: 0.7, crecimiento: 0.6 }]);
+                  setFiguraSeleccionada(id);
+                  if (triAnimRef.current) cancelAnimationFrame(triAnimRef.current);
+                  triAnimIdRef.current = id;
+                  triAnimElapsedRef.current = 0;
+                  triAnimStartRef.current = performance.now();
+                  const paso = (t) => {
+                    const v = videoRef.current;
+                    if (v && !v.paused) triAnimElapsedRef.current += (t - triAnimStartRef.current);
+                    triAnimStartRef.current = t;
+                    const pp = Math.min(1, triAnimElapsedRef.current / 4000);
+                    const e2 = 0.6 + 0.4 * (1 - Math.pow(1 - pp, 2.5));
+                    setFiguras(prev => prev.map(f => f.id === id ? { ...f, crecimiento: e2 } : f));
+                    if (pp < 1) triAnimRef.current = requestAnimationFrame(paso);
+                    else triAnimRef.current = null;
+                  };
+                  triAnimRef.current = requestAnimationFrame(paso);
+                } else if (figuraClickPendiente === 'circulo') {
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'circulo', x, y, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0, rot: 0 }]);
+                  setFiguraSeleccionada(id);
+                } else if (figuraClickPendiente === 'c') {
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'c', x, y, ancho: 0.1, alto: 0.1, color: '#38bdf8', opacidad: 1, grosor: 0.005, rot: 0, hueco: 90, crecimiento: 1 }]);
+                  setFiguraSeleccionada(id);
+                } else if (figuraClickPendiente === 'texto') {
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'texto', x, y, fontSize: 0.06, color: '#ffffff', opacidad: 1, texto: 'Texto', negrita: false }]);
+                  setFiguraSeleccionada(id);
+                }
+              }
+              setFiguraClickPendiente(null);
+              return;
+            }
             if (modoFlechaClick) {
               const p = puntoImagen(e);
               if (p) {
@@ -7416,7 +7465,7 @@ const terminar = () => {
                         // en todos los clips: releerlo entero por cada corte
                         // multiplicaba el tiempo de espera por el numero de
                         // clips marcados.
-                        const baseSrcMontaje = videoUrlCortes || videoUrl;
+                        const baseSrcMontaje = cortesVideoUrl || videoUrlCortes || videoUrl;
                         let baseMontaje = null;
                         if (baseSrcMontaje) {
                           baseMontaje = document.createElement('video');
@@ -7489,7 +7538,7 @@ const terminar = () => {
                         if (!destino) { setAviso('Descarga cancelada: elige un destino para guardar el montaje.'); return; }
                         // Pre-cargar el video base (igual que en "por separado")
                         // para que la duracion sea correcta y no se corte a 27s.
-                        const baseSrcMontaje = videoUrlCortes || videoUrl;
+                        const baseSrcMontaje = cortesVideoUrl || videoUrlCortes || videoUrl;
                         let baseMontaje = null;
                         if (baseSrcMontaje) {
                           baseMontaje = document.createElement('video');
@@ -7582,9 +7631,12 @@ const terminar = () => {
                 setNombreCortes({});
                 setAccionCortes({});
                 setFiltroAccionCortes('');
+                const prevUrl = cortesVideoUrl || videoUrlCortes;
+                if (prevUrl) URL.revokeObjectURL(prevUrl);
                 setArchivoCortes(null);
-                if (videoUrlCortes) URL.revokeObjectURL(videoUrlCortes);
                 setVideoUrlCortes('');
+                setCortesArchivo(null);
+                setCortesVideoUrl('');
                 setCapturas([]);
                 setInformeDescarga('');
                 try { setProgresoDescarga(0); } catch (_) {}
@@ -7605,7 +7657,7 @@ const terminar = () => {
               const est = estimarDuracionMontaje(seleccionadas, {
                 capturas,
                 videoDur: duracion,
-                baseDisponible: !!(videoUrlCortes || videoUrl),
+                baseDisponible: !!(cortesVideoUrl || videoUrlCortes || videoUrl),
               });
               const desglose = [
                 'periodos ' + est.periodos.toFixed(1) + ' s',
@@ -7789,7 +7841,7 @@ const terminar = () => {
                         requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {} } });
                         return;
                       }
-                      const src = videoUrlCortes || videoUrl;
+                      const src = cortesVideoUrl || videoUrlCortes || videoUrl;
                       if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
                       abrirPreviewLinea(fila);
                     }}
