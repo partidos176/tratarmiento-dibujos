@@ -74,6 +74,8 @@ const [hoja, setHoja] = useState('Base de datos');
   const [fotoCompleta, setFotoCompleta] = useState(false);
   const [figuras, setFiguras] = useState([]);
   const [figuraSeleccionada, setFiguraSeleccionada] = useState(null);
+  const [menuFigura, setMenuFigura] = useState(null); // menú contextual (botón derecho) sobre una figura en Edición
+  const [figuraCopiada, setFiguraCopiada] = useState(null); // figura pendiente de pegar con un clic
   const [imgDim, setImgDim] = useState(null);
   const [clipActivo, setClipActivo] = useState(null);
   const [arrastrandoMarcaId, setArrastrandoMarcaId] = useState(null);
@@ -5047,6 +5049,72 @@ const terminar = () => {
     setFiguras(prev => prev.map(f => f.id === id ? { ...f, ...cambios } : f));
   };
 
+  // Menú contextual (botón derecho) sobre una figura en la hoja Edición.
+  const borrarFiguraMenu = (id) => {
+    setFiguras(prev => prev.filter(f => f.id !== id));
+    setFiguraSeleccionada(prev => (prev === id ? null : prev));
+    setMenuFigura(null);
+  };
+  const copiarFiguraMenu = (id) => {
+    const fig = figuras.find(f => f.id === id);
+    if (fig) setFiguraCopiada(fig);
+    setMenuFigura(null);
+  };
+
+  const clonarFiguraEn = (fig, x, y) => {
+    const clon = { ...fig, id: Date.now() + Math.floor(Math.random() * 1000) };
+    if (fig.tipo === 'linea' || fig.tipo === 'flecha') {
+      const cx0 = ((fig.x1 ?? 0) + (fig.x2 ?? 0)) / 2;
+      const cy0 = ((fig.y1 ?? 0) + (fig.y2 ?? 0)) / 2;
+      const dx = x - cx0, dy = y - cy0;
+      clon.x1 = Math.min(1, Math.max(0, (fig.x1 ?? 0) + dx));
+      clon.y1 = Math.min(1, Math.max(0, (fig.y1 ?? 0) + dy));
+      clon.x2 = Math.min(1, Math.max(0, (fig.x2 ?? 0) + dx));
+      clon.y2 = Math.min(1, Math.max(0, (fig.y2 ?? 0) + dy));
+      if (fig.cx != null) { clon.cx = Math.min(1, Math.max(0, fig.cx + dx)); clon.cy = Math.min(1, Math.max(0, fig.cy + dy)); }
+    } else if (fig.tipo === 'polilinea' && Array.isArray(fig.puntos) && fig.puntos.length) {
+      const cx0 = fig.puntos.reduce((s, p) => s + p.x, 0) / fig.puntos.length;
+      const cy0 = fig.puntos.reduce((s, p) => s + p.y, 0) / fig.puntos.length;
+      const dx = x - cx0, dy = y - cy0;
+      clon.puntos = fig.puntos.map(p => ({ x: Math.min(1, Math.max(0, p.x + dx)), y: Math.min(1, Math.max(0, p.y + dy)) }));
+    } else if (fig.tipo === 'circuito' && Array.isArray(fig.elipses) && fig.elipses.length) {
+      const cx0 = fig.elipses.reduce((s, el) => s + (el.x ?? 0), 0) / fig.elipses.length;
+      const cy0 = fig.elipses.reduce((s, el) => s + (el.y ?? 0), 0) / fig.elipses.length;
+      const dx = x - cx0, dy = y - cy0;
+      clon.elipses = fig.elipses.map(el => ({ ...el, x: Math.min(1, Math.max(0, (el.x ?? 0) + dx)), y: Math.min(1, Math.max(0, (el.y ?? 0) + dy)) }));
+    } else {
+      clon.x = Math.min(1, Math.max(0, x));
+      clon.y = Math.min(1, Math.max(0, y));
+    }
+    return clon;
+  };
+  const agrandarFiguraMenu = (id, factor = 1.25) => {
+    setFiguras(prev => prev.map(f => {
+      if (f.id !== id) return f;
+      const c = { ...f };
+      if (f.tipo === 'texto') {
+        c.fontSize = Math.min(0.5, (f.fontSize ?? 0.06) * factor);
+      } else if (f.tipo === 'linea' || f.tipo === 'flecha') {
+        c.grosor = (f.grosor ?? 0.005) * factor;
+      } else if (f.tipo === 'circuito') {
+        if (Array.isArray(f.elipses)) c.elipses = f.elipses.map(el => ({ ...el, rx: (el.rx ?? 0.08) * factor, ry: (el.ry ?? 0.08) * factor }));
+        c.grosor = (f.grosor ?? 0.005) * factor;
+      } else if (f.tipo === 'polilinea') {
+        c.grosor = (f.grosor ?? 0.006) * factor;
+      } else {
+        c.ancho = Math.min(1, (f.ancho ?? 0.1) * factor);
+        c.alto = Math.min(1, (f.alto ?? 0.1) * factor);
+        if (f.grosor != null) c.grosor = f.grosor * factor;
+      }
+      return c;
+    }));
+    setMenuFigura(null);
+  };
+  const cambiarColorFiguraMenu = (id, color) => {
+    actualizarFigura(id, { color });
+    setMenuFigura(null);
+  };
+
   const anadirCircuito = () => {
     const id = Date.now();
     const final = [{ x: 0.2, y: 0.5 }, { x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }, { x: 0.8, y: 0.5 }];
@@ -6335,6 +6403,21 @@ const terminar = () => {
         </div>
       ) : hoja === 'Edición' ? (
         <div ref={editorRef} style={{ flex: 1, position: 'relative', display: 'flex' }}>
+          {menuFigura && (
+            <>
+              <div onClick={() => setMenuFigura(null)} style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
+              <div onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', left: menuFigura.x, top: menuFigura.y, zIndex: 1000, background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                <button onClick={() => copiarFiguraMenu(menuFigura.id)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Copiar</button>
+                <button onClick={() => borrarFiguraMenu(menuFigura.id)} style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Borrar</button>
+                <button onClick={() => agrandarFiguraMenu(menuFigura.id)} style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Agrandar</button>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.25rem', marginTop: '0.2rem' }}>
+                  {colores.map(c => (
+                    <button key={c} onClick={() => cambiarColorFiguraMenu(menuFigura.id, c)} title={c} style={{ width: '18px', height: '18px', background: c, borderRadius: '4px', border: '1px solid #475569', cursor: 'pointer', padding: 0 }} />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           {capturaSeleccionada && (
             <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
               <button
@@ -6649,6 +6732,19 @@ const terminar = () => {
             </button>
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => {
+            if (figuraCopiada) {
+              const p = puntoImagen(e);
+              if (p) {
+                const x = Math.min(1, Math.max(0, p.x));
+                const y = Math.min(1, Math.max(0, p.y));
+                const clon = clonarFiguraEn(figuraCopiada, x, y);
+                setFiguras(prev => [...prev, clon]);
+                setFiguraSeleccionada(clon.id);
+              }
+              setFiguraCopiada(null);
+              setAviso(null);
+              return;
+            }
             if (figuraClickPendiente) {
               const p = puntoImagen(e);
               if (p) {
@@ -6679,7 +6775,7 @@ const terminar = () => {
                   setFiguraSeleccionada(id);
                 } else if (figuraClickPendiente === 'c') {
                   const id = Date.now();
-                  setFiguras(prev => [...prev, { id, tipo: 'c', x, y, ancho: 0.1, alto: 0.1, color: '#38bdf8', opacidad: 1, grosor: 0.005, rot: 0, hueco: 90, crecimiento: 1 }]);
+                  setFiguras(prev => [...prev, { id, tipo: 'c', x, y, ancho: 0.06, alto: 0.06, color: '#38bdf8', opacidad: 1, grosor: 0.005, rot: 0, hueco: 90, crecimiento: 1 }]);
                   setFiguraSeleccionada(id);
                 } else if (figuraClickPendiente === 'texto') {
                   const id = Date.now();
@@ -6876,6 +6972,7 @@ const terminar = () => {
                           style: { pointerEvents: 'all', cursor: 'move' },
                           onClick: (e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); },
                           onPointerDown: (e) => {
+                            if (e.button !== 0) return;
                             if (circuloAnimRef.current) { cancelAnimationFrame(circuloAnimRef.current); circuloAnimRef.current = null; }
                             if (lineaAnimRef.current) { cancelAnimationFrame(lineaAnimRef.current); lineaAnimRef.current = null; }
                             if (flechaAnimRef.current) { cancelAnimationFrame(flechaAnimRef.current); flechaAnimRef.current = null; if (f.tipo === 'flecha') actualizarFigura(f.id, { cabeza: 1 }); }
@@ -7041,7 +7138,7 @@ const terminar = () => {
                         const tamTxt = (f.fontSize || 0.06) * imgDim.h;
                         const anchoTxt = Math.max(60, (f.texto || 'Texto').length * tamTxt * 0.6);
                         return (
-                          <g key={f.id} onClick={(e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); }}>
+                          <g key={f.id} onClick={(e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setFiguraSeleccionada(f.id); setMenuFigura({ id: f.id, x: e.clientX, y: e.clientY }); }}>
                             {shape}
                             {sel && (f.tipo === 'linea' || f.tipo === 'flecha' ? (
                               <>

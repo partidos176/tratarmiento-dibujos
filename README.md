@@ -25,6 +25,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Captura de frames del vídeo.
 - Dibujo de figuras: triángulos redondeados, elipses, líneas, flechas y trazos.
 - Selección, movimiento y borrado de figuras.
+- Menú contextual (botón derecho) sobre una figura con opciones: copiar, borrar, agrandar y cambiar color.
 - Pantalla completa del editor.
 - Exportación de captura anotada y salto a `Montaje`.
 - Animaciones/preview de capturas.
