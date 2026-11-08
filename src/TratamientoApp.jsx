@@ -6084,6 +6084,7 @@ const terminar = () => {
             style={{ display: 'none' }}
             onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
           />
+          <NotasVozPanel notas={notasVoz} />
             <div style={{ display: 'flex', gap: '1rem', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ width: '100%', maxWidth: '800px', flex: '1 1 520px' }}>
             <input

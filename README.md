@@ -11,7 +11,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 ### 1. `Base de datos`
 - Tabla de archivos/registros (`DATOS` + `VIDEO`).
 - Alta de registros y asociación de vídeos.
-- Importación de montajes en JSON (incluye notas de voz del export «base datos» de `futbol`: texto y audio, visibles en `Cortes`).
+- Importación de montajes en JSON (incluye notas de voz del export «base datos» de `futbol`: texto y audio, visibles en `Base de datos` y `Cortes` al importar).
 - Gestión de vídeos ocultos y biblioteca local.
 - Persistencia de vídeos en IndexedDB.
 
