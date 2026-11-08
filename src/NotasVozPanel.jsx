@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 
 // Filas de notas con el mismo formato que los otros tipos de acción en CORTES.
 // Cada nota: { numero, minuto, texto/nota, dataUrl/audio, tipo, ... }
-export default function NotasVozPanel({ notas, onSeekMinuto, onAjustarMinuto, onBorrar }) {
+export default function NotasVozPanel({ notas, onSeekMinuto, onAjustarMinuto, onBorrar, getMarcada, onClickNumero }) {
   const items = Array.isArray(notas) ? notas : [];
   const [sonando, setSonando] = useState(null); // numero de nota sonando
   const refs = useRef({});
@@ -38,7 +38,15 @@ export default function NotasVozPanel({ notas, onSeekMinuto, onAjustarMinuto, on
             title={onSeekMinuto && n.minuto ? 'Ir al vídeo en este minuto' : ''}
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.45rem 0.6rem', cursor: onSeekMinuto && n.minuto ? 'pointer' : 'default', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}
           >
-            <span style={{ width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '50%', fontWeight: 900, fontSize: '0.75rem', background: 'transparent', color: '#e2e8f0' }}>{n.numero ?? '—'}</span>
+            <span
+              onClick={(e) => {
+                if (!onClickNumero) return;
+                e.stopPropagation();
+                onClickNumero(n);
+              }}
+              title={getMarcada && getMarcada(n) ? 'Pulsar para quitar el círculo azul' : (onClickNumero ? 'Pulsar para marcar la nota y pasarla a Montaje' : '')}
+              style={{ width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: onClickNumero ? 'pointer' : 'default', borderRadius: '50%', fontWeight: 900, fontSize: '0.75rem', background: (getMarcada && getMarcada(n)) ? '#38bdf8' : 'transparent', color: (getMarcada && getMarcada(n)) ? '#0f172a' : '#e2e8f0' }}
+            >{n.numero ?? '—'}</span>
             <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap', flexShrink: 0 }}>
               <span style={{ color: '#38bdf8', textDecoration: onSeekMinuto && n.minuto ? 'underline' : 'none', cursor: onSeekMinuto && n.minuto ? 'pointer' : 'default' }}>{n.minuto ? `MIN ${n.minuto}` : '—'}</span>
             </span>

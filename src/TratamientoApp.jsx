@@ -127,8 +127,42 @@ const [hoja, setHoja] = useState('Base de datos');
   const toggleCorteNumAzul = (k) => setCorteNumAzul(prev => { const c = { ...prev }; if (c[k]) delete c[k]; else c[k] = true; return c; });
   // Un corte se marca con una sola clave, compartida por las hojas CORTES y
   // MONTAJE, para que el circulo azul se vea igual en las dos. Las filas sin
-  // inicio (imagenes, transiciones) usan su propia clave.
-  const claveNumCorte = (fila) => (fila && fila.inicio != null ? 'c' + fila.inicio : 'm' + (fila && fila.id));
+  // inicio (imagenes, transiciones) usan su propia clave; las notas usan n+numero.
+  const claveNumCorte = (fila) => {
+    if (!fila) return 'm' + undefined;
+    if (fila.tipo === 'nota' && fila.notaNumero != null) return 'n' + fila.notaNumero;
+    return fila.inicio != null ? 'c' + fila.inicio : 'm' + fila.id;
+  };
+  const claveNumNota = (nota) => 'n' + (nota && nota.numero != null ? nota.numero : '');
+  // Convierte el minuto de partido de una nota a segundos de vídeo usando offsetCortes.
+  const videoSegsDeNota = (nota) => {
+    if (!nota) return null;
+    const secs = parsearTiempo(nota.minuto);
+    if (secs == null) return null;
+    const { off1, off2, seg2 } = offsetCortes || {};
+    const hay = off1 != null || off2 != null;
+    const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
+    const f2 = off2 != null ? off2 : f1;
+    const off = hay ? ((seg2 != null && secs >= seg2) ? f2 : f1) : 0;
+    return Math.max(0, secs + off);
+  };
+  // Construye la fila de Montaje de una nota (inicio/fin en segundos de vídeo).
+  const filaMontajeDeNota = (nota) => {
+    if (!nota) return null;
+    const ini = videoSegsDeNota(nota);
+    if (ini == null) return null;
+    const dur = 10;
+    const texto = (nota.texto || nota.nota || '').trim();
+    return { id: Date.now() + Math.floor(Math.random() * 1000), tipo: 'nota', notaNumero: nota.numero, notaMinuto: nota.minuto || '', videoUrl: null, concepto: `NOTA ${nota.numero ?? ''}`.trim(), accion: texto, inicio: ini, fin: ini + dur, duracion: dur, numCorte: nota.numero };
+  };
+  const pasarNotaAMontaje = (nota) => {
+    if (!nota) return;
+    setFilasMontaje(prev => {
+      if (prev.some(f => f && f.tipo === 'nota' && f.notaNumero === nota.numero)) return prev;
+      const fila = filaMontajeDeNota(nota);
+      return fila ? [...prev, fila] : prev;
+    });
+  };
   // Construye la fila de Montaje de un corte. Devuelve null si ya está en la hoja.
   const filaMontajeDeCorte = (ct) => {
     const ord = [...cortes].sort((a, b) => b - a);
@@ -1024,6 +1058,8 @@ const bdVideoTargetRef = useRef(null);
   const borrarNotaVoz = (nota) => {
     if (!nota) return;
     setNotasVoz((prev) => prev.filter((n) => !(n === nota || (n && nota && n.numero === nota.numero))));
+    // quitar también de Montaje si se había insertado
+    setFilasMontaje((prev) => prev.filter((f) => !(f && f.tipo === 'nota' && f.notaNumero === nota.numero)));
   };
   const parsearTiempo = (str) => {
     const partes = String(str).trim().split(':').map(Number);
@@ -6403,7 +6439,19 @@ const terminar = () => {
                     </select>
                     {filtroAccionCortes === '__notas__' ? (
                       notasVoz.length ? (
-                        <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} onAjustarMinuto={ajustarMinutoNota} onBorrar={borrarNotaVoz} />
+                        <NotasVozPanel
+                          notas={notasVoz}
+                          onSeekMinuto={seekMinutoNota}
+                          onAjustarMinuto={ajustarMinutoNota}
+                          onBorrar={borrarNotaVoz}
+                          getMarcada={(n) => !!corteNumAzul[claveNumNota(n)]}
+                          onClickNumero={(n) => {
+                            const k = claveNumNota(n);
+                            if (corteNumAzul[k]) { toggleCorteNumAzul(k); return; }
+                            toggleCorteNumAzul(k);
+                            pasarNotaAMontaje(n);
+                          }}
+                        />
                       ) : (
                         <span style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '0.2rem 0.4rem' }}>Sin notas</span>
                       )
