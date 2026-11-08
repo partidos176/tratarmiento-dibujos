@@ -6,6 +6,7 @@ import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 // no ahorraba nada: Vite lo avisa con INEFFECTIVE_DYNAMIC_IMPORT.
 import { fetchFile } from '@ffmpeg/util';
 import { estimarDuracionMontaje } from './estimacionMontaje';
+import NotasVozPanel from './NotasVozPanel';
 
 // Se restaura la sesión guardada al arrancar: las claves locales y el
 // IndexedDB se leen en los efectos de montaje (ver abajo). No se borra nada
@@ -250,6 +251,7 @@ const [hoja, setHoja] = useState('Base de datos');
   const [videosBD, setVideosBD] = useState([]);
   const [selVideoBD, setSelVideoBD] = useState(null);
   const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
+  const [notasVoz, setNotasVoz] = useState([]);
   useEffect(() => { try { localStorage.setItem('bd_archivos', JSON.stringify(archivosBD)); } catch (_) {} }, [archivosBD]);
 const [previewMontaje, setPreviewMontaje] = useState(null);
 const previewVideoRef = useRef(null);
@@ -4410,6 +4412,12 @@ const terminar = () => {
     reader.onload = async () => {
       try {
         let data = JSON.parse(reader.result);
+        // Notas de voz (export "base datos" de futbol): se guardan antes de
+        // transformar el formato, porque la rama "copia de partido" reemplaza data.
+        const notasImp = Array.isArray(data && data.notasVoz)
+          ? data.notasVoz
+          : (Array.isArray(data && data.notas) ? data.notas : (Array.isArray(data && data.voiceNotes) ? data.voiceNotes : []));
+        setNotasVoz(notasImp);
         // Una copia de partido de la app futbol (app='futboltotal-copia-partido')
         // no trae la lista 'filas'. Se derivan los cortes de su registro de
         // acciones (payload.actionLog / actionLog) para poder cargarla aqui.
@@ -6273,6 +6281,7 @@ const terminar = () => {
               </button>
             )}
           </div>
+          <NotasVozPanel notas={notasVoz} />
           {cortesVideoUrl && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
               <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
@@ -7741,6 +7750,7 @@ const terminar = () => {
                 setShowModalDescarga(false);
                 setAviso(null);
                 setAvisoCopia(null);
+                setNotasVoz([]);
               }}
               style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
