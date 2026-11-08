@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 
 // Muestra las notas de voz importadas desde el export "base datos" (futbol).
 // Cada nota: { numero, minuto, texto/nota, dataUrl/audio, tipo, ... }
-export default function NotasVozPanel({ notas }) {
+export default function NotasVozPanel({ notas, onSeekMinuto }) {
   const items = Array.isArray(notas) ? notas : [];
   const [sonando, setSonando] = useState(null); // numero de nota sonando
   const refs = useRef({});
@@ -59,7 +59,13 @@ export default function NotasVozPanel({ notas }) {
                   />
                 </>
               ) : null}
-              <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#38bdf8', minWidth: '54px', flex: '0 0 auto' }}>{n.minuto ? `MIN ${n.minuto}` : '—'}</span>
+              <span
+                onClick={() => onSeekMinuto && n.minuto && onSeekMinuto(n.minuto)}
+                title={onSeekMinuto && n.minuto ? 'Ir al vídeo en este minuto' : ''}
+                style={{ fontWeight: 800, fontSize: '0.85rem', color: '#38bdf8', minWidth: '54px', flex: '0 0 auto', cursor: onSeekMinuto && n.minuto ? 'pointer' : 'default', textDecoration: onSeekMinuto && n.minuto ? 'underline' : 'none', textUnderlineOffset: '2px' }}
+              >
+                {n.minuto ? `MIN ${n.minuto}` : '—'}
+              </span>
               <span style={{ flex: 1, minWidth: '160px', color: texto ? '#e2e8f0' : '#64748b', fontFamily: 'Inter, sans-serif', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
                 {texto || '(sin texto)'}
               </span>

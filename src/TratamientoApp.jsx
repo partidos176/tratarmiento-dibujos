@@ -1002,6 +1002,19 @@ const bdVideoTargetRef = useRef(null);
     if (!Number.isFinite(n)) return n;
     return Math.max(0, n - offsetDeVideo(n));
   };
+  // Lleva el reproductor de cortes al minuto de partido de una nota.
+  const seekMinutoNota = (minuto) => {
+    const v = videoRefCortes.current;
+    if (!v || !minuto) return;
+    const secs = parsearTiempo(minuto);
+    if (secs == null) return;
+    const { off1, off2, seg2 } = offsetCortes;
+    const hay = off1 != null || off2 != null;
+    const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
+    const f2 = off2 != null ? off2 : f1;
+    const off = hay ? ((seg2 != null && secs >= seg2) ? f2 : f1) : 0;
+    try { v.currentTime = Math.max(0, secs + off); } catch (_) {}
+  };
   const parsearTiempo = (str) => {
     const partes = String(str).trim().split(':').map(Number);
     if (partes.some(n => Number.isNaN(n))) return null;
@@ -4444,10 +4457,9 @@ const terminar = () => {
         // solo trae los offsets para poder mostrar el minuto de PARTIDO: hay que
         // NO volver a convertirlos (si no, se desfasarian dos veces).
         const hayOff = tieneOffsets;
-        // Los offsets vienen solo en el archivo importado: se usan para situar
-        // los cortes, pero ya no se editan desde la app (la hoja de
-        // Sincronización se ha retirado).
-        // setOffsetCortes(tieneOffsets ? { off1: f1, off2: f2, seg2 } : { off1: null, off2: null, seg2: null });
+        // Offsets del archivo importado (partido -> vídeo). Se guardan para poder
+        // situar, p. ej., el minuto de las notas de voz en el reproductor.
+        setOffsetCortes(tieneOffsets ? { off1, off2, seg2 } : { off1: null, off2: null, seg2: null });
         const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
         const f2 = off2 != null ? off2 : f1;
         const aplicar = (t) => {
@@ -6084,7 +6096,7 @@ const terminar = () => {
             style={{ display: 'none' }}
             onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
           />
-          <NotasVozPanel notas={notasVoz} />
+          <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} />
             <div style={{ display: 'flex', gap: '1rem', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ width: '100%', maxWidth: '800px', flex: '1 1 520px' }}>
             <input
@@ -6282,7 +6294,7 @@ const terminar = () => {
               </button>
             )}
           </div>
-          <NotasVozPanel notas={notasVoz} />
+          <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} />
           {cortesVideoUrl && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
               <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
@@ -6366,7 +6378,7 @@ const terminar = () => {
                       ))}
                     </select>
                     {filtroAccionCortes === '__notas__' ? (
-                      <NotasVozPanel notas={notasVoz} />
+                      <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} />
                     ) : (
                     <>
                     {visibles.length === 0 && (
