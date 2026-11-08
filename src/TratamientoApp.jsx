@@ -1,5 +1,5 @@
 ﻿import { useState, useRef, useEffect } from 'react';
-import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD } from './persistencia';
+import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD, borrarTodoLocal } from './persistencia';
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 // fetchFile sale solo de aqui. Antes ademas se hacia un await import('@ffmpeg/util')
 // en cuatro sitios mas, pero como el modulo ya se carga de forma estatica ese await
@@ -7759,6 +7759,17 @@ const terminar = () => {
               Exportar
             </button>
             <button
+              onClick={async () => {
+                if (!window.confirm('¿Borrar TODO? Se eliminarán base de datos, vídeos, cortes, montaje, capturas, notas y la sesión guardada. Esta acción no se puede deshacer.')) return;
+                try { await borrarTodoLocal(); } catch (_) {}
+                window.location.reload();
+              }}
+              title="Borra todos los datos locales y recarga la aplicación"
+              style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
+            >
+              Borrar todo
+            </button>
+            <button
               onClick={() => {
                 // Limpiar lo deja TODO a cero en esta hoja: filas, selección,
                 // vista previa (pausada y reseteada), cortes, vídeo de cortes
@@ -7802,7 +7813,7 @@ const terminar = () => {
                 setAvisoCopia(null);
                 setNotasVoz([]);
               }}
-              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
             >
               Limpiar
             </button>
