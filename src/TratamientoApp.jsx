@@ -7760,60 +7760,13 @@ const terminar = () => {
             </button>
             <button
               onClick={async () => {
-                if (!window.confirm('¿Borrar TODO? Se eliminarán base de datos, vídeos, cortes, montaje, capturas, notas y la sesión guardada. Esta acción no se puede deshacer.')) return;
+                if (!window.confirm('¿Limpiar TODO? Se eliminarán base de datos, vídeos, cortes, montaje, capturas, notas y la sesión guardada. Esta acción no se puede deshacer.')) return;
+                try { borrarVideosCopiados(); } catch (_) {}
                 try { await borrarTodoLocal(); } catch (_) {}
                 window.location.reload();
               }}
               title="Borra todos los datos locales y recarga la aplicación"
-              style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
-            >
-              Borrar todo
-            </button>
-            <button
-              onClick={() => {
-                // Limpiar lo deja TODO a cero en esta hoja: filas, selección,
-                // vista previa (pausada y reseteada), cortes, vídeo de cortes
-                // cargado, informe y avisos. No toca otras hojas (archivo,
-                // vídeos) ni el servidor. Lo copiado a la carpeta del servidor
-                // sí se borra: al limpiar ya no se va a descargar ese vídeo.
-                try { borrarVideosCopiados(); } catch (_) {}
-                try { if (previewVideoRef.current) previewVideoRef.current.pause(); } catch (_) {}
-                try { limpiarTimerAnim(); } catch (_) {}
-                try { animActualRef.current = null; } catch (_) {}
-                try { animMostradasRef.current.clear(); } catch (_) {}
-                try { deseaPlayPreviewRef.current = false; } catch (_) {}
-                try { retomarEnRef.current = null; } catch (_) {}
-                try { prevTPreviewRef.current = null; } catch (_) {}
-                try { localStorage.removeItem('preview_anim'); } catch (_) {}
-                setFasePreview('base');
-                setPreviewT(null);
-                setPreviewDur(0);
-                setPreviewMontaje(null);
-                setFilasMontaje([]);
-                setLineasSelMontaje({});
-                setFilaSelMontaje(null);
-                setSelPeriodoMontaje({});
-                setCortes([]);
-                setDuracionCortes({});
-                setNombreCortes({});
-                setAccionCortes({});
-                setFiltroAccionCortes('');
-                const prevUrl = cortesVideoUrl || videoUrlCortes;
-                if (prevUrl) URL.revokeObjectURL(prevUrl);
-                setArchivoCortes(null);
-                setVideoUrlCortes('');
-                setCortesArchivo(null);
-                setCortesVideoUrl('');
-                setCapturas([]);
-                setInformeDescarga('');
-                try { setProgresoDescarga(0); } catch (_) {}
-                setShowTransiciones(false);
-                setShowModalDescarga(false);
-                setAviso(null);
-                setAvisoCopia(null);
-                setNotasVoz([]);
-              }}
-              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer', marginLeft: 'auto' }}
             >
               Limpiar
             </button>

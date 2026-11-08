@@ -33,7 +33,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 
 ### 4. `Montaje`
 - Composición de filas/tramos de vídeo e imágenes.
-- `Limpiar`: vacía solo esta hoja (montaje/cortes/capturas/vista previa). `Borrar todo` (con confirmación): borra todos los datos locales (base de datos, vídeos, cortes, montaje, capturas, notas y sesión) y recarga la app.
+- `Limpiar` (con confirmación): borra todos los datos locales (base de datos, vídeos, cortes, montaje, capturas, notas y sesión) y recarga la app.
 - Fundidos y transiciones.
 - Reproducción de preview.
 - El botón *Imagen* de la hoja Montaje acepta también archivos de vídeo
