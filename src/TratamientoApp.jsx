@@ -6347,7 +6347,7 @@ const terminar = () => {
                       return String(nombreCortes[k] || '').split('(')[0].trim();
                     };
                     const accionesCortes = [...new Set(ord.map(accionDeCorte).filter(Boolean))].sort();
-                    const visibles = filtroAccionCortes ? ord.filter((ct) => accionDeCorte(ct) === filtroAccionCortes) : ord;
+                    const visibles = (filtroAccionCortes && filtroAccionCortes !== '__notas__') ? ord.filter((ct) => accionDeCorte(ct) === filtroAccionCortes) : ord;
                     return (
                     <>
                     <select
@@ -6358,10 +6358,17 @@ const terminar = () => {
                       style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.4rem 0.5rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', outline: 'none', width: '100%' }}
                     >
                       <option value="">TODAS LAS ACCIONES ({ord.length})</option>
+                      {notasVoz.length > 0 && (
+                        <option value="__notas__" style={{ color: '#eab308' }}>NOTAS ({notasVoz.length})</option>
+                      )}
                       {accionesCortes.map((a) => (
                         <option key={a} value={a}>{a} ({ord.filter((ct) => accionDeCorte(ct) === a).length})</option>
                       ))}
                     </select>
+                    {filtroAccionCortes === '__notas__' ? (
+                      <NotasVozPanel notas={notasVoz} />
+                    ) : (
+                    <>
                     {visibles.length === 0 && (
                       <span style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '0.2rem 0.4rem' }}>Ningún corte con esa acción</span>
                     )}
@@ -6403,6 +6410,8 @@ const terminar = () => {
                       </div>
                     );
                     })}
+                    </>
+                    )}
                     </>
                     );
                   })()}
