@@ -6135,6 +6135,22 @@ const terminar = () => {
                 bdVideoTargetRef.current = null;
               }}
             />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+              <button
+                onClick={() => {
+                  if (!window.confirm('¿Limpiar la hoja Base de datos (registros y vídeos) y las notas cargadas?')) return;
+                  setArchivosBD([]);
+                  setVideosBD([]);
+                  setNotasVoz([]);
+                  try { localStorage.removeItem('bd_archivos'); } catch (_) {}
+                  try { localStorage.removeItem('bd_videos'); } catch (_) {}
+                }}
+                title="Borra los registros, vídeos y notas de la hoja Base de datos"
+                style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.45rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', color: '#ffffff', cursor: 'pointer' }}
+              >
+                Limpiar base de datos
+              </button>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Inter, sans-serif' }}>
               <thead>
                 <tr style={{ background: 'rgba(14,165,233,0.15)' }}>

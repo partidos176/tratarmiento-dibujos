@@ -13,6 +13,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Alta de registros y asociación de vídeos.
 - Importación de montajes en JSON (incluye notas de voz del export «base datos» de `futbol`: texto y audio), con el mismo formato que las acciones: disponibles solo en el desplegable `NOTAS` de `Cortes` (minuto clicable → va al reproductor, `-`/`+` ajustan el tiempo, `×` elimina, ▶/■ reproduce el audio).
 - Gestión de vídeos ocultos y biblioteca local.
+- Botón «Limpiar base de datos» (con confirmación) para borrar registros, vídeos y notas de la hoja.
 - Persistencia de vídeos en IndexedDB.
 
 ### 2. `Cortes`
