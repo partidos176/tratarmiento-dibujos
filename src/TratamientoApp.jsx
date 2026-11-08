@@ -1004,7 +1004,7 @@ const bdVideoTargetRef = useRef(null);
   };
   // Lleva el reproductor de cortes al minuto de partido de una nota.
   const seekMinutoNota = (minuto) => {
-    const v = videoRefCortes.current;
+    const v = videoRefCortes.current || videoRef.current;
     if (!v || !minuto) return;
     const secs = parsearTiempo(minuto);
     if (secs == null) return;
