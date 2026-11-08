@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 
 // Filas de notas con el mismo formato que los otros tipos de acción en CORTES.
 // Cada nota: { numero, minuto, texto/nota, dataUrl/audio, tipo, ... }
-export default function NotasVozPanel({ notas, onSeekMinuto }) {
+export default function NotasVozPanel({ notas, onSeekMinuto, onAjustarMinuto, onBorrar }) {
   const items = Array.isArray(notas) ? notas : [];
   const [sonando, setSonando] = useState(null); // numero de nota sonando
   const refs = useRef({});
@@ -70,6 +70,17 @@ export default function NotasVozPanel({ notas, onSeekMinuto }) {
                 />
               </>
             ) : null}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0 }}>
+              <button onClick={(e) => { e.stopPropagation(); if (onAjustarMinuto) onAjustarMinuto(n, -1); }} title="Retroceder 1s" style={{ background: '#f97316', color: '#fff', fontWeight: 900, fontSize: '0.7rem', border: 'none', borderRadius: '4px', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>-</button>
+              <button onClick={(e) => { e.stopPropagation(); if (onAjustarMinuto) onAjustarMinuto(n, 1); }} title="Avanzar 1s" style={{ background: '#22c55e', color: '#fff', fontWeight: 900, fontSize: '0.7rem', border: 'none', borderRadius: '4px', width: '20px', height: '20px', cursor: 'pointer', lineHeight: 1 }}>+</button>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); if (onBorrar) onBorrar(n); }}
+              title={`Eliminar nota${n.numero != null ? ' ' + n.numero : ''}`}
+              style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '22px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
+            >
+              ×
+            </button>
           </div>
         );
       })}

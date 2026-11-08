@@ -1015,6 +1015,16 @@ const bdVideoTargetRef = useRef(null);
     const off = hay ? ((seg2 != null && secs >= seg2) ? f2 : f1) : 0;
     try { v.currentTime = Math.max(0, secs + off); } catch (_) {}
   };
+  const ajustarMinutoNota = (nota, delta) => {
+    if (!nota) return;
+    const secs = Math.max(0, (parsearTiempo(nota.minuto) ?? 0) + delta);
+    const nuevo = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+    setNotasVoz((prev) => prev.map((n) => (n === nota || (n && nota && n.numero === nota.numero) ? { ...n, minuto: nuevo } : n)));
+  };
+  const borrarNotaVoz = (nota) => {
+    if (!nota) return;
+    setNotasVoz((prev) => prev.filter((n) => !(n === nota || (n && nota && n.numero === nota.numero))));
+  };
   const parsearTiempo = (str) => {
     const partes = String(str).trim().split(':').map(Number);
     if (partes.some(n => Number.isNaN(n))) return null;
@@ -6096,7 +6106,6 @@ const terminar = () => {
             style={{ display: 'none' }}
             onChange={(e) => { importarMontaje(e.target.files && e.target.files[0]); e.target.value = ''; }}
           />
-          <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} />
             <div style={{ display: 'flex', gap: '1rem', width: '100%', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ width: '100%', maxWidth: '800px', flex: '1 1 520px' }}>
             <input
@@ -6294,7 +6303,6 @@ const terminar = () => {
               </button>
             )}
           </div>
-          <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} />
           {cortesVideoUrl && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
               <div id="cortes-video-wrap" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: '1 1 0', minWidth: 0 }}>
@@ -6378,7 +6386,11 @@ const terminar = () => {
                       ))}
                     </select>
                     {filtroAccionCortes === '__notas__' ? (
-                      <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} />
+                      notasVoz.length ? (
+                        <NotasVozPanel notas={notasVoz} onSeekMinuto={seekMinutoNota} onAjustarMinuto={ajustarMinutoNota} onBorrar={borrarNotaVoz} />
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '0.2rem 0.4rem' }}>Sin notas</span>
+                      )
                     ) : (
                     <>
                     {visibles.length === 0 && (
