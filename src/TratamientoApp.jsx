@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD, borrarTodoLocal } from './persistencia';
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 // fetchFile sale solo de aqui. Antes ademas se hacia un await import('@ffmpeg/util')
@@ -113,6 +113,8 @@ const [hoja, setHoja] = useState('Base de datos');
   const [abrirCarpetaAlOK, setAbrirCarpetaAlOK] = useState(false);
   const [modoPolilinea, setModoPolilinea] = useState(false);
   const [puntosPolilinea, setPuntosPolilinea] = useState([]);
+  const [modoCuadrado, setModoCuadrado] = useState(false);
+  const [puntosCuadrado, setPuntosCuadrado] = useState([]);
   const [cortes, setCortes] = useState([]);
   const [duracionCortes, setDuracionCortes] = useState({});
   const [nombreCortes, setNombreCortes] = useState({});
@@ -1039,15 +1041,21 @@ const bdVideoTargetRef = useRef(null);
   // Lleva el reproductor de cortes al minuto de partido de una nota.
   const seekMinutoNota = (minuto) => {
     const v = videoRefCortes.current || videoRef.current;
-    if (!v || !minuto) return;
+    if (!v || minuto == null || minuto === '') return;
     const secs = parsearTiempo(minuto);
     if (secs == null) return;
-    const { off1, off2, seg2 } = offsetCortes;
+    const { off1, off2, seg2 } = offsetCortes || {};
     const hay = off1 != null || off2 != null;
     const f1 = off1 != null ? off1 : (off2 != null ? off2 : 0);
     const f2 = off2 != null ? off2 : f1;
     const off = hay ? ((seg2 != null && secs >= seg2) ? f2 : f1) : 0;
-    try { v.currentTime = Math.max(0, secs + off); } catch (_) {}
+    const target = Math.max(0, secs + off);
+    try { setAviso('Seek ' + minuto + ' -> ' + target.toFixed(1) + 's'); } catch (_) {}
+    try {
+      v.currentTime = target;
+      const p = v.play();
+      if (p && typeof p.catch === 'function') p.catch((e) => { try { setAviso('play error: ' + (e && e.message ? e.message : e)); } catch (_) {} });
+    } catch (e) { try { setAviso('play throw: ' + (e && e.message ? e.message : e)); } catch (_) {} }
   };
   const ajustarMinutoNota = (nota, delta) => {
     if (!nota) return;
@@ -5453,6 +5461,22 @@ const terminar = () => {
       return `<path d="M ${x1} ${y1} A ${erx} ${ery} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${f.color}" stroke-opacity="${f.opacidad ?? 1}" stroke-width="${sw}" stroke-linecap="round"/>`;
     }
 
+    if (f.tipo === 'cuadrado' && Array.isArray(f.puntos) && f.puntos.length >= 3) {
+      const dash = f.discontinuo ? ' stroke-dasharray="6,4"' : '';
+      const cx = f.puntos.reduce((s, p) => s + p.x, 0) / f.puntos.length;
+      const cy = f.puntos.reduce((s, p) => s + p.y, 0) / f.puntos.length;
+      const pts = f.puntos.map(p => (cx + (p.x - cx) * e) * d.w + ',' + (cy + (p.y - cy) * e) * d.h).join(' ');
+      return pat + '<polygon points="' + pts + '" ' + common + dash + '/>';
+    }
+    if (f.tipo === 'cuadrado') {
+      const x = f.x * d.w;
+      const y = f.y * d.h;
+      const w = (f.ancho ?? 0.1) * d.w * e;
+      const h = (f.alto ?? 0.1) * d.h * e;
+      const rot = f.rot ? ` transform="rotate(${f.rot} ${x} ${y})"` : '';
+      return `${pat}<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}"${rot} ${common}/>`;
+    }
+
     const cx = f.x * d.w;
     const cy = f.y * d.h;
     const rx = (f.ancho * d.w / 2) * e;
@@ -6681,7 +6705,7 @@ const terminar = () => {
                       />
                     </div>
                   )}
-                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'flecha' && (
+                  {(figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'flecha' || figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'cuadrado') && (
                     <button
                       onClick={() => actualizarFigura(figuraSeleccionada, { discontinuo: !figuras.find(f => f.id === figuraSeleccionada)?.discontinuo })}
                       title="Continuidad de la flecha"
@@ -6710,7 +6734,7 @@ const terminar = () => {
                         max="360"
                         value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
                         onChange={(e) => actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) })}
-                        title="Rotación del círculo"
+                        title="Rotación de la figura"
                         style={{ width: '120px', cursor: 'pointer' }}
                       />
                     </div>
@@ -6727,6 +6751,23 @@ const terminar = () => {
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round">
                 <polygon points="12,3 22,20 2,20" />
+              </svg>
+            </button>
+            <button
+               onClick={(e) => {
+                 e.stopPropagation();
+                 setModoLineaClick(false); lineaOrigenRef.current = null;
+                 setModoFlechaClick(false); flechaOrigenRef.current = null;
+                 setModoCirculoClick(false); elipsesSessionRef.current = [];
+                 setFiguraClickPendiente(null);
+                 if (modoCuadrado) { setModoCuadrado(false); setPuntosCuadrado([]); }
+                 else { setModoCuadrado(true); setPuntosCuadrado([]); setFiguraSeleccionada(null); }
+               }}
+               title={modoCuadrado ? 'Cancelar cuadrado' : 'Añadir cuadrado con 4 clics'}
+               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: modoCuadrado ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round">
+                <rect x="5" y="5" width="14" height="14" />
               </svg>
             </button>
             <button
@@ -6954,7 +6995,30 @@ const terminar = () => {
               }
               return;
             }
-            if (modoPolilinea) {
+            if (modoCuadrado) {
+              const p = puntoImagen(e);
+              if (p) {
+                const pt = { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) };
+                setPuntosCuadrado(prev => {
+                  const next = [...prev, pt];
+                  if (next.length >= 4) {
+                    const id = Date.now();
+                    setFiguras(curr => [...curr, { id, tipo: 'cuadrado', puntos: next.slice(0,4), color: '#f97316', opacidad: 0.7, crecimiento: 0 }]);
+                    setFiguraSeleccionada(id);
+                    setModoCuadrado(false);
+                    const t0 = performance.now();
+                    const pasoCuad = (t) => {
+                      const pp = Math.min(1, (t - t0) / 50);
+                      setFiguras(curr => curr.map(f => f.id === id ? { ...f, crecimiento: pp } : f));
+                      if (pp < 1) requestAnimationFrame(pasoCuad);
+                    };
+                    requestAnimationFrame(pasoCuad);
+                    return [];
+                  }
+                  return next;
+                });
+              }
+            } else if (modoPolilinea) {
               const p = puntoImagen(e);
               if (p) setPuntosPolilinea(prev => [...prev, { x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) }]);
             } else {
@@ -6981,7 +7045,7 @@ const terminar = () => {
                         const p = puntoImagen(e);
                         if (!p) return;
                         if (d.tipo === 'mover') {
-                          if (d.tipoFig === 'polilinea') {
+                          if (d.tipoFig === 'polilinea' || (d.tipoFig === 'cuadrado' && Array.isArray(d.puntos))) {
                             const dx = p.x - d.px;
                             const dy = p.y - d.py;
                             actualizarFigura(d.id, { puntos: (d.puntos || []).map(pt => ({ x: pt.x + dx, y: pt.y + dy })) });
@@ -7076,6 +7140,7 @@ const terminar = () => {
                           fillOpacity: f.sinRelleno ? 0 : (f.opacidad ?? 0.5),
                           stroke: f.color,
                           strokeWidth: sel ? 3 : 2,
+                          strokeDasharray: f.discontinuo ? '6,4' : undefined,
                           style: { pointerEvents: 'all', cursor: 'move' },
                           onClick: (e) => { e.stopPropagation(); setFiguraSeleccionada(f.id); },
                           onPointerDown: (e) => {
@@ -7102,8 +7167,18 @@ const terminar = () => {
                               const dTri = pathTrianguloRedondeado({ x, y: apexYTri }, { x: x - hwTri, y: baseYTri }, { x: x + hwTri, y: baseYTri }, Math.min(ancho, alto) * 0.12 * eTri);
                               return <path {...shapeProps} d={dTri} />;
                             })()
-                           : f.tipo === 'circulo'
-                             ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} />
+                           : f.tipo === 'cuadrado'
+                              ? (Array.isArray(f.puntos)
+                                  ? (() => {
+                                      const e = f.crecimiento ?? 1;
+                                      const cx = f.puntos.reduce((s,p)=>s+p.x,0)/f.puntos.length;
+                                      const cy = f.puntos.reduce((s,p)=>s+p.y,0)/f.puntos.length;
+                                      const pts = f.puntos.map(p => (cx + (p.x-cx)*e)*imgDim.w + ',' + (cy + (p.y-cy)*e)*imgDim.h).join(' ');
+                                      return <polygon {...shapeProps} points={pts} />;
+                                    })()
+                                  : <rect {...shapeProps} x={x - ancho / 2} y={y - alto / 2} width={ancho} height={alto} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} />)
+                            : f.tipo === 'circulo'
+                              ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} />
                            : f.tipo === 'c'
                              ? (() => {
                                  const eC = f.crecimiento ?? 1;
@@ -7309,7 +7384,7 @@ const terminar = () => {
                                   />
                                 )}
                               </>
-                            ) : f.tipo === 'polilinea' ? (
+                            ) : (f.tipo === 'polilinea' || (f.tipo === 'cuadrado' && Array.isArray(f.puntos))) ? (
                               <>
                                 {(f.puntos || []).map((p, i) => (
                                   <circle
@@ -7519,6 +7594,19 @@ const terminar = () => {
                           ))}
                         </g>
                       )}
+                       {modoCuadrado && puntosCuadrado.length > 0 && (
+                         <g style={{ pointerEvents: 'none' }}>
+                           {puntosCuadrado.length > 1 && (
+                             <polyline points={puntosCuadrado.map(p => p.x * imgDim.w + ',' + p.y * imgDim.h).join(' ')} fill="none" stroke="#f97316" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,3" />
+                           )}
+                           {puntosCuadrado.length === 4 && (
+                             <line x1={puntosCuadrado[3].x * imgDim.w} y1={puntosCuadrado[3].y * imgDim.h} x2={puntosCuadrado[0].x * imgDim.w} y2={puntosCuadrado[0].y * imgDim.h} stroke="#f97316" strokeWidth="3" strokeDasharray="4,3" />
+                           )}
+                           {puntosCuadrado.map((p, i) => (
+                             <circle key={i} cx={p.x * imgDim.w} cy={p.y * imgDim.h} r="6" fill="#f97316" stroke="#ffffff" strokeWidth="2" />
+                           ))}
+                         </g>
+                       )}
                     </svg>
                   )}
                 </div>

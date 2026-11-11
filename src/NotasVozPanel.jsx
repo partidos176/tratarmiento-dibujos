@@ -34,9 +34,19 @@ export default function NotasVozPanel({ notas, onSeekMinuto, onAjustarMinuto, on
         return (
           <div
             key={key}
-            onClick={() => onSeekMinuto && n.minuto && onSeekMinuto(n.minuto)}
-            title={onSeekMinuto && n.minuto ? 'Ir al vídeo en este minuto' : ''}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.45rem 0.6rem', cursor: onSeekMinuto && n.minuto ? 'pointer' : 'default', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}
+            onClick={() => { 
+              if (!onSeekMinuto || n.minuto == null || n.minuto === '') return;
+              onSeekMinuto(n.minuto);
+              if (audio) {
+                const audioEl = refs.current[n.numero];
+                if (audioEl) {
+                  audioEl.currentTime = 0;
+                  audioEl.play().catch(() => {});
+                }
+              }
+            }}
+            title={onSeekMinuto && n.minuto != null && n.minuto !== '' ? 'Ir al vídeo en este minuto y oír nota de voz' : ''}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0.45rem 0.6rem', cursor: onSeekMinuto && n.minuto != null && n.minuto !== '' ? 'pointer' : 'default', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}
           >
             <span
               onClick={(e) => {
@@ -48,7 +58,11 @@ export default function NotasVozPanel({ notas, onSeekMinuto, onAjustarMinuto, on
               style={{ width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: onClickNumero ? 'pointer' : 'default', borderRadius: '50%', fontWeight: 900, fontSize: '0.75rem', background: (getMarcada && getMarcada(n)) ? '#38bdf8' : 'transparent', color: (getMarcada && getMarcada(n)) ? '#0f172a' : '#e2e8f0' }}
             >{n.numero ?? '—'}</span>
             <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              <span style={{ color: '#38bdf8', textDecoration: onSeekMinuto && n.minuto ? 'underline' : 'none', cursor: onSeekMinuto && n.minuto ? 'pointer' : 'default' }}>{n.minuto ? `MIN ${n.minuto}` : '—'}</span>
+              <button
+                type="button"
+                onClick={(e) => { if (!onSeekMinuto || n.minuto == null || n.minuto === '') return; e.stopPropagation(); onSeekMinuto(n.minuto); }}
+                style={{ background: 'transparent', border: 'none', color: '#38bdf8', textDecoration: onSeekMinuto && n.minuto != null && n.minuto !== '' ? 'underline' : 'none', cursor: onSeekMinuto && n.minuto != null && n.minuto !== '' ? 'pointer' : 'default', padding: 0, font: 'inherit' }}
+              >{n.minuto != null && n.minuto !== '' ? `MIN ${n.minuto}` : '—'}</button>
             </span>
             <input
               value={texto}
