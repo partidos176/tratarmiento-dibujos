@@ -24,7 +24,8 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 
 ### 3. `Edición`
 - Captura de frames del vídeo.
-- Dibujo de figuras: triángulos redondeados, cuadrados, elipses, líneas, flechas y trazos.
+- Dibujo de figuras: triángulos redondeados, cuadrados, elipses, líneas, flechas, cilindros y trazos.
+- En el círculo/ellipse y en el cuadrado se puede ajustar el grosor del borde y ponerlo en discontinuo (igual que flechas).
 - Selección, movimiento y borrado de figuras.
 - Menú contextual (botón derecho) sobre una figura con opciones: copiar, borrar, agrandar y cambiar color.
 - Pantalla completa del editor.

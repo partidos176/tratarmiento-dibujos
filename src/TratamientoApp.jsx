@@ -5212,7 +5212,7 @@ const terminar = () => {
 
   const anadirCirculo = () => {
     const id = Date.now();
-    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0, rot: 0 }]);
+    setFiguras(prev => [...prev, { id, tipo: 'circulo', x: 0.5, y: 0.5, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0, rot: 0, grosor: 0.005 }]);
     setFiguraSeleccionada(id);
   };
 
@@ -5466,7 +5466,8 @@ const terminar = () => {
       const cx = f.puntos.reduce((s, p) => s + p.x, 0) / f.puntos.length;
       const cy = f.puntos.reduce((s, p) => s + p.y, 0) / f.puntos.length;
       const pts = f.puntos.map(p => (cx + (p.x - cx) * e) * d.w + ',' + (cy + (p.y - cy) * e) * d.h).join(' ');
-      return pat + '<polygon points="' + pts + '" ' + common + dash + '/>';
+      const swSq = (f.grosor != null) ? f.grosor * d.h : 2;
+       return pat + '<polygon points="' + pts + '" fill="' + fill + '" fill-opacity="' + (f.sinRelleno ? 0 : op) + '" stroke="' + f.color + '" stroke-opacity="' + op + '" stroke-width="' + swSq + '"' + dash + '/>';
     }
     if (f.tipo === 'cuadrado') {
       const x = f.x * d.w;
@@ -5474,16 +5475,39 @@ const terminar = () => {
       const w = (f.ancho ?? 0.1) * d.w * e;
       const h = (f.alto ?? 0.1) * d.h * e;
       const rot = f.rot ? ` transform="rotate(${f.rot} ${x} ${y})"` : '';
-      return `${pat}<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}"${rot} ${common}/>`;
+      const swSq2 = (f.grosor != null) ? f.grosor * d.h : 2;
+       return `${pat}<rect x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}"${rot} fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : op}" stroke="${f.color}" stroke-opacity="${op}" stroke-width="${swSq2}"/>`;
     }
 
-    const cx = f.x * d.w;
-    const cy = f.y * d.h;
-    const rx = (f.ancho * d.w / 2) * e;
+    if (f.tipo === 'cilindro') {
+       const cx = f.x * d.w;
+       const cy = f.y * d.h;
+       const w = (f.ancho ?? 0.12) * d.w;
+       const fullH = (f.alto ?? 0.2) * d.h;
+       const h = fullH * e;
+       const r = Math.max(2, w * 0.18);
+       const topY = cy - fullH / 2;
+       const botY = topY + h;
+       const left = cx - w / 2;
+       const fill = f.sinRelleno ? 'none' : (f.rayado ? `url(#rayado-${f.id})` : f.color);
+       const op = (f.opacidad ?? 0.5) * (f.tipo === 'texto' ? e : 1);
+       const sw = (f.grosor != null) ? f.grosor * d.h : 2;
+       const dash = f.discontinuo ? ' stroke-dasharray="6,4"' : '';
+       const body = `<rect x="${left}" y="${topY}" width="${w}" height="${h}" fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : op}" stroke="none"/>`;
+       const bottom = (e >= 0.99) ? `<ellipse cx="${cx}" cy="${botY}" rx="${w / 2}" ry="${r}" fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : Math.min(1, op + 0.25)}" stroke="none"/>` : '';
+       return `${bottom}${body}`;
+     }
+
+     const cx = f.x * d.w;
+     const cy = f.y * d.h;
+     const rx = (f.ancho * d.w / 2) * e;
     const ry = (f.alto * d.h / 2) * e;
     if (rx <= 0.001 || ry <= 0.001) return '';
     const rot = f.rot ? ` transform="rotate(${f.rot} ${cx} ${cy})"` : '';
-    return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rot} ${common}/>`;
+    const sw = f.sinRelleno ? 1 : (f.grosor != null ? f.grosor * d.h : 2);
+    const strokeColor = f.sinRelleno ? '#ffffff' : f.color;
+    const dash = (!f.sinRelleno && f.discontinuo) ? ' stroke-dasharray="6,4"' : '';
+    return `${pat}<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rot} fill="${fill}" fill-opacity="${f.sinRelleno ? 0 : op}" stroke="${strokeColor}" stroke-opacity="${op}" stroke-width="${sw}"${dash}/>`;
   };
 
   const generarVideo = async (figurasFn, fondoDataUrl, w, h, onProgress) => {
@@ -6539,7 +6563,7 @@ const terminar = () => {
               <div onClick={() => setMenuFigura(null)} style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
               <div onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', left: menuFigura.x, top: menuFigura.y, zIndex: 1000, background: '#1e293b', border: '1px solid #334155', borderRadius: '10px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
                 <button onClick={() => copiarFiguraMenu(menuFigura.id)} style={{ background: '#334155', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Copiar</button>
-                <button onClick={() => borrarFiguraMenu(menuFigura.id)} style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Borrar</button>
+                <button onClick={(e) => { e.stopPropagation(); borrarFiguraMenu(menuFigura.id); }} style={{ background: '#dc2626', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Borrar</button>
                 <button onClick={() => agrandarFiguraMenu(menuFigura.id)} style={{ background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '0.45rem 0.7rem', color: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left' }}>Agrandar</button>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.25rem', marginTop: '0.2rem' }}>
                   {colores.map(c => (
@@ -6673,7 +6697,7 @@ const terminar = () => {
                       style={{ width: '120px', cursor: 'pointer' }}
                     />
                   </div>
-                  {[ 'linea', 'flecha', 'polilinea', 'circuito', 'c'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) ? (
+                  {[ 'linea', 'flecha', 'polilinea', 'circuito', 'c', 'circulo', 'cuadrado'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Grosor
@@ -6705,7 +6729,7 @@ const terminar = () => {
                       />
                     </div>
                   )}
-                  {(figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'flecha' || figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'cuadrado') && (
+                  {(figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'flecha' || figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'cuadrado' || figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo') && (
                     <button
                       onClick={() => actualizarFigura(figuraSeleccionada, { discontinuo: !figuras.find(f => f.id === figuraSeleccionada)?.discontinuo })}
                       title="Continuidad de la flecha"
@@ -6714,7 +6738,7 @@ const terminar = () => {
                       {figuras.find(f => f.id === figuraSeleccionada)?.discontinuo ? 'Continua' : 'Discontinua'}
                     </button>
                   )}
-                  {!['texto', 'linea', 'flecha', 'polilinea', 'circuito'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) && (
+                  {!['texto', 'linea', 'flecha', 'polilinea', 'circuito', 'cilindro'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) && (
                   <button
                     onClick={() => actualizarFigura(figuraSeleccionada, { rayado: !figuras.find(f => f.id === figuraSeleccionada)?.rayado })}
                     title="Rayas en diagonal"
@@ -6723,6 +6747,12 @@ const terminar = () => {
                     Rayas
                   </button>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (figuraSeleccionada) borrarFiguraMenu(figuraSeleccionada); }}
+                    style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.5rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', marginTop: '0.8rem' }}
+                  >
+                    Borrar
+                  </button>
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem', marginTop: '0.8rem' }}>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -6777,6 +6807,17 @@ const terminar = () => {
             >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5">
                 <circle cx="12" cy="12" r="9" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setModoLineaClick(false); lineaOrigenRef.current = null; setModoFlechaClick(false); flechaOrigenRef.current = null; setModoCirculoClick(false); elipsesSessionRef.current = []; setFiguraClickPendiente(prev => prev === 'cilindro' ? null : 'cilindro'); }}
+              title={figuraClickPendiente === 'cilindro' ? 'Cancelar cilindro' : 'Añadir cilindro con click'}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: figuraClickPendiente === 'cilindro' ? '#16a34a' : '#0ea5e9', border: 'none', borderRadius: '12px', padding: '0.7rem', cursor: 'pointer' }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" strokeWidth="1.5">
+                <ellipse cx="12" cy="6" rx="7" ry="3" />
+                <rect x="5" y="6" width="14" height="12" />
+                <ellipse cx="12" cy="18" rx="7" ry="3" />
               </svg>
             </button>
             <button
@@ -6919,7 +6960,11 @@ const terminar = () => {
                   triAnimRef.current = requestAnimationFrame(paso);
                 } else if (figuraClickPendiente === 'circulo') {
                   const id = Date.now();
-                  setFiguras(prev => [...prev, { id, tipo: 'circulo', x, y, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0, rot: 0 }]);
+                  setFiguras(prev => [...prev, { id, tipo: 'circulo', x, y, ancho: 0.2, alto: 0.2, color: '#38bdf8', opacidad: 0.5, crecimiento: 0, rot: 0, grosor: 0.005 }]);
+                  setFiguraSeleccionada(id);
+                } else if (figuraClickPendiente === 'cilindro') {
+                  const id = Date.now();
+                  setFiguras(prev => [...prev, { id, tipo: 'cilindro', x, y, ancho: 0.12, alto: 0.2, color: '#38bdf8', opacidad: 0.7, crecimiento: 1, rot: 0, grosor: 0.005, discontinuo: false }]);
                   setFiguraSeleccionada(id);
                 } else if (figuraClickPendiente === 'c') {
                   const id = Date.now();
@@ -7003,7 +7048,7 @@ const terminar = () => {
                   const next = [...prev, pt];
                   if (next.length >= 4) {
                     const id = Date.now();
-                    setFiguras(curr => [...curr, { id, tipo: 'cuadrado', puntos: next.slice(0,4), color: '#f97316', opacidad: 0.7, crecimiento: 0 }]);
+                    setFiguras(curr => [...curr, { id, tipo: 'cuadrado', puntos: next.slice(0,4), color: '#f97316', opacidad: 0.7, crecimiento: 0, grosor: 0.005 }]);
                     setFiguraSeleccionada(id);
                     setModoCuadrado(false);
                     const t0 = performance.now();
@@ -7174,12 +7219,33 @@ const terminar = () => {
                                       const cx = f.puntos.reduce((s,p)=>s+p.x,0)/f.puntos.length;
                                       const cy = f.puntos.reduce((s,p)=>s+p.y,0)/f.puntos.length;
                                       const pts = f.puntos.map(p => (cx + (p.x-cx)*e)*imgDim.w + ',' + (cy + (p.y-cy)*e)*imgDim.h).join(' ');
-                                      return <polygon {...shapeProps} points={pts} />;
+                                      return <polygon {...shapeProps} points={pts} strokeWidth={Math.max(1, (f.grosor ?? 0.005) * imgDim.h)} />;
                                     })()
-                                  : <rect {...shapeProps} x={x - ancho / 2} y={y - alto / 2} width={ancho} height={alto} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} />)
+                                  : <rect {...shapeProps} x={x - ancho / 2} y={y - alto / 2} width={ancho} height={alto} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} strokeWidth={Math.max(1, (f.grosor ?? 0.005) * imgDim.h)} />)
                             : f.tipo === 'circulo'
-                              ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} />
-                           : f.tipo === 'c'
+                              ? <ellipse {...shapeProps} cx={x} cy={y} rx={ancho / 2} ry={alto / 2} transform={f.rot ? `rotate(${f.rot} ${x} ${y})` : undefined} stroke={f.sinRelleno ? '#ffffff' : f.color} strokeWidth={f.sinRelleno ? 1 : Math.max(1, (f.grosor ?? 0.005) * imgDim.h)} strokeDasharray={f.sinRelleno ? undefined : (f.discontinuo ? '6,4' : undefined)} />
+                           : f.tipo === 'cilindro'
+                              ? (() => {
+                                  const w = ancho;
+                                  const e = f.crecimiento ?? 1;
+                                  const fullH = alto;
+                                  const h = fullH * e;
+                                  const r = Math.max(2, w * 0.18);
+                                  const topY = y - fullH / 2;
+                                  const botY = topY + h;
+                                  const left = x - w / 2;
+                                  const sw = Math.max(1, (f.grosor ?? 0.005) * imgDim.h);
+                                  const dash = f.discontinuo ? '6,4' : undefined;
+                                  const fill = f.sinRelleno ? 'none' : (f.rayado ? `url(#rayado-${f.id})` : f.color);
+                                  const fillOp = f.sinRelleno ? 0 : (f.opacidad ?? 0.5);
+                                  return (
+                                    <g style={{ pointerEvents: 'all', cursor: 'move' }} onClick={shapeProps.onClick} onPointerDown={shapeProps.onPointerDown}>
+                                      {e >= 0.99 && <ellipse cx={x} cy={botY} rx={w / 2} ry={r} fill={fill} fillOpacity={Math.min(1, fillOp + 0.25)} stroke="none" />}
+                                      <rect x={left} y={topY} width={w} height={h} fill={fill} fillOpacity={fillOp} stroke="none" />
+                                    </g>
+                                  );
+                                })()
+                            : f.tipo === 'c'
                              ? (() => {
                                  const eC = f.crecimiento ?? 1;
                                  const exC = x;
