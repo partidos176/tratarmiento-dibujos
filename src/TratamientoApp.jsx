@@ -4510,7 +4510,8 @@ const terminar = () => {
         // Un export de montaje/cortes guarda los tiempos en minutos de VIDEO y
         // solo trae los offsets para poder mostrar el minuto de PARTIDO: hay que
         // NO volver a convertirlos (si no, se desfasarian dos veces).
-        const hayOff = tieneOffsets;
+        const cortesEnVideo = !!(data && data.cortesEnVideo === true);
+        const hayOff = tieneOffsets && !cortesEnVideo;
         // Offsets del archivo importado (partido -> vídeo). Se guardan para poder
         // situar, p. ej., el minuto de las notas de voz en el reproductor.
         setOffsetCortes(tieneOffsets ? { off1, off2, seg2 } : { off1: null, off2: null, seg2: null });
@@ -6523,7 +6524,7 @@ const terminar = () => {
                           style={{ width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', borderRadius: '50%', fontWeight: 900, fontSize: '0.75rem', background: corteNumAzul['c' + ct] ? '#38bdf8' : 'transparent', color: corteNumAzul['c' + ct] ? '#0f172a' : '#e2e8f0' }}
                         >{ord.length - i}</span>
                         <span style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>
-                          <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(aMinutoPartido(ct))}</span> <span style={{ color: '#64748b', margin: '0 0.25rem' }}>—</span> <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(aMinutoPartido(ct) + (duracionCortes[String(ct)] ?? 15))}</span>
+                          <span onClick={(e) => { e.stopPropagation(); setSelPeriodo(`${ct}-ini`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, ct); }} title="Ir al inicio del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-ini` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-ini` ? 'underline' : 'none' }}>{formatoTiempo(ct)}</span> <span style={{ color: '#64748b', margin: '0 0.25rem' }}>—</span> <span onClick={(e) => { e.stopPropagation(); const fin = ct + (duracionCortes[String(ct)] ?? 15); setSelPeriodo(`${ct}-fin`); if (videoRefCortes.current) videoRefCortes.current.currentTime = Math.max(0, fin); }} title="Ir al final del periodo" style={{ cursor: 'pointer', color: selPeriodo === `${ct}-fin` ? '#ef4444' : '#ffffff', textDecoration: selPeriodo === `${ct}-fin` ? 'underline' : 'none' }}>{formatoTiempo(ct + (duracionCortes[String(ct)] ?? 15))}</span>
                         </span>
                         <input
                           value={nombreCortes[String(ct)] ?? ''}
@@ -6538,7 +6539,7 @@ const terminar = () => {
                         </div>
                         <button
                           onClick={(e) => { e.stopPropagation(); const k = String(ct); setCortes(prev => prev.filter((x) => x !== ct)); setDuracionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setNombreCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setAccionCortes(prev => { const c = { ...prev }; delete c[k]; return c; }); setCortesEditados(prev => { const c = { ...prev }; delete c[k]; return c; }); setFotoPorCorte(prev => { const c = { ...prev }; delete c[k]; return c; }); setFilasMontaje(prev => prev.filter(f => f.inicio != null && Math.abs(f.inicio - ct) > 0.01)); }}
-                          title={`Eliminar corte en ${formatoTiempo(aMinutoPartido(ct))}`}
+                          title={`Eliminar corte en ${formatoTiempo(ct)}`}
                           style={{ background: '#dc2626', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.7rem', width: '22px', height: '22px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
                         >
                           ×
