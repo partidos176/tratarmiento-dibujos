@@ -251,39 +251,7 @@ const [hoja, setHoja] = useState('Base de datos');
       return marcadas;
     });
   }, [filasMontaje]);
-  // Marca todos los cortes de la hoja con el circulo azul y los pasa a Montaje.
-  // Equivale a pulsar el numero de cada uno, pero de una vez. No cambia de hoja,
-  // igual que el clic en un numero suelto. Los que ya estuvieran en Montaje no
-  // se duplican.
-  const marcarTodosLosCortes = () => {
-    if (!cortes.length) { setAviso('No hay cortes en la hoja'); return; }
-    const todosMarcados = cortes.every(ct => !!corteNumAzul['c' + ct]);
-    if (todosMarcados) {
-      // Segunda pulsacion: deseleccionar todos los cortes y borrarlos de Montaje.
-      setCorteNumAzul(prev => {
-        const next = { ...prev };
-        for (const ct of cortes) delete next['c' + ct];
-        return next;
-      });
-      setFilasMontaje(prev => {
-        const claves = new Set(cortes.map(ct => String(ct)));
-        const aBorrar = prev.filter(f => f && f.inicio != null && claves.has(String(f.inicio)));
-        for (const f of aBorrar) {
-          if (f.videoUrl && String(f.videoUrl).startsWith('blob:')) { try { URL.revokeObjectURL(f.videoUrl); } catch (_) {} }
-        }
-        return prev.filter(f => !(f && f.inicio != null && claves.has(String(f.inicio))));
-      });
-      return;
-    }
-    // Primera pulsacion (o parcial): marcar todos y pasar los que falten a Montaje.
-    setCorteNumAzul(prev => {
-      const next = { ...prev };
-      for (const ct of cortes) next['c' + ct] = true;
-      return next;
-    });
-    const faltan = cortes.some(ct => !filasMontaje.some(f => f && f.inicio != null && Math.abs(f.inicio - ct) < 0.01));
-    if (faltan) pasarCortesAMontaje(cortes);
-  };
+
   const [videosBD, setVideosBD] = useState([]);
   const [selVideoBD, setSelVideoBD] = useState(null);
   const [archivosBD, setArchivosBD] = useState(() => { try { return JSON.parse(localStorage.getItem('bd_archivos') || '[]'); } catch (_) { return []; } });
@@ -312,6 +280,7 @@ const [previewPos, setPreviewPos] = useState(() => { try { const g = JSON.parse(
 const arrastrePreviewRef = useRef(null);
 const [lineasSelMontaje, setLineasSelMontaje] = useState({});
 const [lineaArrastre, setLineaArrastre] = useState(null);
+  const arrastreRecienteRef = useRef(false);
 const lineaArrastrandoRef = useRef(false);
 const [filaSelMontaje, setFilaSelMontaje] = useState(null);
   const [selPeriodoMontaje, setSelPeriodoMontaje] = useState('');
@@ -1610,6 +1579,23 @@ const bdVideoTargetRef = useRef(null);
     setPreviewMontaje({ src, inicio: fila.inicio, fin: fila.fin, concepto: fila.concepto || '', anims });
     const destino = tIr ?? fila.inicio;
     requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, destino); if (autoPlay) v.play().catch(() => {}); } catch (_) {} } });
+  };
+  // Carga un corte en el reproductor de Montaje, parando la reproduccion anterior.
+  // autoPlay indica si debe reproducirse tras cargar (false = solo cargar/seek).
+  const reproducirFilaMontaje = (fila, autoPlay = true) => {
+    prevTPreviewRef.current = null;
+    limpiarTimerAnim();
+    animMostradasRef.current.clear(); animActualRef.current = null;
+    if (fila.videoUrl) {
+      deseaPlayPreviewRef.current = autoPlay;
+      setFasePreview('base');
+      setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: fila.concepto || '', anims: [] });
+      requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; if (autoPlay) v.play().catch(() => {}); } catch (_) {} } });
+      return;
+    }
+    const src = cortesVideoUrl || videoUrlCortes || videoUrl;
+    if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
+    abrirPreviewLinea(fila, autoPlay ? undefined : fila.fin, autoPlay);
   };
 
   const mimeDescarga = () => {
@@ -6394,15 +6380,7 @@ const terminar = () => {
                 ELIMINAR
               </button>
             )}
-            {cortes.length > 0 && (
-              <button
-                onClick={marcarTodosLosCortes}
-                title="Marcar todos los cortes con el círculo azul y pasarlos a la hoja Montaje"
-                style={{ background: '#0284c7', border: 'none', borderRadius: '12px', padding: '0.8rem 1.2rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
-              >
-                SELEC. TODO
-              </button>
-            )}
+
           </div>
           {cortesVideoUrl && (
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', maxWidth: '1400px', alignItems: 'flex-start' }}>
@@ -8029,10 +8007,10 @@ const terminar = () => {
             </div>
             {(filasMontaje.length === 0 ? null : filasMontaje.map((fila, i) => (
               <div key={fila.id} draggable
-                onClick={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setFilaSelMontaje(prev => prev === fila.id ? null : fila.id); }}
+                onClick={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; if (arrastreRecienteRef.current) { arrastreRecienteRef.current = false; return; } setFilaSelMontaje(fila.id); reproducirFilaMontaje(fila); }}
                 onMouseDown={(e) => { if (e.target.closest('button,input,video,img,[data-sq]')) return; setLineaArrastre(i); }}
                 onMouseUp={() => { if (!lineaArrastrandoRef.current) setLineaArrastre(null); }}
-                onDragStart={() => { lineaArrastrandoRef.current = true; setLineaArrastre(i); }}
+                onDragStart={() => { lineaArrastrandoRef.current = true; arrastreRecienteRef.current = true; setLineaArrastre(i); }}
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={() => {
                   lineaArrastrandoRef.current = false;
@@ -8091,7 +8069,7 @@ const terminar = () => {
                       <input
                         key={`ini-${fila.id}-${fila.inicio}`}
                         defaultValue={formatoTiempo(aMinutoPartido(fila.inicio))}
-                        onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(`${fila.id}-ini`); setPreviewMontaje(prev => prev ? { ...prev, inicio: Math.max(0, fila.inicio), fin: fila.fin } : prev); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); } catch (_) {} } }}
+                        onClick={(e) => { e.stopPropagation(); setFilaSelMontaje(fila.id); setSelPeriodoMontaje(`${fila.id}-ini`); reproducirFilaMontaje(fila); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.inicio); } catch (_) {} } }}
                         onBlur={(e) => {
                           e.stopPropagation();
                           const segsMin = parsearTiempo(e.target.value);
@@ -8113,7 +8091,7 @@ const terminar = () => {
                       <input
                         key={`fin-${fila.id}-${fila.fin}`}
                         defaultValue={formatoTiempo(aMinutoPartido(fila.fin))}
-                        onClick={(e) => { e.stopPropagation(); setSelPeriodoMontaje(`${fila.id}-fin`); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); } catch (_) {} } }}
+                        onClick={(e) => { e.stopPropagation(); setFilaSelMontaje(fila.id); setSelPeriodoMontaje(`${fila.id}-fin`); reproducirFilaMontaje(fila, false); const v = previewVideoRef.current; if (v) { try { v.currentTime = Math.max(0, fila.fin); } catch (_) {} } }}
                         onBlur={(e) => {
                           e.stopPropagation();
                           const segsMin = parsearTiempo(e.target.value);
@@ -8155,19 +8133,8 @@ const terminar = () => {
                 {fila.inicio != null && fila.fin != null && (
                   <button
                     onClick={() => {
-                      prevTPreviewRef.current = null;
-                      limpiarTimerAnim();
-                      animMostradasRef.current.clear(); animActualRef.current = null;
-                      if (fila.videoUrl) {
-                        deseaPlayPreviewRef.current = true;
-                        setFasePreview('base');
-                        setPreviewMontaje({ src: fila.videoUrl, inicio: 0, fin: Number.POSITIVE_INFINITY, concepto: fila.concepto || '', anims: [] });
-                        requestAnimationFrame(() => { const v = previewVideoRef.current; if (v) { try { v.currentTime = 0; v.play().catch(() => {}); } catch (_) {} } });
-                        return;
-                      }
-                      const src = cortesVideoUrl || videoUrlCortes || videoUrl;
-                      if (!src) { setAviso('Carga primero un vídeo para previsualizar el fragmento'); return; }
-                      abrirPreviewLinea(fila);
+                      setFilaSelMontaje(fila.id);
+                      reproducirFilaMontaje(fila);
                     }}
                     title="Ver fragmento entre inicio y fin"
                     style={{ background: '#16a34a', border: 'none', borderRadius: '6px', color: '#ffffff', fontWeight: 900, fontSize: '0.8rem', width: '28px', height: '24px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}

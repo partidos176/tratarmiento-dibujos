@@ -19,7 +19,6 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 ### 2. `Cortes`
 - Carga de vídeo para cortar.
 - Marcado de cortes sobre el vídeo.
-- Selección masiva de cortes (`SELEC. TODO`): una pulsación marca todos los cortes y los pasa a `Montaje`; pulsar de nuevo los desmarca y los borra de `Montaje`.
 - Recorte de clips con FFmpeg.wasm.
 
 ### 3. `Edición`
