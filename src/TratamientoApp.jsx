@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD, borrarTodoLocal } from './persistencia';
+import { guardarSesion, cargarSesion, guardarVideosBD, cargarVideosBD, borrarTodoLocal, guardarBlobVideoExport, leerBlobVideoExport } from './persistencia';
 import { loadFFmpeg, isFFmpegSupported } from './ffmpegUtil';
 // fetchFile sale solo de aqui. Antes ademas se hacia un await import('@ffmpeg/util')
 // en cuatro sitios mas, pero como el modulo ya se carga de forma estatica ese await
@@ -378,6 +378,69 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       if (!b || b.size === 0) return null;
       return URL.createObjectURL(b);
     } catch (_) { return null; }
+  };
+  // Un vídeo incrustado en base64 ocupa ~1,33x su tamaño y además se copia al
+  // hacer JSON.stringify y al crear el Blob. A partir de este tamaño se guarda
+  // en IndexedDB y el export guarda solo una clave, para no agotar la memoria
+  // del navegador (antes la pestaña se quedaba en blanco al exportar).
+  const LIMITE_VIDEO_INCRUSTADO = 20 * 1024 * 1024;
+  // El mismo base64 (capturas, fotos, fotoPorCorte, filas…) aparece repetido
+  // muchas veces en el estado. Si se serializa tal cual, el JSON multiplica
+  // su tamaño (el export de un partido pasa de ~49 MB únicos a ~135 MB) y el
+  // navegador se queda sin memoria al descargarlo. Se sustituye cada dato por
+  // un token, se serializa el esqueleto y se ensambla el Blob con cada dato
+  // una sola vez. El JSON resultante es idéntico, pero mucho más pequeño.
+  const TOKEN_DEDUP = '__TRATAMIENTO_DEDUP_7c1e_';
+  const dedupParaExport = (obj) => {
+    const datos = [];
+    const vistos = new Map();
+    const token = (s) => {
+      let t = vistos.get(s);
+      if (t === undefined) {
+        t = TOKEN_DEDUP + datos.length + '__';
+        datos.push(s);
+        vistos.set(s, t);
+      }
+      return t;
+    };
+    const walk = (v) => {
+      if (typeof v === 'string') return (v.length > 100 && v.startsWith('data:')) ? token(v) : v;
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === 'object') {
+        const o = {};
+        for (const k of Object.keys(v)) o[k] = walk(v[k]);
+        return o;
+      }
+      return v;
+    };
+    return { esqueleto: walk(obj), datos };
+  };
+  const videoParaExport = async (url, cache, nombre) => {
+    if (!url || typeof url !== 'string' || !url.startsWith('blob:')) return {};
+    if (cache.has(url)) return cache.get(url);
+    let blob = null;
+    try {
+      const r = await fetch(url);
+      blob = await r.blob();
+    } catch (_) { return {}; }
+    if (!blob || !blob.size) return {};
+    let out = {};
+    if (blob.size <= LIMITE_VIDEO_INCRUSTADO) {
+      const dataUrl = await new Promise((res) => {
+        const fr = new FileReader();
+        fr.onload = () => res(typeof fr.result === 'string' ? fr.result : null);
+        fr.onerror = () => res(null);
+        fr.readAsDataURL(blob);
+      });
+      if (dataUrl) out = { videoDataUrl: dataUrl };
+    } else {
+      const key = `exp_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+      if (await guardarBlobVideoExport(key, blob)) {
+        out = { videoBlobKey: key, videoNombre: nombre || null, videoTamano: blob.size, videoTipo: blob.type || null };
+      }
+    }
+    cache.set(url, out);
+    return out;
   };
 
   const aplicarCortes = async (data) => {
@@ -4465,6 +4528,38 @@ const terminar = () => {
     reader.onload = async () => {
       try {
         let data = JSON.parse(reader.result);
+        // Exports v3: los base64 repetidos se guardan una sola vez en __datos
+        // y en el resto del archivo hay tokens. Se reconstruyen antes de
+        // seguir con la importación normal.
+        if (data && Array.isArray(data.__datos)) {
+          const tabla = data.__datos;
+          const reToken = new RegExp(TOKEN_DEDUP + '(\\d+)__', 'g');
+          const expandir = (v) => {
+            if (typeof v === 'string') return v.replace(reToken, (m, i) => tabla[Number(i)] || m);
+            if (Array.isArray(v)) return v.map(expandir);
+            if (v && typeof v === 'object') { for (const k of Object.keys(v)) v[k] = expandir(v[k]); return v; }
+            return v;
+          };
+          data = expandir(data);
+          delete data.__datos;
+        }
+        // Los exports antiguos repiten el mismo base64 en varias listas. Se
+        // internan para que el estado no mantenga decenas de copias del mismo
+        // dato (era lo que agotaba la memoria al volver a exportar).
+        const vistosDatos = new Map();
+        const internar = (v) => {
+          if (typeof v === 'string') {
+            if (v.length > 100 && v.startsWith('data:')) {
+              if (!vistosDatos.has(v)) vistosDatos.set(v, v);
+              return vistosDatos.get(v);
+            }
+            return v;
+          }
+          if (Array.isArray(v)) return v.map(internar);
+          if (v && typeof v === 'object') { for (const k of Object.keys(v)) v[k] = internar(v[k]); return v; }
+          return v;
+        };
+        internar(data);
         // Notas de voz (export "base datos" de futbol): se guardan antes de
         // transformar el formato, porque la rama "copia de partido" reemplaza data.
         const notasImp = Array.isArray(data && data.notasVoz)
@@ -4594,6 +4689,7 @@ const terminar = () => {
           // imagenDataUrl) y anula videoUrl / imagenUrl, asi que hay que
           // volver a convertirlos a URL utilizables.
           const filasRestauradas = [];
+          let faltanVideos = false;
           for (const f of filasUnicas) {
             const copia = { ...f };
             if (!copia.videoUrl && copia.videoDataUrl) {
@@ -4601,9 +4697,18 @@ const terminar = () => {
               if (url) { videoDataUrlCacheRef.current.set(url, copia.videoDataUrl); copia.videoUrl = url; }
               delete copia.videoDataUrl;
             }
+            // Vídeos grandes del export: no viajan en el JSON, se recuperan
+            // del IndexedDB de este navegador mediante la clave guardada.
+            if (!copia.videoUrl && copia.videoBlobKey) {
+              const blob = await leerBlobVideoExport(copia.videoBlobKey);
+              if (blob) copia.videoUrl = URL.createObjectURL(blob);
+              else faltanVideos = true;
+              delete copia.videoBlobKey;
+            }
             if (!copia.imagenUrl && copia.imagenDataUrl) { copia.imagenUrl = copia.imagenDataUrl; delete copia.imagenDataUrl; }
             filasRestauradas.push(copia);
           }
+          if (faltanVideos) setAviso('Hay vídeos que no se incrustan en el JSON y no están en este navegador. Vuelve a cargarlos en Montaje.');
           setFilasMontaje(filasRestauradas.map((f, idx) => f.numCorte != null ? f : { ...f, numCorte: (f.tipo === 'transicion' || f.tipo === 'imagen') ? null : filasRestauradas.slice(0, idx + 1).filter(x => x.tipo !== 'transicion' && x.tipo !== 'imagen').length }));
           setLineasSelMontaje({});
           setPreviewMontaje(null);
@@ -4613,6 +4718,37 @@ const terminar = () => {
       }
     };
     reader.readAsText(file);
+  };
+
+  const descargarJson = async (blob, nombre) => {
+    // En Chromium se escribe directamente en el archivo elegido: evita depender
+    // de un blob: gigante y de que el navegador decida navegar a él en vez de
+    // descargarlo (página en blanco y ningún archivo guardado).
+    if (typeof window.showSaveFilePicker === 'function') {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: nombre,
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        console.error('Error guardando con showSaveFilePicker, se usa descarga clásica', e);
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    // Un JSON grande puede tardar más de 10 s en copiarse al archivo; si se
+    // revoca antes, la descarga falla y no se guarda nada.
+    setTimeout(() => { try { a.remove(); } catch (_) {} try { URL.revokeObjectURL(url); } catch (_) {} }, 300000);
   };
 
   const exportarMontaje = async () => {
@@ -4634,11 +4770,12 @@ const terminar = () => {
         return null;
       };
       const filas = [];
+      const cacheVideos = new Map();
       for (const f of (filasMontaje || [])) {
         const copia = { ...f };
         if (f && f.videoUrl && f.videoUrl.startsWith('blob:')) {
-          copia.videoDataUrl = await videoBlobADataUrl(f.videoUrl);
           copia.videoUrl = null;
+          Object.assign(copia, await videoParaExport(f.videoUrl, cacheVideos, f.concepto));
         }
         if (f && f.imagenUrl && f.imagenUrl.startsWith('blob:')) {
           copia.imagenDataUrl = await videoBlobADataUrl(f.imagenUrl);
@@ -4654,17 +4791,15 @@ const terminar = () => {
       const fotos = (capturas || [])
         .filter(c => c && c.dataUrl)
         .map(c => ({ id: c.id, tiempo: c.tiempo ?? null, dataUrl: c.dataUrl, duracionAnim: c.duracionAnim || 4, figuras: c.figuras || [], baseDataUrl: c.baseDataUrl || null }));
-      const contenido = JSON.stringify({ app: 'tratamiento-dibujos-montaje', version: 2, guardado: new Date().toISOString(), cortes: datosCortes(), ...syncCortes(), filas, animaciones, fotos });
+      const { esqueleto, datos } = dedupParaExport({ app: 'tratamiento-dibujos-montaje', version: 3, guardado: new Date().toISOString(), cortes: datosCortes(), ...syncCortes(), filas, animaciones, fotos });
+      // Cada base64 se guarda una sola vez en __datos y en su lugar queda un
+      // token corto. Al importar se reconstruye; los exports antiguos (sin
+      // __datos) siguen cargando igual. Así el JSON pasa de ~135 MB a ~54 MB
+      // y el navegador no se queda sin memoria al descargarlo.
+      esqueleto.__datos = datos;
+      const contenido = JSON.stringify(esqueleto);
       const blob = new Blob([contenido], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${nombreLimpio}.json`;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { try { a.remove(); } catch (_) {} try { URL.revokeObjectURL(url); } catch (_) {} }, 10000);
+      await descargarJson(blob, `${nombreLimpio}.json`);
     } catch (e) {
       console.error('Error al exportar el montaje', e);
       window.alert('No se pudo exportar el montaje: ' + (e?.message || e));

@@ -47,6 +47,8 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
   fundido y recorte al final del vídeo base); coincide con lo que informa
   la descarga.
 - Guardado/carga de sesión.
+- Botón `Exportar` (JSON, formato v3): las imágenes/base64 repetidos se guardan **una sola vez** en `__datos` y el resto del archivo usa tokens (al importar se reconstruyen). Un partido que antes generaba ~135 MB ahora genera ~53 MB, evitando que la página se quede en blanco por falta de memoria al descargar. Los exports antiguos (sin `__datos`) siguen importándose igual. En Chrome/Edge se escribe directamente en el archivo elegido (File System Access API); en otros navegadores se usa la descarga clásica.
+- Los vídeos de hasta 20 MB se incrustan como `videoDataUrl` para que el archivo sea portable; los vídeos más grandes **no se incrustan**: se guardan en IndexedDB y el JSON guarda solo `videoBlobKey` con nombre/tamaño. Al importar ese JSON en el **mismo navegador** el vídeo se recupera automáticamente; en otro navegador avisa y hay que volver a cargarlo. Los clips/animaciones pequeños siguen viajando dentro del JSON.
 
 ---
 

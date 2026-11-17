@@ -44,6 +44,27 @@ const dbDelete = async (store, key) => {
   });
 };
 
+// Los vídeos grandes no se incrustan en base64 en el JSON del export (llenan
+// la memoria del navegador y la página se queda en blanco). Se guardan como
+// blob en IndexedDB y el JSON solo guarda la clave para recuperarlos aquí.
+export const guardarBlobVideoExport = async (key, blob) => {
+  try {
+    await dbPut('videos', key, blob);
+    return true;
+  } catch (e) {
+    console.error('Error al guardar vídeo del export', e);
+    return false;
+  }
+};
+
+export const leerBlobVideoExport = async (key) => {
+  try {
+    return (await dbGet('videos', key)) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
 const dbGetAllKeys = async (store) => {
   const db = await openDB();
   return new Promise((resolve, reject) => {
