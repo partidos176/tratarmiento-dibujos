@@ -6688,7 +6688,7 @@ const terminar = () => {
             </>
           )}
           {capturaSeleccionada && (
-            <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.75rem', zIndex: 10 }}>
+            <div style={{ position: 'absolute', top: '1rem', right: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem', zIndex: 10 }}>
               <button
                 onClick={() => {
                   const el = editorRef.current;
@@ -6747,12 +6747,12 @@ const terminar = () => {
               </button>
               <button
                 onClick={() => { guardarCaptura(); setCapturaSeleccionada(null); setCapturaGuardada(null); setFiguras([]); setImgDim(null); setFiguraSeleccionada(null); }}
-                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '4rem' }}
+                style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.7rem 1rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: '1.75rem' }}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
               {figuraSeleccionada && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
                   {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'texto' && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
                       <input
@@ -6786,17 +6786,17 @@ const terminar = () => {
                       </div>
                     </div>
                   )}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem', background: '#1e293b', padding: '0.6rem', borderRadius: '12px', border: '1px solid #334155' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.3rem', background: '#1e293b', padding: '0.4rem', borderRadius: '12px', border: '1px solid #334155' }}>
                     {colores.map(c => (
                       <button
                         key={c}
                         onClick={() => actualizarFigura(figuraSeleccionada, { color: c })}
                         title={c}
-                        style={{ width: '22px', height: '22px', background: c, borderRadius: '6px', border: figuras.find(f => f.id === figuraSeleccionada)?.color === c ? '2px solid #ffffff' : '2px solid transparent', cursor: 'pointer', padding: 0 }}
+                        style={{ width: '18px', height: '18px', background: c, borderRadius: '6px', border: figuras.find(f => f.id === figuraSeleccionada)?.color === c ? '2px solid #ffffff' : '2px solid transparent', cursor: 'pointer', padding: 0 }}
                       />
                     ))}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem', marginTop: '0.8rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem', marginTop: '0.3rem' }}>
                     <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       Opacidad
                     </span>
@@ -6811,6 +6811,22 @@ const terminar = () => {
                       style={{ width: '120px', cursor: 'pointer' }}
                     />
                   </div>
+                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem', marginTop: '0.3rem' }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Rotar
+                      </span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
+                        onChange={(e) => actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) })}
+                        title="Rotación de la figura"
+                        style={{ width: '120px', cursor: 'pointer' }}
+                      />
+                    </div>
+                  )}
                   {[ 'linea', 'flecha', 'polilinea', 'circuito', 'c', 'circulo', 'cuadrado'].includes(figuras.find(f => f.id === figuraSeleccionada)?.tipo) ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -6847,7 +6863,7 @@ const terminar = () => {
                     <button
                       onClick={() => actualizarFigura(figuraSeleccionada, { discontinuo: !figuras.find(f => f.id === figuraSeleccionada)?.discontinuo })}
                       title="Continuidad de la flecha"
-                      style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.discontinuo ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '12px', padding: '0.5rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
+                      style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.discontinuo ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '12px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer' }}
                     >
                       {figuras.find(f => f.id === figuraSeleccionada)?.discontinuo ? 'Continua' : 'Discontinua'}
                     </button>
@@ -6856,33 +6872,17 @@ const terminar = () => {
                   <button
                     onClick={() => actualizarFigura(figuraSeleccionada, { rayado: !figuras.find(f => f.id === figuraSeleccionada)?.rayado })}
                     title="Rayas en diagonal"
-                    style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.rayado ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '12px', padding: '0.5rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', marginTop: '0.8rem' }}
+                    style={{ background: figuras.find(f => f.id === figuraSeleccionada)?.rayado ? '#0ea5e9' : '#334155', border: 'none', borderRadius: '12px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', marginTop: '0.3rem' }}
                   >
                     Rayas
                   </button>
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); if (figuraSeleccionada) borrarFiguraMenu(figuraSeleccionada); }}
-                    style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.5rem 0.9rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', marginTop: '0.8rem' }}
+                    style={{ background: '#dc2626', border: 'none', borderRadius: '12px', padding: '0.4rem 0.8rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.8rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', marginTop: '0.3rem' }}
                   >
                     Borrar
                   </button>
-                  {figuras.find(f => f.id === figuraSeleccionada)?.tipo === 'circulo' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem', marginTop: '0.8rem' }}>
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Rotar
-                      </span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="360"
-                        value={Math.round(figuras.find(f => f.id === figuraSeleccionada)?.rot ?? 0)}
-                        onChange={(e) => actualizarFigura(figuraSeleccionada, { rot: Number(e.target.value) })}
-                        title="Rotación de la figura"
-                        style={{ width: '120px', cursor: 'pointer' }}
-                      />
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -7240,6 +7240,12 @@ const terminar = () => {
                             return { ...el, rot: ((ang - (el.hueco ?? 110) / 2) % 360 + 360) % 360 };
                           });
                           actualizarFigura(d.id, { elipses });
+                        } else if (d.tipo === 'circuloRot') {
+                          const figCir = figuras.find(ff => ff.id === d.id);
+                          if (figCir) {
+                            const angCir = Math.atan2((p.y - figCir.y) * imgDim.h, (p.x - figCir.x) * imgDim.w) * 180 / Math.PI;
+                            actualizarFigura(d.id, { rot: ((angCir + 90) % 360 + 360) % 360 });
+                          }
                         } else if (d.tipo === 'circuitoHueco') {
                           const elipses = (figuras.find(f => f.id === d.id)?.elipses || []).map((el, i) => {
                             if (i !== d.indice) return el;
@@ -7761,6 +7767,29 @@ const terminar = () => {
                                 }}
                               />
                             ))}
+                            {sel && f.tipo === 'circulo' && (() => {
+                              const rotRad = ((f.rot || 0) * Math.PI) / 180;
+                              const radioGiro = alto / 2 + 22;
+                              return (
+                                <circle
+                                  cx={x + Math.sin(rotRad) * radioGiro}
+                                  cy={y - Math.cos(rotRad) * radioGiro}
+                                  r={8}
+                                  fill="#f472b6"
+                                  stroke="#0ea5e9"
+                                  strokeWidth="2"
+                                  style={{ pointerEvents: 'all', cursor: 'grab' }}
+                                  title="Girar círculo (arrastra para rotar)"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => {
+                                    setFiguraSeleccionada(f.id);
+                                    if (circuloAnimRef.current) { cancelAnimationFrame(circuloAnimRef.current); circuloAnimRef.current = null; }
+                                    dragRef.current = { tipo: 'circuloRot', id: f.id };
+                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                  }}
+                                />
+                              );
+                            })()}
                           </g>
                         );
                       })}

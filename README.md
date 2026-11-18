@@ -25,6 +25,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Captura de frames del vídeo.
 - Dibujo de figuras: triángulos redondeados, cuadrados, elipses, líneas, flechas, cilindros y trazos.
 - En el círculo/ellipse y en el cuadrado se puede ajustar el grosor del borde y ponerlo en discontinuo (igual que flechas).
+- El círculo/ellipse se puede girar: al insertarlo/seleccionarlo aparece un tirador rosa «Girar círculo» sobre la figura que se arrastra para rotarla, además del deslizador *Rotar* en el panel de propiedades (la rotación se conserva en la exportación y en el vídeo).
 - Selección, movimiento y borrado de figuras.
 - Menú contextual (botón derecho) sobre una figura con opciones: copiar, borrar, agrandar y cambiar color.
 - Pantalla completa del editor.
