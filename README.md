@@ -90,7 +90,7 @@ tratarmiento-dibujos/
 ## 🚀 Instalación y Puesta en Marcha
 
 ### Prerrequisitos
-- Node.js **22.23.4 o superior**
+- Node.js **26.0.0 o superior**
 - pnpm
 
 ### Instalación
