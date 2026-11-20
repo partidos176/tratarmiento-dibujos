@@ -12,6 +12,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Tabla de archivos/registros (`DATOS` + `VIDEO`).
 - Alta de registros y asociación de vídeos.
 - Importación de montajes en JSON (incluye notas de voz del export «base datos» de `futbol`: texto y audio), con el mismo formato que las acciones: disponibles solo en el desplegable `NOTAS` de `Cortes`. Clic en el número → marca en azul e inserta la nota en `Montaje` (como otras acciones); minuto clicable → va al reproductor y reproduce; `-`/`+` ajustan el tiempo; `×` elimina; ▶/■ reproduce el audio.
+- Carga de archivos `.json` guardados con el botón **Guardar** de `Cortes`: se detectan como export de cortes, se restauran y se añade el registro a la tabla.
 - Gestión de vídeos ocultos y biblioteca local.
 - Botón «Limpiar base de datos» (con confirmación) para borrar registros, vídeos y notas de la hoja.
 - Persistencia de vídeos en IndexedDB.
@@ -20,6 +21,7 @@ Stack: **React 19 + Vite 8**, **FFmpeg.wasm**, **mediabunny**, **Firebase** e **
 - Carga de vídeo para cortar.
 - Marcado de cortes sobre el vídeo.
 - Recorte de clips con FFmpeg.wasm.
+- Botón **Guardar**: exporta todos los cortes (marcas, duraciones, nombres, acciones, fotos y edición) a un archivo `.json` que luego se puede cargar en `Base de datos`.
 
 ### 3. `Edición`
 - Captura de frames del vídeo.
@@ -168,4 +170,5 @@ powershell -ExecutionPolicy Bypass -File scripts\\auto-update.ps1
 
 ### Cambios importantes
 
+- **2026-11-20**: botón **Guardar** en `Cortes` que exporta todos los cortes a `.json`; el import `.json` de `Base de datos` detecta ese formato, lo lee y registra el archivo en la tabla.
 - **2026-11-18**: calcada la configuración de `Noticias`: Dependabot diario y escalonado (también para GitHub Actions), CI con pnpm, auto-merge tras CI y `update-node.yml` + `scripts/update-node-version.mjs` para actualizar Node.js a la última LTS con commit directo a `main`.

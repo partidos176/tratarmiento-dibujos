@@ -494,18 +494,48 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
       const blob = new Blob([JSON.stringify({ app: 'tratamiento-dibujos-cortes', version: 3, guardado: new Date().toISOString(), ...datosCortes(), ...syncCortes(), fotos, edicion: { figuras: [...figuras], capturaSeleccionadaId: capturaSeleccionada ? capturaSeleccionada.id : null, captura: capturaConImagen } }, null, 2)], { type: 'application/json' });
       const baseVideo = (archivoCortes && archivoCortes.name ? String(archivoCortes.name).replace(/\.[^.]+$/, '') : null) || (archivo && archivo.name ? String(archivo.name).replace(/\.[^.]+$/, '') : null) || 'cortes';
       const nombreArchivo = `${baseVideo}.json`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = nombreArchivo;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      // Usa el mismo guardado que el export de montaje: en Chromium escribe
+      // directamente en el archivo elegido, así que no falla con JSON grandes
+      // (fotos/base64) como podía hacerlo un blob: con revoke a los 3 s.
+      await descargarJson(blob, nombreArchivo);
     } catch (e) {
       console.error('Error al exportar los cortes', e);
       window.alert('No se pudieron exportar los cortes: ' + (e?.message || e));
     }
+  };
+
+  // Registra el archivo de cortes en la tabla de la hoja Base de datos, para
+  // que se vea que se ha leído y cuántos cortes contiene.
+  const registrarCortesEnBD = (file, n) => {
+    if (!file) return;
+    setArchivosBD(prev => {
+      const reg = { id: Date.now(), nombre: file.name, nFilas: n };
+      const ix = prev.findIndex(x => x.nombre === file.name);
+      if (ix >= 0) { const copy = [...prev]; copy[ix] = reg; return copy; }
+      return [...prev, reg];
+    });
+  };
+  // Aplica un archivo de cortes ya parseado. Lo usan tanto el import directo
+  // como la carga de .json desde la hoja Base de datos.
+  const aplicarArchivoCortes = async (data, file) => {
+    await aplicarCortes(data);
+    if (data.edicion) {
+      const cap = data.edicion.captura;
+      if (cap && cap.dataUrl) {
+        const videoUrl = await dataUrlAVideoBlobUrl(cap.videoDataUrl);
+        const { videoDataUrl: _, ...restoCap } = cap;
+        const limpia = { ...restoCap, videoUrl };
+        setCapturas(prev => prev.some(c => c.id === limpia.id) ? prev.map(c => c.id === limpia.id ? limpia : c) : [...prev, limpia]);
+        setCapturaSeleccionada(limpia);
+        setFiguras(normalizarFiguras(Array.isArray(data.edicion.figuras) ? data.edicion.figuras : limpia.figuras));
+      } else if (Array.isArray(data.edicion.figuras)) {
+        setFiguras(normalizarFiguras(data.edicion.figuras));
+      }
+      setFiguraSeleccionada(null);
+      setImgDim(null);
+    }
+    registrarCortesEnBD(file, Array.isArray(data.cortes) ? data.cortes.length : 0);
+    setAviso('Cortes recuperados');
   };
 
   const importarCortes = (file) => {
@@ -514,23 +544,7 @@ const [filaSelMontaje, setFilaSelMontaje] = useState(null);
     reader.onload = async () => {
       try {
         const data = JSON.parse(reader.result);
-        await aplicarCortes(data);
-        if (data.edicion) {
-          const cap = data.edicion.captura;
-          if (cap && cap.dataUrl) {
-            const videoUrl = await dataUrlAVideoBlobUrl(cap.videoDataUrl);
-            const { videoDataUrl: _, ...restoCap } = cap;
-            const limpia = { ...restoCap, videoUrl };
-            setCapturas(prev => prev.some(c => c.id === limpia.id) ? prev.map(c => c.id === limpia.id ? limpia : c) : [...prev, limpia]);
-            setCapturaSeleccionada(limpia);
-            setFiguras(normalizarFiguras(Array.isArray(data.edicion.figuras) ? data.edicion.figuras : limpia.figuras));
-          } else if (Array.isArray(data.edicion.figuras)) {
-            setFiguras(normalizarFiguras(data.edicion.figuras));
-          }
-          setFiguraSeleccionada(null);
-          setImgDim(null);
-        }
-        setAviso('Cortes recuperados');
+        await aplicarArchivoCortes(data, file);
       } catch (e) {
         console.error('Error al importar los cortes', e);
         window.alert('No se pudieron importar los cortes: ' + (e?.message || e));
@@ -4560,6 +4574,15 @@ const terminar = () => {
           return v;
         };
         internar(data);
+        // Un archivo guardado con el botón «Guardar» de la hoja Cortes es un
+        // export de cortes (app='tratamiento-dibujos-cortes'): no trae 'filas',
+        // así que el import de montaje lo rechazaría. Se lee aquí como cortes
+        // y se deja constancia en la tabla de la hoja Base de datos.
+        const esExportCortes = data && (data.app === 'tratamiento-dibujos-cortes' || (Array.isArray(data.cortes) && !Array.isArray(data.filas)));
+        if (esExportCortes) {
+          await aplicarArchivoCortes(data, file);
+          return;
+        }
         // Notas de voz (export "base datos" de futbol): se guardan antes de
         // transformar el formato, porque la rama "copia de partido" reemplaza data.
         const notasImp = Array.isArray(data && data.notasVoz)
@@ -6515,6 +6538,13 @@ const terminar = () => {
                 ELIMINAR
               </button>
             )}
+            <button
+              onClick={() => exportarCortes()}
+              title="Guarda todos los cortes en un archivo .json que se puede cargar en la hoja Base de datos"
+              style={{ background: '#22c55e', border: 'none', borderRadius: '12px', padding: '0.8rem 1.5rem', fontFamily: 'Inter, sans-serif', fontWeight: 800, fontSize: '0.85rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', flexShrink: 0 }}
+            >
+              GUARDAR
+            </button>
 
           </div>
           {cortesVideoUrl && (
