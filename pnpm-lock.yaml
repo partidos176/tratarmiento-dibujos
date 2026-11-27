@@ -18,8 +18,8 @@ importers:
         specifier: ^12.19.0
         version: 12.19.0
       mediabunny:
-        specifier: ^1.66.2
-        version: 1.66.2
+        specifier: ^1.66.3
+        version: 1.66.3
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -1950,8 +1950,8 @@ packages:
     resolution: {integrity: sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ==}
     engines: {node: '>= 0.8'}
 
-  mediabunny@1.66.2:
-    resolution: {integrity: sha512-NTzRrBhAyRVi8qpJ9AH6XPyxiDVkfugxYY+gu3Z5zi+Nw2R/7nTAnXJEt2Ucy8wTIve1/UYGnCFf50x2LpvMDQ==}
+  mediabunny@1.66.3:
+    resolution: {integrity: sha512-ugNU19umLxfjMaJLWKYUaFTWtmg+k0rwF6bmL5YfSX+BbCHGAOTxsecRzuHKX/OA+tO81pkI/2pNIo8nZdJZmA==}
 
   merge-descriptors@1.0.3:
     resolution: {integrity: sha512-gaNvAS7TZ897/rVaZ0nMtAyxNyi/pdbjbAwUpFQpN70GqnVfOiXpeUUMKRBmzXaSQ8DdTX4/0ms62r2K+hE6mQ==}
@@ -5037,7 +5037,7 @@ snapshots:
 
   media-typer@1.1.1: {}
 
-  mediabunny@1.66.2:
+  mediabunny@1.66.3:
     dependencies:
       '@types/dom-mediacapture-transform': 0.1.12
       '@types/dom-webcodecs': 0.1.13
